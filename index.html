@@ -960,9 +960,14 @@ function exportCSV() {
 }
 
 let dragSrc = null;
+let touchDragSrc = null;
+let touchPlaceholder = null;
 
 function bindDragDrop() {
   document.querySelectorAll(".ex-row-drag").forEach(row => {
+
+    // ── Desktop drag ──────────────────────────────────────────────
+    row.setAttribute("draggable", "true");
     row.addEventListener("dragstart", e => {
       dragSrc = row;
       row.classList.add("dragging");
@@ -988,6 +993,49 @@ function bindDragDrop() {
       w.exercises.splice(toIdx, 0, moved);
       saveWorkouts(); render();
     });
+
+    // ── Mobile touch ──────────────────────────────────────────────
+    const handle = row.querySelector(".drag-handle");
+    if (!handle) return;
+
+    handle.addEventListener("touchstart", e => {
+      touchDragSrc = row;
+      row.classList.add("dragging");
+      e.preventDefault();
+    }, { passive: false });
+
+    handle.addEventListener("touchmove", e => {
+      if (!touchDragSrc) return;
+      e.preventDefault();
+      const touch = e.touches[0];
+      const el = document.elementFromPoint(touch.clientX, touch.clientY);
+      const target = el ? el.closest(".ex-row-drag") : null;
+      document.querySelectorAll(".ex-row-drag").forEach(r => r.style.borderTop = "");
+      if (target && target !== touchDragSrc) {
+        target.style.borderTop = "2px solid var(--accent)";
+      }
+    }, { passive: false });
+
+    handle.addEventListener("touchend", e => {
+      if (!touchDragSrc) return;
+      const touch = e.changedTouches[0];
+      const el = document.elementFromPoint(touch.clientX, touch.clientY);
+      const target = el ? el.closest(".ex-row-drag") : null;
+      document.querySelectorAll(".ex-row-drag").forEach(r => r.style.borderTop = "");
+      touchDragSrc.classList.remove("dragging");
+      if (target && target !== touchDragSrc) {
+        const wid = target.dataset.wid;
+        const fromIdx = parseInt(touchDragSrc.dataset.idx);
+        const toIdx = parseInt(target.dataset.idx);
+        const w = getWorkout(wid);
+        if (w) {
+          const moved = w.exercises.splice(fromIdx, 1)[0];
+          w.exercises.splice(toIdx, 0, moved);
+          saveWorkouts(); render();
+        }
+      }
+      touchDragSrc = null;
+    }, { passive: false });
   });
 }
 
