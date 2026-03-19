@@ -13,7 +13,7 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
 :root {
   --bg: #f8f9fa; --surface: #f3f4f6; --card: #ffffff;
   --border: #e5e7eb; --border-med: #d1d5db;
-  --accent: #111827; --accent-light: #f3f4f6;
+  --accent: #111827;
   --text-primary: #111827; --text-secondary: #4b5563; --text-hint: #9ca3af;
   --green: #15803d; --green-bg: #dcfce7;
   --red: #dc2626; --red-bg: #fee2e2;
@@ -27,8 +27,11 @@ body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg);
 .bottomnav { background: var(--card); border-top: 1px solid var(--border); display: flex; position: sticky; bottom: 0; }
 .navbtn { flex: 1; padding: 10px 0 8px; background: none; border: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 10px; font-family: inherit; border-top: 2px solid transparent; color: var(--text-hint); }
 .navbtn.active { color: var(--accent); border-top-color: var(--accent); }
-.card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; margin-bottom: 10px; overflow: hidden; }
 .card.improved { border-color: var(--green); }
+.ex-header { display: flex; justify-content: space-between; align-items: center; padding: 13px 16px; cursor: pointer; }
+.ex-header:hover { background: var(--surface); }
+.ex-body { padding: 0 16px 14px; border-top: 1px solid var(--border); }
 .inp { width: 100%; text-align: center; font-size: 15px; font-family: inherit; background: var(--surface); border: 1px solid var(--border-med); border-radius: 8px; padding: 8px 4px; color: var(--text-primary); outline: none; }
 .inp:focus { border-color: var(--accent); background: #fff; }
 .inp-text { text-align: right; padding: 8px 10px; }
@@ -40,8 +43,6 @@ body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg);
 .badge-up { background: var(--green-bg); color: var(--green); }
 .badge-down { background: var(--red-bg); color: var(--red); }
 .badge-eq { background: var(--surface); color: var(--text-hint); }
-.progress-bar { display: flex; gap: 4px; margin-bottom: 16px; }
-.progress-seg { flex: 1; height: 4px; border-radius: 4px; cursor: pointer; }
 .choose-btn { flex: 1; padding: 20px 8px; background: var(--card); border: 1px solid var(--border); border-radius: 14px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 7px; font-family: inherit; min-width: 0; }
 .choose-btn:hover { border-color: var(--accent); }
 .workout-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; cursor: pointer; }
@@ -51,6 +52,7 @@ body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg);
 .del-btn:hover { color: var(--red); background: var(--red-bg); }
 .icon-btn { background: none; border: none; cursor: pointer; padding: 2px; display: flex; align-items: center; color: var(--text-hint); }
 .icon-btn:hover { color: var(--text-primary); }
+.rest-chip { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: #c2410c; background: #fff7ed; padding: 2px 7px; border-radius: 20px; }
 </style>
 </head>
 <body>
@@ -75,19 +77,40 @@ body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg);
 
 <script>
 const STORAGE_SESSIONS = "gym_sessions_v2";
-const STORAGE_WORKOUTS = "gym_workouts_v3";
+const STORAGE_WORKOUTS = "gym_workouts_v4";
 const DEFAULT_WORKOUTS = [
-  { id: "A", name: "אימון A", exercises: ["לחיצת חזה", "כתפיים קדמי", "טרייספס", "בטן"] },
-  { id: "B", name: "אימון B", exercises: ["גב רחב", "בייספס", "כתפיים אחורי", "כרעיים"] }
+  { id: "A", name: "אימון A", exercises: [
+    { name: "לחיצת חזה", rest: 90 },
+    { name: "כתפיים קדמי", rest: 60 },
+    { name: "טרייספס", rest: 60 },
+    { name: "בטן", rest: 45 }
+  ]},
+  { id: "B", name: "אימון B", exercises: [
+    { name: "גב רחב", rest: 90 },
+    { name: "בייספס", rest: 60 },
+    { name: "כתפיים אחורי", rest: 60 },
+    { name: "כרעיים", rest: 90 }
+  ]}
 ];
 
 function loadWorkouts() {
-  try { const s = localStorage.getItem(STORAGE_WORKOUTS); return s ? JSON.parse(s) : JSON.parse(JSON.stringify(DEFAULT_WORKOUTS)); }
-  catch { return JSON.parse(JSON.stringify(DEFAULT_WORKOUTS)); }
+  try {
+    const s = localStorage.getItem(STORAGE_WORKOUTS);
+    if (s) return JSON.parse(s);
+    const old = localStorage.getItem("gym_workouts_v3");
+    if (old) {
+      const parsed = JSON.parse(old);
+      return parsed.map(w => ({
+        ...w,
+        exercises: w.exercises.map(e => typeof e === "string" ? { name: e, rest: 60 } : e)
+      }));
+    }
+    return JSON.parse(JSON.stringify(DEFAULT_WORKOUTS));
+  } catch { return JSON.parse(JSON.stringify(DEFAULT_WORKOUTS)); }
 }
 
 let state = {
-  screen: "home", workoutId: null, step: 0, exercises: {},
+  screen: "home", workoutId: null, openExercise: null, exercises: {},
   sessions: [], workouts: loadWorkouts(), manageOpenId: null, editingNameId: null
 };
 try { state.sessions = JSON.parse(localStorage.getItem(STORAGE_SESSIONS) || "[]"); } catch {}
@@ -98,10 +121,13 @@ function formatDate(iso) { return new Date(iso).toLocaleDateString("he-IL", { da
 function calcVolume(sets) { return sets.reduce((s,r) => s + (r.weight||0)*(r.reps||0), 0); }
 function getWorkout(id) { return state.workouts.find(w => w.id === id); }
 function getLastSession(id) { return [...state.sessions].reverse().find(s => s.workoutId === id) || null; }
+function formatRest(sec) { return sec >= 60 ? Math.floor(sec/60)+":" + String(sec%60).padStart(2,"0") + " דק׳" : sec + " שנ׳"; }
+function getExNames(w) { return w.exercises.map(e => typeof e === "string" ? e : e.name); }
+function getExRest(w, name) { const e = w.exercises.find(ex => (typeof ex === "string" ? ex : ex.name) === name); return e?.rest || 60; }
 
 function navigate(screen) {
   state.screen = screen;
-  if (screen === "home") state.workoutId = null;
+  if (screen === "home") { state.workoutId = null; state.openExercise = null; }
   ["home","history","manage"].forEach(s => document.getElementById("nav-"+s).classList.toggle("active", s === screen));
   document.getElementById("screen-title").textContent = { home:"אימון חדש", history:"היסטוריה", manage:"ניהול אימונים" }[screen];
   render();
@@ -122,8 +148,7 @@ function bindDelButtons() {
       const idx = parseInt(this.dataset.delSession);
       if (confirm("למחוק את האימון מההיסטוריה?")) {
         state.sessions.splice(idx, 1);
-        saveSessions();
-        render();
+        saveSessions(); render();
       }
     });
   });
@@ -137,6 +162,7 @@ function renderChoose() {
     <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:12px">
       ${state.workouts.map(w => {
         const last = getLastSession(w.id);
+        const names = getExNames(w);
         return `<button class="choose-btn" onclick="selectWorkout('${w.id}')">
           <i data-lucide="dumbbell" style="width:24px;height:24px;color:var(--accent)"></i>
           <span style="font-size:18px;font-weight:700;color:var(--text-primary)">${w.name}</span>
@@ -144,7 +170,7 @@ function renderChoose() {
             <i data-lucide="clock" style="width:11px;height:11px"></i>
             ${last ? formatDate(last.date) : "לא בוצע עדיין"}
           </span>
-          <span style="font-size:10px;color:var(--text-hint);text-align:center;line-height:1.6">${w.exercises.join(" · ")}</span>
+          <span style="font-size:10px;color:var(--text-hint);text-align:center;line-height:1.6">${names.join(" · ")}</span>
         </button>`;
       }).join("")}
     </div>
@@ -152,15 +178,22 @@ function renderChoose() {
 }
 
 function selectWorkout(id) {
-  state.workoutId = id; state.step = 0;
+  state.workoutId = id;
   const w = getWorkout(id); const last = getLastSession(id);
+  const names = getExNames(w);
   state.exercises = {};
-  w.exercises.forEach(name => {
+  state.openExercise = names[0];
+  names.forEach(name => {
     const prev = last?.exercises?.[name];
     state.exercises[name] = prev
       ? prev.map((_,i) => ({ num:i+1, weight:0, reps:0 }))
       : [{num:1,weight:0,reps:0},{num:2,weight:0,reps:0},{num:3,weight:0,reps:0}];
   });
+  render();
+}
+
+function toggleExercise(name) {
+  state.openExercise = state.openExercise === name ? null : name;
   render();
 }
 
@@ -172,69 +205,85 @@ function copyPrevSets(name) {
 }
 
 function renderWorkout() {
-  const w = getWorkout(state.workoutId); const exList = w.exercises;
-  const step = state.step; const name = exList[step];
-  const sets = state.exercises[name] || []; const last = getLastSession(state.workoutId);
-  const prevSets = last?.exercises?.[name] || null;
-  const improved = prevSets && sets.some((s,i) => prevSets[i] && s.weight > prevSets[i].weight);
-  const curVol = calcVolume(sets); const prevVol = prevSets ? calcVolume(prevSets) : null;
-  const volDiff = prevVol && curVol > 0 ? Math.round(((curVol-prevVol)/prevVol)*100) : null;
+  const w = getWorkout(state.workoutId);
+  const names = getExNames(w);
+  const last = getLastSession(state.workoutId);
+  const allDone = names.every(name => state.exercises[name]?.some(s => s.weight > 0 || s.reps > 0));
 
-  const segs = exList.map((_,i) =>
-    `<div class="progress-seg" style="background:${i<=step?"var(--accent)":"var(--border)"}" onclick="goStep(${i})"></div>`
-  ).join("");
+  const cards = names.map((name, idx) => {
+    const sets = state.exercises[name] || [];
+    const prevSets = last?.exercises?.[name] || null;
+    const isOpen = state.openExercise === name;
+    const improved = prevSets && sets.some((s,i) => prevSets[i] && s.weight > prevSets[i].weight);
+    const hasData = sets.some(s => s.weight > 0 || s.reps > 0);
+    const curVol = calcVolume(sets); const prevVol = prevSets ? calcVolume(prevSets) : null;
+    const volDiff = prevVol && curVol > 0 ? Math.round(((curVol-prevVol)/prevVol)*100) : null;
+    const rest = getExRest(w, name);
 
-  const setsHtml = sets.map((s,i) => {
-    const p = prevSets?.[i]; const imp = p && s.weight > p.weight; const reg = p && s.weight > 0 && s.weight < p.weight;
-    const icon = s.weight > 0 && p
-      ? `<span style="display:flex;align-items:center;color:${imp?"var(--green)":reg?"var(--red)":"var(--text-hint)"}">
-           <i data-lucide="${imp?"trending-up":reg?"trending-down":"minus"}" style="width:14px;height:14px"></i>
-         </span>`
-      : `<button onclick="removeSet('${name}',${i})" class="icon-btn"><i data-lucide="x" style="width:16px;height:16px"></i></button>`;
-    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
-      <span style="min-width:16px;font-size:12px;color:var(--text-hint);font-weight:600">${s.num}</span>
-      <div style="flex:1;display:flex;gap:8px">
-        <div style="flex:1">
-          <input class="inp" type="number" placeholder="ק״ג" value="${s.weight||""}" oninput="updateSet('${name}',${i},'weight',this.value)">
-          ${p?`<div style="text-align:center;font-size:10px;color:var(--text-hint);margin-top:3px">לפני: ${p.weight}</div>`:""}
+    const statusDot = hasData
+      ? `<span style="width:8px;height:8px;border-radius:50%;background:${improved?"var(--green)":"#6b7280"};flex-shrink:0"></span>`
+      : `<span style="width:8px;height:8px;border-radius:50%;border:1.5px solid var(--border-med);flex-shrink:0"></span>`;
+
+    const header = `<div class="ex-header ${isOpen?"":""}` + `" onclick="toggleExercise('${name}')">
+      <div style="display:flex;align-items:center;gap:9px;min-width:0">
+        ${statusDot}
+        <div style="min-width:0">
+          <div style="font-weight:600;font-size:14px;color:var(--text-primary)">${name}</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap">
+            <span class="rest-chip"><i data-lucide="timer" style="width:10px;height:10px"></i> ${formatRest(rest)}</span>
+            ${hasData ? `<span style="font-size:11px;color:var(--text-hint)">${sets.filter(s=>s.weight>0||s.reps>0).length} סטים</span>` : ""}
+            ${volDiff !== null ? `<span class="badge ${volDiff>0?"badge-up":volDiff<0?"badge-down":"badge-eq"}" style="font-size:10px">${volDiff>0?"+":""}${volDiff}%</span>` : ""}
+            ${improved ? `<span style="font-size:11px;color:var(--green);font-weight:600;display:flex;align-items:center;gap:2px"><i data-lucide="trending-up" style="width:11px;height:11px"></i> שיפרת</span>` : ""}
+          </div>
         </div>
-        <div style="flex:1">
-          <input class="inp" type="number" placeholder="חז׳" value="${s.reps||""}" oninput="updateSet('${name}',${i},'reps',this.value)">
-          ${p?`<div style="text-align:center;font-size:10px;color:var(--text-hint);margin-top:3px">לפני: ${p.reps}</div>`:""}
-        </div>
-        <div style="width:28px;display:flex;align-items:center;justify-content:center">${icon}</div>
       </div>
+      <i data-lucide="${isOpen?"chevron-up":"chevron-down"}" style="width:16px;height:16px;color:var(--text-hint);flex-shrink:0"></i>
     </div>`;
-  }).join("");
 
-  const copyBtn = prevSets
-    ? `<button class="btn-copy" onclick="copyPrevSets('${name}')">
-         <i data-lucide="copy" style="width:12px;height:12px"></i>
-         העתק מהפעם הקודמת
-       </button>` : "";
+    if (!isOpen) return `<div class="card ${improved&&hasData?"improved":""}">${header}</div>`;
 
-  return `<div style="padding:18px 14px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <button onclick="navigate('home')" class="btn-secondary" style="width:auto;padding:7px 12px;font-size:13px;gap:4px">
-        <i data-lucide="chevron-right" style="width:14px;height:14px"></i> חזור
-      </button>
-      <span style="font-weight:600;font-size:14px;color:var(--text-primary)">${w.name}</span>
-      <span style="font-size:12px;color:var(--text-hint);background:var(--surface);padding:4px 10px;border-radius:20px">${step+1}/${exList.length}</span>
-    </div>
-    <div class="progress-bar">${segs}</div>
-    ${last ? `<p style="font-size:11px;color:var(--text-hint);text-align:center;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:4px">
-      <i data-lucide="clock" style="width:11px;height:11px"></i> אימון קודם: ${formatDate(last.date)}
-    </p>` : ""}
-    <div class="card ${improved?"improved":""}">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <span style="font-weight:700;font-size:15px;color:var(--text-primary)">${name}</span>
-        <div style="display:flex;gap:6px;align-items:center">
-          ${copyBtn}
-          ${volDiff !== null ? `<span class="badge ${volDiff>0?"badge-up":volDiff<0?"badge-down":"badge-eq"}">${volDiff>0?"+":""}${volDiff}%</span>` : ""}
-          ${improved ? `<span style="font-size:12px;color:var(--green);font-weight:600;display:flex;align-items:center;gap:3px"><i data-lucide="trending-up" style="width:13px;height:13px"></i> שיפרת</span>` : ""}
+    const copyBtn = prevSets
+      ? `<button class="btn-copy" onclick="copyPrevSets('${name}')">
+           <i data-lucide="copy" style="width:12px;height:12px"></i> העתק מהפעם הקודמת
+         </button>` : "";
+
+    const prevInfo = last
+      ? `<p style="font-size:11px;color:var(--text-hint);margin:10px 0 6px;display:flex;align-items:center;gap:4px">
+           <i data-lucide="clock" style="width:11px;height:11px"></i> אימון קודם: ${formatDate(last.date)}
+         </p>` : "";
+
+    const setsHtml = sets.map((s,i) => {
+      const p = prevSets?.[i]; const imp = p && s.weight > p.weight; const reg = p && s.weight > 0 && s.weight < p.weight;
+      const icon = s.weight > 0 && p
+        ? `<span style="display:flex;align-items:center;color:${imp?"var(--green)":reg?"var(--red)":"var(--text-hint)"}">
+             <i data-lucide="${imp?"trending-up":reg?"trending-down":"minus"}" style="width:14px;height:14px"></i>
+           </span>`
+        : `<button onclick="removeSet('${name}',${i})" class="icon-btn"><i data-lucide="x" style="width:16px;height:16px"></i></button>`;
+      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+        <span style="min-width:16px;font-size:12px;color:var(--text-hint);font-weight:600">${s.num}</span>
+        <div style="flex:1;display:flex;gap:8px">
+          <div style="flex:1">
+            <input class="inp" type="number" placeholder="ק״ג" value="${s.weight||""}" oninput="updateSet('${name}',${i},'weight',this.value)">
+            ${p?`<div style="text-align:center;font-size:10px;color:var(--text-hint);margin-top:3px">לפני: ${p.weight}</div>`:""}
+          </div>
+          <div style="flex:1">
+            <input class="inp" type="number" placeholder="חז׳" value="${s.reps||""}" oninput="updateSet('${name}',${i},'reps',this.value)">
+            ${p?`<div style="text-align:center;font-size:10px;color:var(--text-hint);margin-top:3px">לפני: ${p.reps}</div>`:""}
+          </div>
+          <div style="width:28px;display:flex;align-items:center;justify-content:center">${icon}</div>
         </div>
+      </div>`;
+    }).join("");
+
+    const body = `<div class="ex-body">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0 8px">
+        <div style="display:flex;gap:4px">
+          <span style="flex:1;min-width:0"></span>
+        </div>
+        ${copyBtn}
       </div>
-      <div style="display:flex;margin-bottom:14px">
+      ${prevInfo}
+      <div style="display:flex;margin-bottom:12px">
         <span style="flex:0 0 24px"></span>
         <div style="flex:1;display:flex;gap:8px">
           <span style="flex:1;text-align:center;font-size:11px;color:var(--text-hint);font-weight:600">משקל ק״ג</span>
@@ -243,23 +292,33 @@ function renderWorkout() {
         </div>
       </div>
       ${setsHtml}
-      <button onclick="addSet('${name}')" style="margin-top:8px;width:100%;background:var(--surface);border:1px dashed var(--border-med);border-radius:8px;padding:8px;cursor:pointer;font-size:13px;color:var(--text-secondary);font-family:inherit;display:flex;align-items:center;justify-content:center;gap:5px">
+      <button onclick="addSet('${name}')" style="width:100%;background:var(--surface);border:1px dashed var(--border-med);border-radius:8px;padding:8px;cursor:pointer;font-size:13px;color:var(--text-secondary);font-family:inherit;display:flex;align-items:center;justify-content:center;gap:5px">
         <i data-lucide="plus" style="width:14px;height:14px"></i> הוסף סט
       </button>
+    </div>`;
+
+    return `<div class="card ${improved&&hasData?"improved":""}">${header}${body}</div>`;
+  }).join("");
+
+  return `<div style="padding:16px 14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <button onclick="navigate('home')" class="btn-secondary" style="width:auto;padding:7px 12px;font-size:13px;gap:4px">
+        <i data-lucide="chevron-right" style="width:14px;height:14px"></i> חזור
+      </button>
+      <span style="font-weight:600;font-size:15px;color:var(--text-primary)">${w.name}</span>
+      <span style="font-size:12px;color:var(--text-hint);background:var(--surface);padding:4px 10px;border-radius:20px">${names.filter(n=>state.exercises[n]?.some(s=>s.weight>0||s.reps>0)).length}/${names.length}</span>
     </div>
-    <div style="display:flex;gap:10px;margin-top:10px">
-      ${step > 0 ? `<button class="btn-secondary" onclick="goStep(${step-1})" style="flex:1"><i data-lucide="chevron-right" style="width:16px;height:16px"></i> הקודם</button>` : ""}
-      ${step < exList.length-1
-        ? `<button class="btn-primary" onclick="goStep(${step+1})" style="flex:1">הבא <i data-lucide="chevron-left" style="width:16px;height:16px"></i></button>`
-        : `<button class="btn-success" onclick="finishWorkout()"><i data-lucide="check-circle" style="width:16px;height:16px"></i> סיום אימון</button>`}
-    </div>
+    ${cards}
+    <button class="btn-success" onclick="finishWorkout()" style="margin-top:6px">
+      <i data-lucide="check-circle" style="width:16px;height:16px"></i> סיום אימון
+    </button>
   </div>`;
 }
 
 function updateSet(name,i,field,val) { state.exercises[name][i][field] = field==="weight" ? parseFloat(val)||0 : parseInt(val)||0; }
 function addSet(name) { state.exercises[name].push({ num:state.exercises[name].length+1, weight:0, reps:0 }); render(); }
 function removeSet(name,i) { state.exercises[name].splice(i,1); state.exercises[name].forEach((s,idx) => s.num=idx+1); render(); }
-function goStep(i) { state.step=i; render(); }
+
 function finishWorkout() {
   state.sessions.push({ id:"s_"+Date.now(), workoutId:state.workoutId, date:new Date().toISOString(), exercises:JSON.parse(JSON.stringify(state.exercises)) });
   saveSessions(); navigate("history");
@@ -278,6 +337,7 @@ function renderHistory() {
       if (!sets.length) return "";
       const prevSets = prevSameType?.exercises?.[name]||[];
       const improved = prevSets.length>0 && sets.some((s,i) => prevSets[i] && s.weight>prevSets[i].weight);
+      const rest = w ? getExRest(w, name) : null;
       const setsTable = sets.map((s,i) => {
         const p=prevSets[i]; const imp=p&&s.weight>p.weight; const reg=p&&s.weight>0&&s.weight<p.weight;
         return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0">
@@ -289,7 +349,10 @@ function renderHistory() {
       }).join("");
       return `<div style="margin-bottom:12px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-          <span style="font-size:13px;font-weight:600;color:var(--text-primary)">${name}</span>
+          <div style="display:flex;align-items:center;gap:7px">
+            <span style="font-size:13px;font-weight:600;color:var(--text-primary)">${name}</span>
+            ${rest ? `<span class="rest-chip"><i data-lucide="timer" style="width:10px;height:10px"></i> ${formatRest(rest)}</span>` : ""}
+          </div>
           ${improved
             ? `<span style="font-size:11px;color:var(--green);font-weight:600;display:flex;align-items:center;gap:3px"><i data-lucide="trending-up" style="width:12px;height:12px"></i> שיפרת</span>`
             : prevSets.length>0 ? `<span style="font-size:11px;color:var(--text-hint)">ללא שינוי</span>` : ""}
@@ -297,8 +360,8 @@ function renderHistory() {
         <div style="padding-right:4px">${setsTable}</div>
       </div>`;
     }).join("");
-    return `<div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border)">
+    return `<div class="card" style="padding:0;overflow:hidden">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 16px;border-bottom:1px solid var(--border)">
         <div style="display:flex;align-items:center;gap:7px">
           <i data-lucide="dumbbell" style="width:16px;height:16px;color:var(--text-secondary)"></i>
           <span style="font-weight:700;font-size:15px;color:var(--text-primary)">${wName}</span>
@@ -312,7 +375,7 @@ function renderHistory() {
           </button>
         </div>
       </div>
-      ${exRows}
+      <div style="padding:12px 16px">${exRows}</div>
     </div>`;
   }).join("")}</div>`;
 }
@@ -329,18 +392,34 @@ function renderManage() {
          <button onclick="event.stopPropagation();startEditName('${w.id}')" class="icon-btn" style="margin-right:4px">
            <i data-lucide="pencil" style="width:13px;height:13px"></i>
          </button>`;
-    const exRows = isOpen ? w.exercises.map((ex,i) => `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);font-size:14px;color:var(--text-primary)">
-        <span>${ex}</span>
+    const exRows = isOpen ? w.exercises.map((ex,i) => {
+      const name = typeof ex === "string" ? ex : ex.name;
+      const rest = typeof ex === "string" ? 60 : (ex.rest || 60);
+      return `<div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--border)">
+        <span style="flex:1;font-size:14px;color:var(--text-primary)">${name}</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <i data-lucide="timer" style="width:13px;height:13px;color:var(--text-hint)"></i>
+          <input type="number" value="${rest}" min="15" max="600" step="15"
+            onchange="updateExRest('${w.id}',${i},this.value)"
+            style="width:54px;text-align:center;font-size:13px;font-family:inherit;background:var(--surface);border:1px solid var(--border-med);border-radius:6px;padding:4px;color:var(--text-primary);outline:none">
+          <span style="font-size:11px;color:var(--text-hint)">שנ׳</span>
+        </div>
         <button onclick="removeExercise('${w.id}',${i})" class="icon-btn" style="color:var(--red)">
           <i data-lucide="x" style="width:16px;height:16px"></i>
         </button>
-      </div>`).join("") : "";
+      </div>`;
+    }).join("") : "";
     const addRow = isOpen ? `
-      <div style="display:flex;gap:8px;margin-top:12px">
+      <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
         <input class="inp inp-text" id="new-ex-${w.id}" placeholder="שם תרגיל..." style="flex:1"
           onkeydown="if(event.key==='Enter')addExercise('${w.id}')">
-        <button onclick="addExercise('${w.id}')" style="padding:0 14px;background:var(--accent);border:none;border-radius:8px;cursor:pointer;color:#fff;display:flex;align-items:center;">
+        <div style="display:flex;align-items:center;gap:4px">
+          <i data-lucide="timer" style="width:13px;height:13px;color:var(--text-hint)"></i>
+          <input type="number" id="new-rest-${w.id}" value="60" min="15" max="600" step="15"
+            style="width:54px;text-align:center;font-size:13px;font-family:inherit;background:var(--surface);border:1px solid var(--border-med);border-radius:6px;padding:6px 4px;color:var(--text-primary);outline:none">
+          <span style="font-size:11px;color:var(--text-hint)">שנ׳</span>
+        </div>
+        <button onclick="addExercise('${w.id}')" style="padding:0 12px;height:38px;background:var(--accent);border:none;border-radius:8px;cursor:pointer;color:#fff;display:flex;align-items:center;">
           <i data-lucide="plus" style="width:16px;height:16px"></i>
         </button>
       </div>` : "";
@@ -398,12 +477,18 @@ function deleteWorkout(id) {
 }
 function addExercise(workoutId) {
   const inp=document.getElementById("new-ex-"+workoutId); const val=inp?inp.value.trim():"";
+  const restInp=document.getElementById("new-rest-"+workoutId);
+  const rest=restInp?parseInt(restInp.value)||60:60;
   if(!val) return; const w=getWorkout(workoutId);
-  if(w){ w.exercises.push(val); saveWorkouts(); render(); }
+  if(w){ w.exercises.push({name:val, rest}); saveWorkouts(); render(); }
 }
 function removeExercise(workoutId,i) {
   const w=getWorkout(workoutId);
   if(w){ w.exercises.splice(i,1); saveWorkouts(); render(); }
+}
+function updateExRest(workoutId,i,val) {
+  const w=getWorkout(workoutId);
+  if(w && w.exercises[i]){ w.exercises[i].rest=parseInt(val)||60; saveWorkouts(); }
 }
 
 window.addEventListener("load", function() { render(); });
