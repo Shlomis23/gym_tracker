@@ -240,6 +240,18 @@ function loadInProgress() {
 }
 
 function navigate(screen) {
+  if (state.screen === "manage" && screen !== "manage") {
+    const empty = state.workouts.filter(w => w.exercises.length === 0);
+    if (empty.length > 0) {
+      const names = empty.map(w => w.name).join(", ");
+      if (confirm("השארת אימון ריק (" + names + "), האם למחוק?")) {
+        state.workouts = state.workouts.filter(w => w.exercises.length > 0);
+        saveWorkouts();
+      } else {
+        return;
+      }
+    }
+  }
   if (state.workoutId) saveInProgress();
   state.screen = screen;
   if (screen === "home") {
@@ -659,18 +671,11 @@ function renderWorkout() {
 function updateSet(name,i,field,val) {
   const parsed = field==="weight" ? parseFloat(val)||0 : parseInt(val)||0;
   state.exercises[name][i][field] = parsed;
-  if (field === "weight" && parsed > 0) {
-    const sets = state.exercises[name];
-    for (let j = i+1; j < sets.length; j++) {
-      if (!sets[j].weight) sets[j].weight = parsed;
-    }
-  }
   saveInProgress();
 }
 function addSet(name) {
   const sets = state.exercises[name];
-  const lastW = sets.length ? sets[sets.length-1].weight : 0;
-  sets.push({ num:sets.length+1, weight:lastW, reps:0, failed:false });
+  sets.push({ num:sets.length+1, weight:0, reps:0, failed:false });
   saveInProgress(); render();
 }
 function removeSet(name,i) { state.exercises[name].splice(i,1); state.exercises[name].forEach((s,idx) => s.num=idx+1); saveInProgress(); render(); }
