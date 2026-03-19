@@ -540,8 +540,8 @@ function renderWorkout() {
 
   return `<div style="padding:16px 14px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-      <button onclick="navigate('home')" class="btn-secondary" style="width:auto;padding:7px 12px;font-size:13px;gap:4px">
-        <i data-lucide="chevron-right" style="width:14px;height:14px"></i> חזור
+      <button onclick="cancelWorkout()" class="btn-secondary" style="width:auto;padding:7px 12px;font-size:13px;gap:4px;color:var(--red);border-color:var(--red)">
+        <i data-lucide="x" style="width:14px;height:14px"></i> בטל
       </button>
       <span style="font-weight:600;font-size:15px;color:var(--text-primary)">${w.name}</span>
       <span style="font-size:12px;color:var(--text-hint);background:var(--surface);padding:4px 10px;border-radius:20px">${done}/${names.length}</span>
@@ -558,6 +558,7 @@ function addSet(name) { state.exercises[name].push({ num:state.exercises[name].l
 function removeSet(name,i) { state.exercises[name].splice(i,1); state.exercises[name].forEach((s,idx) => s.num=idx+1); saveInProgress(); render(); }
 
 function finishWorkout() {
+  if (!confirm("האם לשמור את האימון?")) return;
   state.sessions.push({ id:"s_"+Date.now(), workoutId:state.workoutId, date:new Date().toISOString(), exercises:JSON.parse(JSON.stringify(state.exercises)) });
   sessionStorage.removeItem("gym_in_progress");
   state.workoutId = null; state.exercises = {}; state.openExercise = null; state.selectedWorkoutId = null;
@@ -565,6 +566,14 @@ function finishWorkout() {
   haptic("success");
   navigate("dashboard");
   setTimeout(() => showToast("כל הכבוד! האימון הושלם 💪", ""), 300);
+}
+
+function cancelWorkout() {
+  if (!confirm("האם אתה בטוח? האימון לא יישמר.")) return;
+  haptic("light");
+  sessionStorage.removeItem("gym_in_progress");
+  state.workoutId = null; state.exercises = {}; state.openExercise = null; state.selectedWorkoutId = null;
+  navigate("home");
 }
 
 function renderHistory() {
@@ -781,7 +790,16 @@ function addExercise(workoutId) {
 }
 function removeExercise(workoutId,i) {
   const w=getWorkout(workoutId);
-  if(w){ w.exercises.splice(i,1); saveWorkouts(); render(); }
+  if(!w) return;
+  if(w.exercises.length === 1) {
+    if(confirm("אם תמחק תרגיל זה, האימון יישאר ריק. האם למחוק את האימון לגמרי?")) {
+      state.workouts = state.workouts.filter(x => x.id !== workoutId);
+      if(state.manageOpenId === workoutId) state.manageOpenId = null;
+      saveWorkouts(); render();
+    }
+    return;
+  }
+  w.exercises.splice(i,1); saveWorkouts(); render();
 }
 function updateExRest(workoutId,i,val) {
   const w=getWorkout(workoutId);
