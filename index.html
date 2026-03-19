@@ -63,6 +63,10 @@ body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg);
 .pr-row:last-child { border-bottom: none; }
 .week-dot { width: 10px; height: 10px; border-radius: 50%; }
 .choose-btn.selected { border: 2px solid var(--accent); background: var(--surface); }
+.drag-handle { cursor: grab; color: var(--text-hint); display:flex;align-items:center;padding:0 4px; touch-action: none; }
+.drag-handle:active { cursor: grabbing; }
+.ex-row-drag { transition: opacity 0.15s; }
+.ex-row-drag.dragging { opacity: 0.4; }
 .toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #111827; color: #fff; padding: 14px 24px; border-radius: 14px; font-size: 14px; font-weight: 600; z-index: 999; opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; display: flex; align-items: center; gap: 8px; max-width: 320px; text-align: center; }
 .toast.show { opacity: 1; }
 </style>
@@ -258,6 +262,7 @@ function render() {
   else el.innerHTML = renderManage();
   if (window.lucide) lucide.createIcons();
   bindDelButtons();
+  bindDragDrop();
   const dot = document.getElementById("inprogress-dot");
   if (dot) dot.style.display = state.workoutId ? "block" : "none";
 }
@@ -290,9 +295,112 @@ function renderDashboard() {
   const prEntries = Object.entries(prs).slice(0, 6);
   const daysSince = getDaysSinceLastWorkout();
 
-  const weekDots = Array.from({length: goal}, (_,i) =>
-    `<div class="week-dot" style="background:${i < thisWeek ? "var(--accent)" : "var(--border-med)"}"></div>`
-  ).join("");
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  const daysLeftInWeek = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
+  const workoutsLeft = Math.max(0, goal - thisWeek);
+  const goalReached = thisWeek >= goal;
+
+  let urgencyCard = "";
+  if (!goalReached) {
+    const isUrgent = daysLeftInWeek <= workoutsLeft;
+    const urgentColor = isUrgent ? "var(--red)" : daysLeftInWeek <= 2 ? "var(--orange)" : "var(--text-primary)";
+    const urgentBg = isUrgent ? "var(--red-bg)" : daysLeftInWeek <= 2 ? "var(--orange-bg)" : "var(--surface)";
+    const urgentBorder = isUrgent ? "var(--red)" : daysLeftInWeek <= 2 ? "var(--orange)" : "var(--border)";
+    const msg = isUrgent
+      ? "⚠ לא יהיה מספיק זמן — התאמן היום!"
+      : daysLeftInWeek === 0
+      ? "היום הוא יום ראשון — שבוע חדש מתחיל"
+      : workoutsLeft === 1
+      ? "עוד אימון אחד ותשלים את היעד השבועי"
+      : `עוד ${workoutsLeft} אימונים להשלמת השבוע`;
+    const dayWord = daysLeftInWeek === 1 ? "יום" : "ימים";
+    const workoutWord = workoutsLeft === 1 ? "אימון" : "אימונים";
+    urgencyCard = `<div style="background:${urgentBg};border:1px solid ${urgentBorder};border-radius:14px;padding:14px 16px;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <span style="font-size:13px;font-weight:600;color:${urgentColor}">${msg}</span>
+      </div>
+      <div style="display:flex;gap:0">
+        <div style="flex:1;text-align:center;border-left:1px solid ${urgentBorder}">
+          <div style="font-size:26px;font-weight:700;color:${urgentColor};line-height:1">${daysLeftInWeek}</div>
+          <div style="font-size:11px;color:${urgentColor};margin-top:3px;opacity:0.8">${dayWord} נותרו</div>
+        </div>
+        <div style="flex:1;text-align:center">
+          <div style="font-size:26px;font-weight:700;color:${urgentColor};line-height:1">${workoutsLeft}</div>
+          <div style="font-size:11px;color:${urgentColor};margin-top:3px;opacity:0.8">${workoutWord} נותרו</div>
+        </div>
+      </div>
+    </div>`;
+  } else {
+    urgencyCard = `<div style="background:var(--green-bg);border:1px solid #86efac;border-radius:14px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
+      <div style="font-size:28px;line-height:1">🏆</div>
+      <div>
+        <div style="font-size:14px;font-weight:700;color:var(--green)">היעד השבועי הושלם יא מלך!</div>
+        <div style="font-size:12px;color:var(--green);margin-top:2px;opacity:0.8">${thisWeek} מתוך ${goal} אימונים הושלמו</div>
+      </div>
+    </div>`;
+  }
+
+  const dayNames = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
+  const todayDow = new Date().getDay();
+  const weekStart = new Date();
+  weekStart.setDate(weekStart.getDate() - (todayDow === 0 ? 6 : todayDow - 0));
+  weekStart.setHours(0,0,0,0);
+
+  const workedDays = new Set();
+  state.sessions.forEach(s => {
+    const d = new Date(s.date);
+    if (d >= weekStart) {
+      workedDays.add(d.getDay());
+    }
+  });
+
+  const pct = goal > 0 ? Math.round((thisWeek / goal) * 100) : 0;
+  const pctColor = pct >= 100 ? "var(--green)" : pct >= 50 ? "var(--orange)" : "var(--text-hint)";
+  const pctBg = pct >= 100 ? "var(--green-bg)" : pct >= 50 ? "var(--orange-bg)" : "var(--surface)";
+
+  const checkIcon = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+
+  const dayOrder = [0,1,2,3,4,5,6];
+  const dayCells = dayOrder.map(dow => {
+    const isToday = dow === todayDow;
+    const isPast = todayDow === 0 ? dow === 0 : dow < todayDow || dow === 0 && todayDow > 0;
+    const isFuture = !isToday && !isPast;
+    const worked = workedDays.has(dow);
+    const labelColor = worked ? "var(--green)" : isFuture ? "var(--border-med)" : "var(--text-hint)";
+    const labelWeight = isToday ? "700" : "600";
+    const boxBg = worked ? "var(--green-bg)" : isFuture ? "var(--card)" : "var(--surface)";
+    const boxBorder = worked
+      ? isToday ? "2px solid var(--green)" : "1px solid #86efac"
+      : isFuture ? "1px dashed var(--border-med)" : "1px solid var(--border)";
+    return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+      <span style="font-size:10px;color:${labelColor};font-weight:${labelWeight}">${dayNames[dow]}</span>
+      <div style="width:100%;aspect-ratio:1;border-radius:8px;background:${boxBg};border:${boxBorder};display:flex;align-items:center;justify-content:center">
+        ${worked ? checkIcon : ""}
+      </div>
+    </div>`;
+  }).join("");
+
+  const dumbbellIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5m-2.5 0a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0 -5 0"/><path d="M17.5 6.5m-2.5 0a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0 -5 0"/><path d="M4 16c0-1.1.9-2 2-2h.5"/><path d="M4 6.5v4"/><path d="M20 6.5v4"/><path d="M9 17h6"/><path d="M15 16.1A2 2 0 0 1 16.5 14H17a2 2 0 0 1 2 2"/><path d="M8 22v-5"/><path d="M16 22v-5"/></svg>`;
+  const boltIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>`;
+
+  const weekCard = `<div class="stat-card" style="margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <span class="stat-label">השבוע</span>
+      <span style="font-size:11px;font-weight:600;color:${pctColor};background:${pctBg};padding:2px 8px;border-radius:20px">${pct}% מהיעד</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-bottom:12px">${dayCells}</div>
+    <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;justify-content:space-between;align-items:center">
+      <div style="display:flex;align-items:center;gap:6px">
+        ${dumbbellIcon}
+        <span style="font-size:12px;color:var(--text-secondary);font-weight:500">${thisWeek} מתוך ${goal} אימונים</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:5px">
+        ${boltIcon}
+        <span style="font-size:12px;color:var(--orange);font-weight:600">Streak: ${streak} שבועות</span>
+      </div>
+    </div>
+  </div>`;
 
   const inProgress = sessionStorage.getItem("gym_in_progress");
   const inProgressId = inProgress ? JSON.parse(inProgress).workoutId : null;
@@ -309,13 +417,12 @@ function renderDashboard() {
        </button>`
     : "";
 
-  const streakColor = streak >= 3 ? "var(--green)" : streak >= 1 ? "var(--orange)" : "var(--text-hint)";
 
   let daysSinceCard = "";
   if (daysSince) {
     const d = daysSince.days;
     const color = d <= 2 ? "var(--green)" : d <= 3 ? "var(--orange)" : "var(--red)";
-    const msg = d === 0 ? "אימנת היום" : d <= 2 ? "מנוחה טובה" : d <= 3 ? "כדאי להתאמן" : "בוא נחזור למסלול";
+    const msg = d === 0 ? "התאמנת היום - מגיע לך לנוח" : d <= 2 ? "מחר אימון" : d <= 3 ? "קום להתאמן" : "בוא נחזור למסלול";
     const barW = Math.min(Math.round((d / 6) * 100), 100);
     const lastW = getWorkout(daysSince.session.workoutId);
     daysSinceCard = `<div class="stat-card" style="margin-bottom:16px">
@@ -343,21 +450,9 @@ function renderDashboard() {
   return `<div style="padding:16px 14px">
     ${nextBtn}
 
-    <div class="stat-card" style="margin-bottom:16px;display:flex;padding:16px">
-      <div style="flex:1;text-align:center;padding-left:16px">
-        <div class="stat-label">השבוע</div>
-        <div style="font-size:28px;font-weight:700;line-height:1;color:${thisWeek >= goal ? "var(--green)" : "var(--text-primary)"};margin:6px 0">${thisWeek}</div>
-        <div style="font-size:12px;color:var(--text-hint);margin-bottom:8px">/ ${goal} אימונים</div>
-        <div style="display:flex;justify-content:center;gap:4px">${weekDots}</div>
-      </div>
-      <div style="width:1px;background:var(--border);margin:0 4px"></div>
-      <div style="flex:1;text-align:center;padding-right:16px">
-        <div class="stat-label">Streak שבועי</div>
-        <div style="font-size:28px;font-weight:700;line-height:1;color:${streakColor};margin:6px 0">${streak}</div>
-        <div style="font-size:12px;color:${streakColor}">${streak === 0 ? "יאללה נתחיל" : streak === 1 ? "שבוע ראשון" : `${streak} שבועות ברצף`}</div>
-      </div>
-    </div>
+    ${weekCard}
 
+    ${urgencyCard}
     ${daysSinceCard}
 
     ${prEntries.length ? `<div class="card" style="padding:0;overflow:hidden;margin-bottom:16px">
@@ -491,24 +586,33 @@ function renderWorkout() {
 
     const setsHtml = sets.map((s,i) => {
       const p = prevSets?.[i]; const imp = p && s.weight > p.weight; const reg = p && s.weight > 0 && s.weight < p.weight;
+      const isLast = i === sets.length - 1;
+      const isFailed = !!s.failed;
       const icon = s.weight > 0 && p
         ? `<span style="display:flex;align-items:center;color:${imp?"var(--green)":reg?"var(--red)":"var(--text-hint)"}">
              <i data-lucide="${imp?"trending-up":reg?"trending-down":"minus"}" style="width:14px;height:14px"></i>
            </span>`
         : `<button onclick="removeSet('${name}',${i})" class="icon-btn"><i data-lucide="x" style="width:16px;height:16px"></i></button>`;
-      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
-        <span style="min-width:16px;font-size:12px;color:var(--text-hint);font-weight:600">${s.num}</span>
-        <div style="flex:1;display:flex;gap:8px">
-          <div style="flex:1">
-            <input class="inp" type="number" placeholder="ק״ג" value="${s.weight||""}" oninput="updateSet('${name}',${i},'weight',this.value)">
-            ${p?`<div style="text-align:center;font-size:10px;color:var(--text-hint);margin-top:3px">לפני: ${p.weight}</div>`:""}
+      const failedChk = isLast ? `<label style="display:flex;align-items:center;gap:4px;margin-top:6px;cursor:pointer;font-size:11px;color:${isFailed?"var(--red)":"var(--text-hint)"}">
+        <input type="checkbox" ${isFailed?"checked":""} onchange="toggleFailed('${name}',${i})" style="accent-color:var(--red);width:13px;height:13px">
+        כשל
+      </label>` : "";
+      return `<div style="margin-bottom:${isLast?"8px":"14px"}">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="min-width:16px;font-size:12px;color:${isFailed?"var(--red)":"var(--text-hint)"};font-weight:600">${s.num}</span>
+          <div style="flex:1;display:flex;gap:8px">
+            <div style="flex:1">
+              <input class="inp" type="number" placeholder="ק״ג" value="${s.weight||""}" style="${isFailed?"border-color:var(--red);color:var(--red)":""}" oninput="updateSet('${name}',${i},'weight',this.value)">
+              ${p?`<div style="text-align:center;font-size:10px;color:var(--text-hint);margin-top:3px">לפני: ${p.weight}</div>`:""}
+            </div>
+            <div style="flex:1">
+              <input class="inp" type="number" placeholder="חז׳" value="${s.reps||""}" style="${isFailed?"border-color:var(--red);color:var(--red)":""}" oninput="updateSet('${name}',${i},'reps',this.value)">
+              ${p?`<div style="text-align:center;font-size:10px;color:var(--text-hint);margin-top:3px">לפני: ${p.reps}</div>`:""}
+            </div>
+            <div style="width:28px;display:flex;align-items:center;justify-content:center">${icon}</div>
           </div>
-          <div style="flex:1">
-            <input class="inp" type="number" placeholder="חז׳" value="${s.reps||""}" oninput="updateSet('${name}',${i},'reps',this.value)">
-            ${p?`<div style="text-align:center;font-size:10px;color:var(--text-hint);margin-top:3px">לפני: ${p.reps}</div>`:""}
-          </div>
-          <div style="width:28px;display:flex;align-items:center;justify-content:center">${icon}</div>
         </div>
+        ${failedChk}
       </div>`;
     }).join("");
 
@@ -552,9 +656,25 @@ function renderWorkout() {
   </div>`;
 }
 
-function updateSet(name,i,field,val) { state.exercises[name][i][field] = field==="weight" ? parseFloat(val)||0 : parseInt(val)||0; saveInProgress(); }
-function addSet(name) { state.exercises[name].push({ num:state.exercises[name].length+1, weight:0, reps:0 }); saveInProgress(); render(); }
+function updateSet(name,i,field,val) {
+  const parsed = field==="weight" ? parseFloat(val)||0 : parseInt(val)||0;
+  state.exercises[name][i][field] = parsed;
+  if (field === "weight" && parsed > 0) {
+    const sets = state.exercises[name];
+    for (let j = i+1; j < sets.length; j++) {
+      if (!sets[j].weight) sets[j].weight = parsed;
+    }
+  }
+  saveInProgress();
+}
+function addSet(name) {
+  const sets = state.exercises[name];
+  const lastW = sets.length ? sets[sets.length-1].weight : 0;
+  sets.push({ num:sets.length+1, weight:lastW, reps:0, failed:false });
+  saveInProgress(); render();
+}
 function removeSet(name,i) { state.exercises[name].splice(i,1); state.exercises[name].forEach((s,idx) => s.num=idx+1); saveInProgress(); render(); }
+function toggleFailed(name,i) { state.exercises[name][i].failed = !state.exercises[name][i].failed; saveInProgress(); render(); }
 
 function finishWorkout() {
   if (!confirm("האם לשמור את האימון?")) return;
@@ -578,8 +698,13 @@ function cancelWorkout() {
 function renderHistory() {
   if (!state.sessions.length) return `<div style="padding:40px;text-align:center;color:var(--text-hint);font-size:14px">אין אימונים עדיין</div>`;
   const reversed = [...state.sessions].reverse();
+  const exportBtn = `<div style="padding:0 14px 10px;display:flex;justify-content:flex-start">
+    <button onclick="exportCSV()" style="display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border-med);border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px;font-family:inherit;color:var(--text-secondary)">
+      <i data-lucide="download" style="width:13px;height:13px"></i> ייצוא CSV
+    </button>
+  </div>`;
   if (!state.expandedSessions) state.expandedSessions = new Set();
-  return `<div style="padding:14px">${reversed.map((session, ri) => {
+  return `<div style="padding:14px">${exportBtn}${reversed.map((session, ri) => {
     const originalIdx = state.sessions.length - 1 - ri;
     const w = getWorkout(session.workoutId);
     const wName = w ? w.name : session.workoutId;
@@ -607,11 +732,12 @@ function renderHistory() {
       const rest = w ? getExRest(w, name) : null;
       const setsTable = sets.map((s,i) => {
         const p=prevSets[i]; const imp=p&&s.weight>p.weight; const reg=p&&s.weight>0&&s.weight<p.weight;
+        const failed = !!s.failed;
         return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0">
-          <span style="min-width:14px;font-size:11px;color:var(--text-hint);font-weight:600">${s.num}</span>
-          <span style="font-size:13px;color:var(--text-primary);font-weight:500;min-width:56px">${s.weight} ק״ג</span>
-          <span style="font-size:13px;color:var(--text-secondary);min-width:44px">× ${s.reps}</span>
-          ${p?`<i data-lucide="${imp?"trending-up":reg?"trending-down":"minus"}" style="width:13px;height:13px;color:${imp?"var(--green)":reg?"var(--red)":"var(--text-hint)"}"></i>`:""}
+          <span style="min-width:14px;font-size:11px;color:${failed?"var(--red)":"var(--text-hint)"};font-weight:600">${s.num}</span>
+          <span style="font-size:13px;color:${failed?"var(--red)":"var(--text-primary)"};font-weight:500;min-width:56px">${s.weight} ק״ג</span>
+          <span style="font-size:13px;color:${failed?"var(--red)":"var(--text-secondary)"};min-width:44px">× ${s.reps}</span>
+          ${failed ? `<span style="font-size:10px;color:var(--red);font-weight:600">כשל</span>` : p?`<i data-lucide="${imp?"trending-up":reg?"trending-down":"minus"}" style="width:13px;height:13px;color:${imp?"var(--green)":reg?"var(--red)":"var(--text-hint)"}"></i>`:""}
         </div>`;
       }).join("");
       return `<div style="margin-bottom:12px">
@@ -669,10 +795,12 @@ function renderManage() {
          <button onclick="event.stopPropagation();startEditName('${w.id}')" class="icon-btn" style="margin-right:4px">
            <i data-lucide="pencil" style="width:13px;height:13px"></i>
          </button>`;
-    const exRows = isOpen ? w.exercises.map((ex,i) => {
+    const exRows = isOpen ? `<div id="drag-list-${w.id}">${w.exercises.map((ex,i) => {
       const name = typeof ex === "string" ? ex : ex.name;
       const rest = typeof ex === "string" ? 60 : (ex.rest||60);
-      return `<div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--border)">
+      return `<div class="ex-row-drag" draggable="true" data-wid="${w.id}" data-idx="${i}"
+        style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--border)">
+        <span class="drag-handle"><i data-lucide="grip-vertical" style="width:14px;height:14px"></i></span>
         <span style="flex:1;font-size:14px;color:var(--text-primary)">${name}</span>
         <div style="display:flex;align-items:center;gap:5px">
           <i data-lucide="timer" style="width:13px;height:13px;color:var(--orange)"></i>
@@ -685,7 +813,7 @@ function renderManage() {
           <i data-lucide="x" style="width:16px;height:16px"></i>
         </button>
       </div>`;
-    }).join("") : "";
+    }).join("")}</div>` : "";
     const addRow = isOpen ? `
       <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
         <input class="inp inp-text" id="new-ex-${w.id}" placeholder="שם תרגיל..." style="flex:1"
@@ -803,6 +931,64 @@ function removeExercise(workoutId,i) {
 function updateExRest(workoutId,i,val) {
   const w=getWorkout(workoutId);
   if(w && w.exercises[i]){ w.exercises[i].rest=parseInt(val)||60; saveWorkouts(); }
+}
+
+function exportCSV() {
+  if (!state.sessions.length) { showToast("אין נתונים לייצוא"); return; }
+  const rows = [["תאריך","אימון","תרגיל","סט","משקל","חזרות","כשל"]];
+  state.sessions.forEach(session => {
+    const w = getWorkout(session.workoutId);
+    const wName = w ? w.name : session.workoutId;
+    Object.entries(session.exercises||{}).forEach(([exName, sets]) => {
+      sets.forEach(s => {
+        if (s.weight > 0 || s.reps > 0) {
+          rows.push([
+            new Date(session.date).toLocaleDateString("he-IL"),
+            wName, exName, s.num, s.weight, s.reps, s.failed ? "כן" : "לא"
+          ]);
+        }
+      });
+    });
+  });
+  const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(",")).join("\n");
+  const blob = new Blob(["﻿"+csv], {type:"text/csv;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "gym-tracker.csv"; a.click();
+  URL.revokeObjectURL(url);
+  showToast("הנתונים יוצאו בהצלחה ✓");
+}
+
+let dragSrc = null;
+
+function bindDragDrop() {
+  document.querySelectorAll(".ex-row-drag").forEach(row => {
+    row.addEventListener("dragstart", e => {
+      dragSrc = row;
+      row.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+    });
+    row.addEventListener("dragend", () => {
+      row.classList.remove("dragging");
+      dragSrc = null;
+    });
+    row.addEventListener("dragover", e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+    });
+    row.addEventListener("drop", e => {
+      e.preventDefault();
+      if (!dragSrc || dragSrc === row) return;
+      const wid = row.dataset.wid;
+      const fromIdx = parseInt(dragSrc.dataset.idx);
+      const toIdx = parseInt(row.dataset.idx);
+      const w = getWorkout(wid);
+      if (!w) return;
+      const moved = w.exercises.splice(fromIdx, 1)[0];
+      w.exercises.splice(toIdx, 0, moved);
+      saveWorkouts(); render();
+    });
+  });
 }
 
 window.addEventListener("load", function() { render(); });
