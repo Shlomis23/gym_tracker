@@ -4,61 +4,75 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>מעקב אימונים</title>
+<script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 input[type=number] { -moz-appearance: textfield; }
 input[type=number]::-webkit-outer-spin-button,
 input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
 :root {
-  --bg: #eef0f8; --surface: #f5f6fc; --card: #ffffff;
-  --border: rgba(120,110,200,0.15); --border-med: rgba(120,110,200,0.3);
-  --accent: #8b7fd4; --accent-light: #ede9fa; --accent-mid: #c4baf0;
-  --text-primary: #2d2756; --text-secondary: #7b74a8; --text-hint: #b3aed4;
-  --green: #5db88a; --green-bg: #eaf6f0; --red: #d46b6b; --red-bg: #faeaea;
+  --bg: #f8f9fa; --surface: #f3f4f6; --card: #ffffff;
+  --border: #e5e7eb; --border-med: #d1d5db;
+  --accent: #111827; --accent-light: #f3f4f6;
+  --text-primary: #111827; --text-secondary: #4b5563; --text-hint: #9ca3af;
+  --green: #15803d; --green-bg: #dcfce7;
+  --red: #dc2626; --red-bg: #fee2e2;
+  --blue: #1d4ed8; --blue-bg: #dbeafe;
 }
 body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); direction: rtl; }
 .app { max-width: 420px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); }
-.topbar { background: linear-gradient(135deg, #d6d0f5 0%, #c8d4f5 100%); border-bottom: 0.5px solid var(--border); padding: 16px 18px 12px; position: sticky; top: 0; z-index: 10; }
-.topbar-title { font-weight: 600; font-size: 17px; color: var(--text-primary); }
+.topbar { background: var(--accent); padding: 16px 18px 12px; position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 10px; }
+.topbar-title { font-weight: 600; font-size: 17px; color: #fff; }
 .content { flex: 1; }
-.bottomnav { background: #fff; border-top: 0.5px solid var(--border); display: flex; position: sticky; bottom: 0; }
-.navbtn { flex: 1; padding: 10px 0; background: none; border: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; font-family: inherit; border-top: 2px solid transparent; }
+.bottomnav { background: var(--card); border-top: 1px solid var(--border); display: flex; position: sticky; bottom: 0; }
+.navbtn { flex: 1; padding: 10px 0 8px; background: none; border: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 10px; font-family: inherit; border-top: 2px solid transparent; color: var(--text-hint); }
 .navbtn.active { color: var(--accent); border-top-color: var(--accent); }
-.navbtn:not(.active) { color: var(--text-hint); }
-.card { background: var(--card); border: 0.5px solid var(--border); border-radius: 16px; padding: 14px 16px; margin-bottom: 12px; }
-.card.improved { border-color: var(--green); background: linear-gradient(180deg, #f6fdf9 0%, #fff 60%); }
-.inp { width: 100%; text-align: center; font-size: 15px; font-family: inherit; background: var(--surface); border: 0.5px solid var(--border-med); border-radius: 10px; padding: 8px 4px; color: var(--text-primary); outline: none; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; }
+.card.improved { border-color: var(--green); }
+.inp { width: 100%; text-align: center; font-size: 15px; font-family: inherit; background: var(--surface); border: 1px solid var(--border-med); border-radius: 8px; padding: 8px 4px; color: var(--text-primary); outline: none; }
 .inp:focus { border-color: var(--accent); background: #fff; }
 .inp-text { text-align: right; padding: 8px 10px; }
-.btn-primary { width: 100%; padding: 12px; background: var(--accent); color: #fff; border: none; border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 500; font-family: inherit; }
-.btn-secondary { width: 100%; padding: 12px; background: var(--surface); border: 0.5px solid var(--border-med); border-radius: 10px; cursor: pointer; font-size: 14px; color: var(--text-secondary); font-family: inherit; }
-.btn-success { width: 100%; padding: 12px; background: var(--green-bg); color: var(--green); border: 0.5px solid var(--green); border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 500; font-family: inherit; }
-.btn-copy { padding: 5px 10px; background: var(--accent-light); border: 0.5px solid var(--accent-mid); border-radius: 8px; cursor: pointer; font-size: 11px; color: var(--accent); font-family: inherit; white-space: nowrap; }
-.badge { font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 8px; }
+.btn-primary { width: 100%; padding: 13px; background: var(--accent); color: #fff; border: none; border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 600; font-family: inherit; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.btn-secondary { width: 100%; padding: 13px; background: var(--surface); border: 1px solid var(--border-med); border-radius: 10px; cursor: pointer; font-size: 14px; color: var(--text-secondary); font-family: inherit; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.btn-success { width: 100%; padding: 13px; background: var(--green-bg); color: var(--green); border: 1px solid #86efac; border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 600; font-family: inherit; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.btn-copy { padding: 5px 10px; background: var(--blue-bg); border: 1px solid #93c5fd; border-radius: 8px; cursor: pointer; font-size: 11px; color: var(--blue); font-family: inherit; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+.badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; }
 .badge-up { background: var(--green-bg); color: var(--green); }
 .badge-down { background: var(--red-bg); color: var(--red); }
 .badge-eq { background: var(--surface); color: var(--text-hint); }
 .progress-bar { display: flex; gap: 4px; margin-bottom: 16px; }
 .progress-seg { flex: 1; height: 4px; border-radius: 4px; cursor: pointer; }
-.choose-btn { flex: 1; padding: 22px 8px; background: var(--card); border: 0.5px solid var(--border); border-radius: 16px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 7px; font-family: inherit; min-width: 0; }
-.choose-btn:hover { border-color: var(--accent-mid); }
+.choose-btn { flex: 1; padding: 20px 8px; background: var(--card); border: 1px solid var(--border); border-radius: 14px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 7px; font-family: inherit; min-width: 0; }
+.choose-btn:hover { border-color: var(--accent); }
 .workout-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; cursor: pointer; }
-.name-edit-inp { font-weight: 600; font-size: 15px; font-family: inherit; color: var(--text-primary); background: var(--accent-light); border: 0.5px solid var(--accent-mid); border-radius: 8px; padding: 4px 8px; outline: none; width: 140px; text-align: right; }
+.name-edit-inp { font-weight: 600; font-size: 15px; font-family: inherit; color: var(--text-primary); background: var(--surface); border: 1px solid var(--border-med); border-radius: 8px; padding: 4px 8px; outline: none; width: 150px; text-align: right; }
 .name-edit-inp:focus { border-color: var(--accent); }
-.del-session-btn { background: none; border: none; cursor: pointer; color: var(--text-hint); font-size: 15px; padding: 2px 4px; line-height: 1; border-radius: 6px; }
-.del-session-btn:hover { color: var(--red); background: var(--red-bg); }
+.del-btn { background: none; border: none; cursor: pointer; color: var(--text-hint); padding: 4px; border-radius: 6px; display: flex; align-items: center; }
+.del-btn:hover { color: var(--red); background: var(--red-bg); }
+.icon-btn { background: none; border: none; cursor: pointer; padding: 2px; display: flex; align-items: center; color: var(--text-hint); }
+.icon-btn:hover { color: var(--text-primary); }
 </style>
 </head>
 <body>
 <div class="app">
-  <div class="topbar"><span class="topbar-title" id="screen-title">אימון חדש</span></div>
+  <div class="topbar">
+    <i data-lucide="dumbbell" style="width:20px;height:20px;color:#fff"></i>
+    <span class="topbar-title" id="screen-title">אימון חדש</span>
+  </div>
   <div class="content" id="main-content"></div>
   <div class="bottomnav">
-    <button class="navbtn active" id="nav-home" onclick="navigate('home')"><span style="font-size:17px">&#9711;</span><span>אימון</span></button>
-    <button class="navbtn" id="nav-history" onclick="navigate('history')"><span style="font-size:17px">&#9776;</span><span>היסטוריה</span></button>
-    <button class="navbtn" id="nav-manage" onclick="navigate('manage')"><span style="font-size:17px">&#9998;</span><span>תרגילים</span></button>
+    <button class="navbtn active" id="nav-home" onclick="navigate('home')">
+      <i data-lucide="dumbbell" style="width:18px;height:18px"></i><span>אימון</span>
+    </button>
+    <button class="navbtn" id="nav-history" onclick="navigate('history')">
+      <i data-lucide="calendar" style="width:18px;height:18px"></i><span>היסטוריה</span>
+    </button>
+    <button class="navbtn" id="nav-manage" onclick="navigate('manage')">
+      <i data-lucide="pencil" style="width:18px;height:18px"></i><span>תרגילים</span>
+    </button>
   </div>
 </div>
+
 <script>
 const STORAGE_SESSIONS = "gym_sessions_v2";
 const STORAGE_WORKOUTS = "gym_workouts_v3";
@@ -66,10 +80,12 @@ const DEFAULT_WORKOUTS = [
   { id: "A", name: "אימון A", exercises: ["לחיצת חזה", "כתפיים קדמי", "טרייספס", "בטן"] },
   { id: "B", name: "אימון B", exercises: ["גב רחב", "בייספס", "כתפיים אחורי", "כרעיים"] }
 ];
+
 function loadWorkouts() {
   try { const s = localStorage.getItem(STORAGE_WORKOUTS); return s ? JSON.parse(s) : JSON.parse(JSON.stringify(DEFAULT_WORKOUTS)); }
   catch { return JSON.parse(JSON.stringify(DEFAULT_WORKOUTS)); }
 }
+
 let state = {
   screen: "home", workoutId: null, step: 0, exercises: {},
   sessions: [], workouts: loadWorkouts(), manageOpenId: null, editingNameId: null
@@ -96,20 +112,43 @@ function render() {
   if (state.screen === "home") el.innerHTML = state.workoutId ? renderWorkout() : renderChoose();
   else if (state.screen === "history") el.innerHTML = renderHistory();
   else el.innerHTML = renderManage();
+  if (window.lucide) lucide.createIcons();
+  bindDelButtons();
+}
+
+function bindDelButtons() {
+  document.querySelectorAll("[data-del-session]").forEach(btn => {
+    btn.addEventListener("click", function() {
+      const idx = parseInt(this.dataset.delSession);
+      if (confirm("למחוק את האימון מההיסטוריה?")) {
+        state.sessions.splice(idx, 1);
+        saveSessions();
+        render();
+      }
+    });
+  });
 }
 
 function renderChoose() {
-  if (!state.workouts.length) return `<div style="padding:40px;text-align:center;color:var(--text-secondary);font-size:14px">אין אימונים — הוסף דרך לשונית תרגילים</div>`;
+  if (!state.workouts.length) return `<div style="padding:40px;text-align:center;color:var(--text-hint);font-size:14px">אין אימונים — הוסף דרך לשונית תרגילים</div>`;
   const cols = state.workouts.length <= 3 ? state.workouts.length : 2;
   return `<div style="padding:20px 16px">
-    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:20px;text-align:center">איזה אימון היום?</p>
+    <p style="font-size:13px;color:var(--text-hint);margin-bottom:20px;text-align:center">איזה אימון היום?</p>
     <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:12px">
-      ${state.workouts.map(w => { const last = getLastSession(w.id); return `<button class="choose-btn" onclick="selectWorkout('${w.id}')">
-        <span style="font-size:20px;font-weight:600;color:var(--accent)">${w.name}</span>
-        <span style="font-size:11px;color:var(--text-secondary)">${last ? formatDate(last.date) : "לא בוצע עדיין"}</span>
-        <span style="font-size:10px;color:var(--text-hint);text-align:center;line-height:1.6">${w.exercises.join(" · ")}</span>
-      </button>`; }).join("")}
-    </div></div>`;
+      ${state.workouts.map(w => {
+        const last = getLastSession(w.id);
+        return `<button class="choose-btn" onclick="selectWorkout('${w.id}')">
+          <i data-lucide="dumbbell" style="width:24px;height:24px;color:var(--accent)"></i>
+          <span style="font-size:18px;font-weight:700;color:var(--text-primary)">${w.name}</span>
+          <span style="font-size:11px;color:var(--text-secondary);display:flex;align-items:center;gap:3px">
+            <i data-lucide="clock" style="width:11px;height:11px"></i>
+            ${last ? formatDate(last.date) : "לא בוצע עדיין"}
+          </span>
+          <span style="font-size:10px;color:var(--text-hint);text-align:center;line-height:1.6">${w.exercises.join(" · ")}</span>
+        </button>`;
+      }).join("")}
+    </div>
+  </div>`;
 }
 
 function selectWorkout(id) {
@@ -118,7 +157,9 @@ function selectWorkout(id) {
   state.exercises = {};
   w.exercises.forEach(name => {
     const prev = last?.exercises?.[name];
-    state.exercises[name] = prev ? prev.map((_,i) => ({ num:i+1, weight:0, reps:0 })) : [{num:1,weight:0,reps:0},{num:2,weight:0,reps:0},{num:3,weight:0,reps:0}];
+    state.exercises[name] = prev
+      ? prev.map((_,i) => ({ num:i+1, weight:0, reps:0 }))
+      : [{num:1,weight:0,reps:0},{num:2,weight:0,reps:0},{num:3,weight:0,reps:0}];
   });
   render();
 }
@@ -131,60 +172,88 @@ function copyPrevSets(name) {
 }
 
 function renderWorkout() {
-  const w = getWorkout(state.workoutId); const exList = w.exercises; const step = state.step; const name = exList[step];
+  const w = getWorkout(state.workoutId); const exList = w.exercises;
+  const step = state.step; const name = exList[step];
   const sets = state.exercises[name] || []; const last = getLastSession(state.workoutId);
   const prevSets = last?.exercises?.[name] || null;
   const improved = prevSets && sets.some((s,i) => prevSets[i] && s.weight > prevSets[i].weight);
   const curVol = calcVolume(sets); const prevVol = prevSets ? calcVolume(prevSets) : null;
   const volDiff = prevVol && curVol > 0 ? Math.round(((curVol-prevVol)/prevVol)*100) : null;
-  const segs = exList.map((_,i) => `<div class="progress-seg" style="background:${i<=step?"var(--accent)":"var(--border-med)"}" onclick="goStep(${i})"></div>`).join("");
+
+  const segs = exList.map((_,i) =>
+    `<div class="progress-seg" style="background:${i<=step?"var(--accent)":"var(--border)"}" onclick="goStep(${i})"></div>`
+  ).join("");
+
   const setsHtml = sets.map((s,i) => {
     const p = prevSets?.[i]; const imp = p && s.weight > p.weight; const reg = p && s.weight > 0 && s.weight < p.weight;
     const icon = s.weight > 0 && p
-      ? `<span style="font-size:13px;color:${imp?"var(--green)":reg?"var(--red)":"var(--text-hint)"}">${imp?"▲":reg?"▼":"="}</span>`
-      : `<button onclick="removeSet('${name}',${i})" style="background:none;border:none;cursor:pointer;color:var(--text-hint);font-size:18px;line-height:1;padding:0">×</button>`;
-    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:13px">
-      <span style="min-width:16px;font-size:12px;color:var(--text-hint)">${s.num}</span>
+      ? `<span style="display:flex;align-items:center;color:${imp?"var(--green)":reg?"var(--red)":"var(--text-hint)"}">
+           <i data-lucide="${imp?"trending-up":reg?"trending-down":"minus"}" style="width:14px;height:14px"></i>
+         </span>`
+      : `<button onclick="removeSet('${name}',${i})" class="icon-btn"><i data-lucide="x" style="width:16px;height:16px"></i></button>`;
+    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+      <span style="min-width:16px;font-size:12px;color:var(--text-hint);font-weight:600">${s.num}</span>
       <div style="flex:1;display:flex;gap:8px">
-        <div style="flex:1"><input class="inp" type="number" placeholder="ק״ג" value="${s.weight||""}" oninput="updateSet('${name}',${i},'weight',this.value)">
-          ${p?`<div style="text-align:center;font-size:10px;color:var(--text-hint);margin-top:3px">לפני: ${p.weight}</div>`:""}</div>
-        <div style="flex:1"><input class="inp" type="number" placeholder="חז׳" value="${s.reps||""}" oninput="updateSet('${name}',${i},'reps',this.value)">
-          ${p?`<div style="text-align:center;font-size:10px;color:var(--text-hint);margin-top:3px">לפני: ${p.reps}</div>`:""}</div>
+        <div style="flex:1">
+          <input class="inp" type="number" placeholder="ק״ג" value="${s.weight||""}" oninput="updateSet('${name}',${i},'weight',this.value)">
+          ${p?`<div style="text-align:center;font-size:10px;color:var(--text-hint);margin-top:3px">לפני: ${p.weight}</div>`:""}
+        </div>
+        <div style="flex:1">
+          <input class="inp" type="number" placeholder="חז׳" value="${s.reps||""}" oninput="updateSet('${name}',${i},'reps',this.value)">
+          ${p?`<div style="text-align:center;font-size:10px;color:var(--text-hint);margin-top:3px">לפני: ${p.reps}</div>`:""}
+        </div>
         <div style="width:28px;display:flex;align-items:center;justify-content:center">${icon}</div>
-      </div></div>`;
+      </div>
+    </div>`;
   }).join("");
-  const copyBtn = prevSets ? `<button class="btn-copy" onclick="copyPrevSets('${name}')">↙ העתק מהפעם הקודמת</button>` : "";
+
+  const copyBtn = prevSets
+    ? `<button class="btn-copy" onclick="copyPrevSets('${name}')">
+         <i data-lucide="copy" style="width:12px;height:12px"></i>
+         העתק מהפעם הקודמת
+       </button>` : "";
+
   return `<div style="padding:18px 14px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <button onclick="navigate('home')" style="background:none;border:none;cursor:pointer;color:var(--text-secondary);font-size:13px;font-family:inherit">← חזור</button>
-      <span style="font-weight:500;font-size:14px;color:var(--text-primary)">${w.name}</span>
-      <span style="font-size:12px;color:var(--text-secondary)">${step+1}/${exList.length}</span>
+      <button onclick="navigate('home')" class="btn-secondary" style="width:auto;padding:7px 12px;font-size:13px;gap:4px">
+        <i data-lucide="chevron-right" style="width:14px;height:14px"></i> חזור
+      </button>
+      <span style="font-weight:600;font-size:14px;color:var(--text-primary)">${w.name}</span>
+      <span style="font-size:12px;color:var(--text-hint);background:var(--surface);padding:4px 10px;border-radius:20px">${step+1}/${exList.length}</span>
     </div>
     <div class="progress-bar">${segs}</div>
-    ${last?`<p style="font-size:11px;color:var(--text-hint);text-align:center;margin-bottom:10px">אימון קודם: ${formatDate(last.date)}</p>`:""}
+    ${last ? `<p style="font-size:11px;color:var(--text-hint);text-align:center;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:4px">
+      <i data-lucide="clock" style="width:11px;height:11px"></i> אימון קודם: ${formatDate(last.date)}
+    </p>` : ""}
     <div class="card ${improved?"improved":""}">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <span style="font-weight:600;font-size:15px;color:var(--text-primary)">${name}</span>
+        <span style="font-weight:700;font-size:15px;color:var(--text-primary)">${name}</span>
         <div style="display:flex;gap:6px;align-items:center">
           ${copyBtn}
-          ${volDiff!==null?`<span class="badge ${volDiff>0?"badge-up":volDiff<0?"badge-down":"badge-eq"}">${volDiff>0?"+":""}${volDiff}%</span>`:""}
-          ${improved?`<span style="font-size:12px;color:var(--green);font-weight:500">שיפרת ✓</span>`:""}
+          ${volDiff !== null ? `<span class="badge ${volDiff>0?"badge-up":volDiff<0?"badge-down":"badge-eq"}">${volDiff>0?"+":""}${volDiff}%</span>` : ""}
+          ${improved ? `<span style="font-size:12px;color:var(--green);font-weight:600;display:flex;align-items:center;gap:3px"><i data-lucide="trending-up" style="width:13px;height:13px"></i> שיפרת</span>` : ""}
         </div>
       </div>
-      <div style="display:flex;margin-bottom:14px"><span style="flex:0 0 24px"></span>
+      <div style="display:flex;margin-bottom:14px">
+        <span style="flex:0 0 24px"></span>
         <div style="flex:1;display:flex;gap:8px">
-          <span style="flex:1;text-align:center;font-size:11px;color:var(--text-secondary)">משקל ק״ג</span>
-          <span style="flex:1;text-align:center;font-size:11px;color:var(--text-secondary)">חזרות</span>
+          <span style="flex:1;text-align:center;font-size:11px;color:var(--text-hint);font-weight:600">משקל ק״ג</span>
+          <span style="flex:1;text-align:center;font-size:11px;color:var(--text-hint);font-weight:600">חזרות</span>
           <span style="width:28px"></span>
         </div>
       </div>
       ${setsHtml}
-      <button onclick="addSet('${name}')" style="margin-top:8px;width:100%;background:var(--accent-light);border:0.5px dashed var(--accent-mid);border-radius:10px;padding:7px;cursor:pointer;font-size:13px;color:var(--accent);font-family:inherit">+ הוסף סט</button>
+      <button onclick="addSet('${name}')" style="margin-top:8px;width:100%;background:var(--surface);border:1px dashed var(--border-med);border-radius:8px;padding:8px;cursor:pointer;font-size:13px;color:var(--text-secondary);font-family:inherit;display:flex;align-items:center;justify-content:center;gap:5px">
+        <i data-lucide="plus" style="width:14px;height:14px"></i> הוסף סט
+      </button>
     </div>
     <div style="display:flex;gap:10px;margin-top:10px">
-      ${step>0?`<button class="btn-secondary" onclick="goStep(${step-1})" style="flex:1">← הקודם</button>`:""}
-      ${step<exList.length-1?`<button class="btn-primary" onclick="goStep(${step+1})" style="flex:1">הבא →</button>`:`<button class="btn-success" onclick="finishWorkout()">סיום אימון ✓</button>`}
-    </div></div>`;
+      ${step > 0 ? `<button class="btn-secondary" onclick="goStep(${step-1})" style="flex:1"><i data-lucide="chevron-right" style="width:16px;height:16px"></i> הקודם</button>` : ""}
+      ${step < exList.length-1
+        ? `<button class="btn-primary" onclick="goStep(${step+1})" style="flex:1">הבא <i data-lucide="chevron-left" style="width:16px;height:16px"></i></button>`
+        : `<button class="btn-success" onclick="finishWorkout()"><i data-lucide="check-circle" style="width:16px;height:16px"></i> סיום אימון</button>`}
+    </div>
+  </div>`;
 }
 
 function updateSet(name,i,field,val) { state.exercises[name][i][field] = field==="weight" ? parseFloat(val)||0 : parseInt(val)||0; }
@@ -192,22 +261,18 @@ function addSet(name) { state.exercises[name].push({ num:state.exercises[name].l
 function removeSet(name,i) { state.exercises[name].splice(i,1); state.exercises[name].forEach((s,idx) => s.num=idx+1); render(); }
 function goStep(i) { state.step=i; render(); }
 function finishWorkout() {
-  state.sessions.push({ id:Date.now(), workoutId:state.workoutId, date:new Date().toISOString(), exercises:JSON.parse(JSON.stringify(state.exercises)) });
+  state.sessions.push({ id:"s_"+Date.now(), workoutId:state.workoutId, date:new Date().toISOString(), exercises:JSON.parse(JSON.stringify(state.exercises)) });
   saveSessions(); navigate("history");
 }
 
-function deleteSession(id) {
-  if (!confirm("למחוק את האימון מההיסטוריה?")) return;
-  state.sessions = state.sessions.filter(s => s.id !== id);
-  saveSessions(); render();
-}
-
 function renderHistory() {
-  if (!state.sessions.length) return `<div style="padding:40px;text-align:center;color:var(--text-secondary);font-size:14px">אין אימונים עדיין</div>`;
-  return `<div style="padding:14px">${[...state.sessions].reverse().map(session => {
-    const w = getWorkout(session.workoutId); const wName = w ? w.name : session.workoutId;
-    const idx = state.sessions.findIndex(s => s.id === session.id);
-    const prevSameType = [...state.sessions].slice(0,idx).reverse().find(s => s.workoutId === session.workoutId);
+  if (!state.sessions.length) return `<div style="padding:40px;text-align:center;color:var(--text-hint);font-size:14px">אין אימונים עדיין</div>`;
+  const reversed = [...state.sessions].reverse();
+  return `<div style="padding:14px">${reversed.map((session, ri) => {
+    const originalIdx = state.sessions.length - 1 - ri;
+    const w = getWorkout(session.workoutId);
+    const wName = w ? w.name : session.workoutId;
+    const prevSameType = state.sessions.slice(0, originalIdx).reverse().find(s => s.workoutId === session.workoutId);
     const exRows = Object.keys(session.exercises).map(name => {
       const sets = (session.exercises[name]||[]).filter(s => s.weight>0||s.reps>0);
       if (!sets.length) return "";
@@ -216,26 +281,35 @@ function renderHistory() {
       const setsTable = sets.map((s,i) => {
         const p=prevSets[i]; const imp=p&&s.weight>p.weight; const reg=p&&s.weight>0&&s.weight<p.weight;
         return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0">
-          <span style="min-width:14px;font-size:11px;color:var(--text-hint)">${s.num}</span>
-          <span style="font-size:13px;color:var(--text-primary);min-width:52px">${s.weight} ק״ג</span>
+          <span style="min-width:14px;font-size:11px;color:var(--text-hint);font-weight:600">${s.num}</span>
+          <span style="font-size:13px;color:var(--text-primary);font-weight:500;min-width:56px">${s.weight} ק״ג</span>
           <span style="font-size:13px;color:var(--text-secondary);min-width:44px">× ${s.reps}</span>
-          ${p?`<span style="font-size:11px;color:${imp?"var(--green)":reg?"var(--red)":"var(--text-hint)"}">${imp?"▲":reg?"▼":"="}</span>`:""}
+          ${p?`<i data-lucide="${imp?"trending-up":reg?"trending-down":"minus"}" style="width:13px;height:13px;color:${imp?"var(--green)":reg?"var(--red)":"var(--text-hint)"}"></i>`:""}
         </div>`;
       }).join("");
       return `<div style="margin-bottom:12px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-          <span style="font-size:13px;font-weight:500;color:var(--text-primary)">${name}</span>
-          ${improved?`<span style="font-size:11px;color:var(--green);font-weight:500">▲ שיפרת</span>`:prevSets.length>0?`<span style="font-size:11px;color:var(--text-hint)">→ ללא שינוי</span>`:""}
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+          <span style="font-size:13px;font-weight:600;color:var(--text-primary)">${name}</span>
+          ${improved
+            ? `<span style="font-size:11px;color:var(--green);font-weight:600;display:flex;align-items:center;gap:3px"><i data-lucide="trending-up" style="width:12px;height:12px"></i> שיפרת</span>`
+            : prevSets.length>0 ? `<span style="font-size:11px;color:var(--text-hint)">ללא שינוי</span>` : ""}
         </div>
         <div style="padding-right:4px">${setsTable}</div>
       </div>`;
     }).join("");
     return `<div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:10px;border-bottom:0.5px solid var(--border)">
-        <span style="font-weight:600;font-size:15px;color:var(--text-primary)">${wName}</span>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:center;gap:7px">
+          <i data-lucide="dumbbell" style="width:16px;height:16px;color:var(--text-secondary)"></i>
+          <span style="font-weight:700;font-size:15px;color:var(--text-primary)">${wName}</span>
+        </div>
         <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:12px;color:var(--text-secondary)">${formatDate(session.date)}</span>
-          <button class="del-session-btn" onclick="deleteSession(${session.id})" title="מחק אימון">🗑</button>
+          <span style="font-size:12px;color:var(--text-hint);display:flex;align-items:center;gap:3px">
+            <i data-lucide="clock" style="width:11px;height:11px"></i> ${formatDate(session.date)}
+          </span>
+          <button class="del-btn" data-del-session="${originalIdx}">
+            <i data-lucide="trash-2" style="width:15px;height:15px"></i>
+          </button>
         </div>
       </div>
       ${exRows}
@@ -245,40 +319,58 @@ function renderHistory() {
 
 function renderManage() {
   const workoutSections = state.workouts.map(w => {
-    const isOpen = state.manageOpenId === w.id; const isEditing = state.editingNameId === w.id;
+    const isOpen = state.manageOpenId === w.id;
+    const isEditing = state.editingNameId === w.id;
     const nameEl = isEditing
-      ? `<input class="name-edit-inp" id="name-inp-${w.id}" value="${w.name}" onblur="saveWorkoutName('${w.id}')" onkeydown="if(event.key==='Enter')saveWorkoutName('${w.id}');if(event.key==='Escape'){state.editingNameId=null;render();}">`
-      : `<span style="font-weight:600;font-size:15px;color:var(--text-primary)">${w.name}</span>
-         <button onclick="event.stopPropagation();startEditName('${w.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-hint);font-size:13px;padding:2px 4px;margin-right:4px">✎</button>`;
+      ? `<input class="name-edit-inp" id="name-inp-${w.id}" value="${w.name}"
+           onblur="saveWorkoutName('${w.id}')"
+           onkeydown="if(event.key==='Enter')saveWorkoutName('${w.id}');if(event.key==='Escape'){state.editingNameId=null;render();}">`
+      : `<span style="font-weight:700;font-size:15px;color:var(--text-primary)">${w.name}</span>
+         <button onclick="event.stopPropagation();startEditName('${w.id}')" class="icon-btn" style="margin-right:4px">
+           <i data-lucide="pencil" style="width:13px;height:13px"></i>
+         </button>`;
     const exRows = isOpen ? w.exercises.map((ex,i) => `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border);font-size:14px;color:var(--text-primary)">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);font-size:14px;color:var(--text-primary)">
         <span>${ex}</span>
-        <button onclick="removeExercise('${w.id}',${i})" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:18px;padding:0">×</button>
+        <button onclick="removeExercise('${w.id}',${i})" class="icon-btn" style="color:var(--red)">
+          <i data-lucide="x" style="width:16px;height:16px"></i>
+        </button>
       </div>`).join("") : "";
-    const addRow = isOpen ? `<div style="display:flex;gap:8px;margin-top:10px">
-      <input class="inp inp-text" id="new-ex-${w.id}" placeholder="שם תרגיל..." style="flex:1" onkeydown="if(event.key==='Enter')addExercise('${w.id}')">
-      <button onclick="addExercise('${w.id}')" style="padding:0 14px;background:var(--accent-light);border:0.5px solid var(--accent-mid);border-radius:10px;cursor:pointer;font-size:16px;color:var(--accent);font-family:inherit">+</button>
-    </div>` : "";
+    const addRow = isOpen ? `
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <input class="inp inp-text" id="new-ex-${w.id}" placeholder="שם תרגיל..." style="flex:1"
+          onkeydown="if(event.key==='Enter')addExercise('${w.id}')">
+        <button onclick="addExercise('${w.id}')" style="padding:0 14px;background:var(--accent);border:none;border-radius:8px;cursor:pointer;color:#fff;display:flex;align-items:center;">
+          <i data-lucide="plus" style="width:16px;height:16px"></i>
+        </button>
+      </div>` : "";
     return `<div class="card" style="padding:0;overflow:hidden;margin-bottom:10px">
       <div class="workout-header" onclick="toggleManageOpen('${w.id}')">
         <div style="display:flex;align-items:center;gap:6px" onclick="event.stopPropagation()">${nameEl}</div>
         <div style="display:flex;align-items:center;gap:8px">
           <span style="font-size:12px;color:var(--text-hint)">${w.exercises.length} תרגילים</span>
-          <button onclick="event.stopPropagation();deleteWorkout('${w.id}')" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:15px;padding:2px 4px">🗑</button>
-          <span style="color:var(--accent);font-size:13px">${isOpen?"▲":"▼"}</span>
+          <button onclick="event.stopPropagation();deleteWorkout('${w.id}')" class="del-btn">
+            <i data-lucide="trash-2" style="width:15px;height:15px"></i>
+          </button>
+          <i data-lucide="${isOpen?"chevron-up":"chevron-down"}" style="width:16px;height:16px;color:var(--text-hint)"></i>
         </div>
       </div>
-      ${isOpen?`<div style="padding:0 14px 14px">${exRows}${addRow}</div>`:""}
+      ${isOpen ? `<div style="padding:0 14px 14px">${exRows}${addRow}</div>` : ""}
     </div>`;
   }).join("");
   return `<div style="padding:14px">${workoutSections}
-    <div style="margin-top:8px;padding:14px 16px;background:var(--card);border:0.5px solid var(--border);border-radius:16px">
-      <p style="font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:10px">+ הוסף אימון חדש</p>
+    <div style="margin-top:8px;padding:14px 16px;background:var(--card);border:1px solid var(--border);border-radius:14px">
+      <p style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:10px;display:flex;align-items:center;gap:5px">
+        <i data-lucide="plus-circle" style="width:14px;height:14px"></i> הוסף אימון חדש
+      </p>
       <div style="display:flex;gap:8px">
         <input class="inp inp-text" id="new-workout-name" placeholder='למשל "אימון C"' style="flex:1">
-        <button onclick="addWorkout()" style="padding:0 14px;background:var(--accent);border:none;border-radius:10px;cursor:pointer;font-size:14px;color:#fff;font-family:inherit;white-space:nowrap">הוסף</button>
+        <button onclick="addWorkout()" style="padding:0 16px;background:var(--accent);border:none;border-radius:8px;cursor:pointer;font-size:14px;color:#fff;font-family:inherit;white-space:nowrap;display:flex;align-items:center;gap:5px">
+          <i data-lucide="plus" style="width:16px;height:16px"></i> הוסף
+        </button>
       </div>
-    </div></div>`;
+    </div>
+  </div>`;
 }
 
 function toggleManageOpen(id) { state.manageOpenId = state.manageOpenId===id ? null : id; state.editingNameId=null; render(); }
@@ -294,10 +386,9 @@ function saveWorkoutName(id) {
 function addWorkout() {
   const inp=document.getElementById("new-workout-name"); const name=inp?inp.value.trim():"";
   if(!name) return;
-  const id="w_"+Date.now();
-  state.workouts.push({id,name,exercises:[]});
-  state.manageOpenId=id; state.editingNameId=null;
-  saveWorkouts(); render();
+  state.workouts.push({id:"w_"+Date.now(), name, exercises:[]});
+  state.manageOpenId=state.workouts[state.workouts.length-1].id;
+  state.editingNameId=null; saveWorkouts(); render();
 }
 function deleteWorkout(id) {
   if(!confirm("למחוק את האימון לצמיתות?")) return;
@@ -314,7 +405,8 @@ function removeExercise(workoutId,i) {
   const w=getWorkout(workoutId);
   if(w){ w.exercises.splice(i,1); saveWorkouts(); render(); }
 }
-render();
+
+window.addEventListener("load", function() { render(); });
 </script>
 </body>
 </html>
