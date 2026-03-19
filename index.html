@@ -100,6 +100,33 @@ body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg);
 </div>
 
 <script>
+// ── Supabase ─────────────────────────────────────────────────────
+const SUPABASE_URL = "https://jezibgdemidhebbcpdch.supabase.co";
+const SUPABASE_KEY = "sb_publishable_NDyz8DAcTO8kOs6JhAjTFw_uRTgb5nf";
+
+const SB_HEADERS = {
+  apikey: SUPABASE_KEY,
+  Authorization: "Bearer " + SUPABASE_KEY,
+  "Content-Type": "application/json",
+  Prefer: "return=representation"
+};
+
+async function sbGet(path) {
+  const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, { headers: SB_HEADERS });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+async function sbPost(path, body) {
+  const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, { method:"POST", headers: SB_HEADERS, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+async function sbDelete(path) {
+  const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, { method:"DELETE", headers: SB_HEADERS });
+  if (!r.ok) throw new Error(await r.text());
+}
+// ─────────────────────────────────────────────────────────────────
+
 const STORAGE_SESSIONS = "gym_sessions_v2";
 const STORAGE_WORKOUTS = "gym_workouts_v4";
 const STORAGE_SETTINGS = "gym_settings_v1";
@@ -140,6 +167,56 @@ let state = {
 try { state.sessions = JSON.parse(localStorage.getItem(STORAGE_SESSIONS) || "[]"); } catch {}
 
 function saveSessions() { localStorage.setItem(STORAGE_SESSIONS, JSON.stringify(state.sessions)); }
+
+async function saveSessionToSupabase(session) {
+  try {
+    const rows = await sbPost("workout_sessions", {
+      local_id: session.id,
+      workout_id: session.workoutId,
+      workout_name: getWorkout(session.workoutId)?.name || session.workoutId,
+      date: session.date
+    });
+    const sessionRow = rows[0];
+    const sets = [];
+    Object.entries(session.exercises || {}).forEach(([exName, exSets]) => {
+      exSets.forEach(s => {
+        if (s.weight > 0 || s.reps > 0) {
+          sets.push({ session_id: sessionRow.id, exercise_name: exName, set_number: s.num, weight: s.weight, reps: s.reps, failed: !!s.failed });
+        }
+      });
+    });
+    if (sets.length) await sbPost("session_exercises", sets);
+  } catch(e) {
+    console.error("Supabase save failed:", e);
+  }
+}
+
+async function loadSessionsFromSupabase() {
+  try {
+    const rows = await sbGet("workout_sessions?select=*,sets:session_exercises(*)&order=date.asc");
+    state.sessions = rows.map(row => {
+      const exercises = {};
+      (row.sets || []).forEach(s => {
+        if (!exercises[s.exercise_name]) exercises[s.exercise_name] = [];
+        exercises[s.exercise_name].push({ num: s.set_number, weight: s.weight, reps: s.reps, failed: s.failed });
+      });
+      Object.values(exercises).forEach(arr => arr.sort((a,b) => a.num - b.num));
+      return { id: row.local_id || row.id, workoutId: row.workout_id, date: row.date, exercises };
+    });
+    localStorage.setItem(STORAGE_SESSIONS, JSON.stringify(state.sessions));
+  } catch(e) {
+    console.error("Supabase load failed, using localStorage:", e);
+    try { state.sessions = JSON.parse(localStorage.getItem(STORAGE_SESSIONS) || "[]"); } catch {}
+  }
+}
+
+async function deleteSessionFromSupabase(localId) {
+  try {
+    await sbDelete("workout_sessions?local_id=eq." + encodeURIComponent(localId));
+  } catch(e) {
+    console.error("Supabase delete failed:", e);
+  }
+}
 function haptic(type) {
   if (!navigator.vibrate) return;
   if (type === "light") navigator.vibrate(10);
@@ -288,6 +365,8 @@ function bindDelButtons() {
     btn.addEventListener("click", function() {
       const idx = parseInt(this.dataset.delSession);
       if (confirm("למחוק את האימון מההיסטוריה?")) {
+        const session = state.sessions[idx];
+        if (session) deleteSessionFromSupabase(session.id);
         state.sessions.splice(idx, 1); saveSessions(); render();
       }
     });
@@ -686,10 +765,12 @@ function toggleFailed(name,i) { state.exercises[name][i].failed = !state.exercis
 
 function finishWorkout() {
   if (!confirm("האם לשמור את האימון?")) return;
-  state.sessions.push({ id:"s_"+Date.now(), workoutId:state.workoutId, date:new Date().toISOString(), exercises:JSON.parse(JSON.stringify(state.exercises)) });
+  const session = { id:"s_"+Date.now(), workoutId:state.workoutId, date:new Date().toISOString(), exercises:JSON.parse(JSON.stringify(state.exercises)) };
+  state.sessions.push(session);
   sessionStorage.removeItem("gym_in_progress");
   state.workoutId = null; state.exercises = {}; state.openExercise = null; state.selectedWorkoutId = null;
   saveSessions();
+  saveSessionToSupabase(session);
   haptic("success");
   navigate("dashboard");
   setTimeout(() => showToast("כל הכבוד! האימון הושלם 💪", ""), 300);
@@ -1047,7 +1128,12 @@ function bindDragDrop() {
   });
 }
 
-window.addEventListener("load", function() { render(); });
+window.addEventListener("load", async function() {
+  state.screen = "dashboard";
+  render();
+  await loadSessionsFromSupabase();
+  render();
+});
 </script>
 </body>
 </html>
