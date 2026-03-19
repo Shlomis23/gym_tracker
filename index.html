@@ -62,9 +62,13 @@ body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg);
 .pr-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
 .pr-row:last-child { border-bottom: none; }
 .week-dot { width: 10px; height: 10px; border-radius: 50%; }
+.choose-btn.selected { border: 2px solid var(--accent); background: var(--surface); }
+.toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #111827; color: #fff; padding: 14px 24px; border-radius: 14px; font-size: 14px; font-weight: 600; z-index: 999; opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; display: flex; align-items: center; gap: 8px; max-width: 320px; text-align: center; }
+.toast.show { opacity: 1; }
 </style>
 </head>
 <body>
+<div id="toast" class="toast"></div>
 <div class="app">
   <div class="topbar">
     <i data-lucide="dumbbell" style="width:20px;height:20px;color:#fff"></i>
@@ -83,7 +87,7 @@ body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg);
       <i data-lucide="calendar" style="width:18px;height:18px"></i><span>היסטוריה</span>
     </button>
     <button class="navbtn" id="nav-manage" onclick="navigate('manage')">
-      <i data-lucide="settings" style="width:18px;height:18px"></i><span>הגדרות</span>
+      <i data-lucide="list-checks" style="width:18px;height:18px"></i><span>ניהול תוכנית</span>
     </button>
   </div>
 </div>
@@ -124,11 +128,24 @@ function loadSettings() {
 let state = {
   screen: "dashboard", workoutId: null, openExercise: null, exercises: {},
   sessions: [], workouts: loadWorkouts(), settings: loadSettings(),
-  manageOpenId: null, editingNameId: null, chartInstance: null
+  manageOpenId: null, editingNameId: null, selectedWorkoutId: null, expandedSessions: new Set()
 };
 try { state.sessions = JSON.parse(localStorage.getItem(STORAGE_SESSIONS) || "[]"); } catch {}
 
 function saveSessions() { localStorage.setItem(STORAGE_SESSIONS, JSON.stringify(state.sessions)); }
+function haptic(type) {
+  if (!navigator.vibrate) return;
+  if (type === "light") navigator.vibrate(10);
+  else if (type === "medium") navigator.vibrate(30);
+  else if (type === "success") navigator.vibrate([40, 30, 60]);
+}
+function showToast(msg, icon) {
+  const el = document.getElementById("toast");
+  if (!el) return;
+  el.innerHTML = icon ? `<span>${icon}</span>${msg}` : msg;
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), 2800);
+}
 function saveWorkouts() { localStorage.setItem(STORAGE_WORKOUTS, JSON.stringify(state.workouts)); }
 function saveSettings() { localStorage.setItem(STORAGE_SETTINGS, JSON.stringify(state.settings)); }
 function formatDate(iso) { return new Date(iso).toLocaleDateString("he-IL", { day:"numeric", month:"numeric", year:"2-digit", weekday:"short" }); }
@@ -228,7 +245,7 @@ function navigate(screen) {
     const el = document.getElementById("nav-"+s);
     if (el) el.classList.toggle("active", s === screen);
   });
-  const titles = { dashboard:"דשבורד", home:"אימון חדש", history:"היסטוריה", manage:"הגדרות" };
+  const titles = { dashboard:"דשבורד", home:"אימון חדש", history:"היסטוריה", manage:"ניהול תוכנית" };
   document.getElementById("screen-title").textContent = titles[screen] || "";
   render();
 }
@@ -277,7 +294,15 @@ function renderDashboard() {
     `<div class="week-dot" style="background:${i < thisWeek ? "var(--accent)" : "var(--border-med)"}"></div>`
   ).join("");
 
-  const nextBtn = next
+  const inProgress = sessionStorage.getItem("gym_in_progress");
+  const inProgressId = inProgress ? JSON.parse(inProgress).workoutId : null;
+  const inProgressW = inProgressId ? getWorkout(inProgressId) : null;
+  const nextBtn = inProgressW
+    ? `<button class="next-btn" style="background:var(--orange);border-radius:14px" onclick="navigate('home')">
+         <i data-lucide="play" style="width:20px;height:20px"></i>
+         המשך ${inProgressW.name}
+       </button>`
+    : next
     ? `<button class="next-btn" onclick="selectWorkoutDirect('${next.id}')">
          <i data-lucide="play" style="width:20px;height:20px"></i>
          התחל ${next.name}
@@ -361,15 +386,18 @@ function selectWorkoutDirect(id) {
 }
 
 function renderChoose() {
-  if (!state.workouts.length) return `<div style="padding:40px;text-align:center;color:var(--text-hint);font-size:14px">אין אימונים — הוסף דרך הגדרות</div>`;
+  if (!state.workouts.length) return `<div style="padding:40px;text-align:center;color:var(--text-hint);font-size:14px">אין אימונים — הוסף דרך ניהול תוכנית</div>`;
   const cols = state.workouts.length <= 3 ? state.workouts.length : 2;
+  const sel = state.selectedWorkoutId;
+  const selW = sel ? getWorkout(sel) : null;
   return `<div style="padding:20px 16px">
-    <p style="font-size:13px;color:var(--text-hint);margin-bottom:20px;text-align:center">איזה אימון היום?</p>
-    <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:12px">
+    <p style="font-size:13px;color:var(--text-hint);margin-bottom:16px;text-align:center">איזה אימון היום?</p>
+    <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:12px;margin-bottom:16px">
       ${state.workouts.map(w => {
         const last = getLastSession(w.id);
-        return `<button class="choose-btn" onclick="selectWorkout('${w.id}')">
-          <i data-lucide="dumbbell" style="width:24px;height:24px;color:var(--accent)"></i>
+        const isSel = sel === w.id;
+        return `<button class="choose-btn${isSel?" selected":""}" onclick="pickWorkout('${w.id}')">
+          <i data-lucide="dumbbell" style="width:24px;height:24px;color:${isSel?"var(--accent)":"var(--text-hint)"}"></i>
           <span style="font-size:18px;font-weight:700;color:var(--text-primary)">${w.name}</span>
           <span style="font-size:11px;color:var(--text-secondary);display:flex;align-items:center;gap:3px">
             <i data-lucide="clock" style="width:11px;height:11px"></i>
@@ -379,10 +407,21 @@ function renderChoose() {
         </button>`;
       }).join("")}
     </div>
+    ${sel ? `<button class="next-btn" style="margin-bottom:0" onclick="selectWorkout('${sel}')">
+      <i data-lucide="play" style="width:20px;height:20px"></i>
+      התחל ${selW?.name || ""}
+    </button>` : ""}
   </div>`;
 }
 
+function pickWorkout(id) {
+  haptic("light");
+  state.selectedWorkoutId = state.selectedWorkoutId === id ? null : id;
+  render();
+}
+
 function selectWorkout(id) {
+  haptic("medium");
   state.workoutId = id;
   const w = getWorkout(id); const last = getLastSession(id);
   const names = getExNames(w);
@@ -448,7 +487,7 @@ function renderWorkout() {
 
     const copyBtn = prevSets
       ? `<button class="btn-copy" onclick="copyPrevSets('${name}')">
-           <i data-lucide="copy" style="width:12px;height:12px"></i> העתק מהפעם הקודמת
+           <i data-lucide="copy" style="width:12px;height:12px"></i> אימון אחרון
          </button>` : "";
 
     const setsHtml = sets.map((s,i) => {
@@ -521,23 +560,42 @@ function removeSet(name,i) { state.exercises[name].splice(i,1); state.exercises[
 function finishWorkout() {
   state.sessions.push({ id:"s_"+Date.now(), workoutId:state.workoutId, date:new Date().toISOString(), exercises:JSON.parse(JSON.stringify(state.exercises)) });
   sessionStorage.removeItem("gym_in_progress");
-  state.workoutId = null; state.exercises = {}; state.openExercise = null;
-  saveSessions(); navigate("dashboard");
+  state.workoutId = null; state.exercises = {}; state.openExercise = null; state.selectedWorkoutId = null;
+  saveSessions();
+  haptic("success");
+  navigate("dashboard");
+  setTimeout(() => showToast("כל הכבוד! האימון הושלם 💪", ""), 300);
 }
 
 function renderHistory() {
   if (!state.sessions.length) return `<div style="padding:40px;text-align:center;color:var(--text-hint);font-size:14px">אין אימונים עדיין</div>`;
   const reversed = [...state.sessions].reverse();
+  if (!state.expandedSessions) state.expandedSessions = new Set();
   return `<div style="padding:14px">${reversed.map((session, ri) => {
     const originalIdx = state.sessions.length - 1 - ri;
     const w = getWorkout(session.workoutId);
     const wName = w ? w.name : session.workoutId;
     const prevSameType = state.sessions.slice(0, originalIdx).reverse().find(s => s.workoutId === session.workoutId);
-    const exRows = Object.keys(session.exercises).map(name => {
+    const isExpanded = state.expandedSessions.has(session.id);
+
+    const exNames = Object.keys(session.exercises);
+    const totalEx = exNames.length;
+    const improved = exNames.filter(name => {
+      const sets = (session.exercises[name]||[]).filter(s=>s.weight>0||s.reps>0);
+      const prevSets = prevSameType?.exercises?.[name]||[];
+      return prevSets.length>0 && sets.some((s,i)=>prevSets[i]&&s.weight>prevSets[i].weight);
+    }).length;
+
+    const summaryChips = `
+      <span style="font-size:11px;color:var(--text-hint)">${totalEx} תרגילים</span>
+      ${improved > 0 ? `<span style="font-size:11px;color:var(--green);font-weight:600;display:inline-flex;align-items:center;gap:2px"><i data-lucide="trending-up" style="width:11px;height:11px"></i> ${improved} שיפרת</span>` : (prevSameType ? `<span style="font-size:11px;color:var(--text-hint)">ללא שינוי</span>` : "")}
+    `;
+
+    const exRows = isExpanded ? exNames.map(name => {
       const sets = (session.exercises[name]||[]).filter(s => s.weight>0||s.reps>0);
       if (!sets.length) return "";
       const prevSets = prevSameType?.exercises?.[name]||[];
-      const improved = prevSets.length>0 && sets.some((s,i) => prevSets[i] && s.weight>prevSets[i].weight);
+      const exImproved = prevSets.length>0 && sets.some((s,i) => prevSets[i] && s.weight>prevSets[i].weight);
       const rest = w ? getExRest(w, name) : null;
       const setsTable = sets.map((s,i) => {
         const p=prevSets[i]; const imp=p&&s.weight>p.weight; const reg=p&&s.weight>0&&s.weight<p.weight;
@@ -554,31 +612,41 @@ function renderHistory() {
             <span style="font-size:13px;font-weight:600;color:var(--text-primary)">${name}</span>
             ${rest ? `<span class="rest-chip"><i data-lucide="timer" style="width:10px;height:10px"></i> ${formatRest(rest)}</span>` : ""}
           </div>
-          ${improved
-            ? `<span style="font-size:11px;color:var(--green);font-weight:600;display:flex;align-items:center;gap:3px"><i data-lucide="trending-up" style="width:12px;height:12px"></i> שיפרת</span>`
-            : prevSets.length>0 ? `<span style="font-size:11px;color:var(--text-hint)">ללא שינוי</span>` : ""}
+          ${exImproved ? `<span style="font-size:11px;color:var(--green);font-weight:600;display:flex;align-items:center;gap:3px"><i data-lucide="trending-up" style="width:12px;height:12px"></i> שיפרת</span>` : prevSets.length>0 ? `<span style="font-size:11px;color:var(--text-hint)">ללא שינוי</span>` : ""}
         </div>
         <div style="padding-right:4px">${setsTable}</div>
       </div>`;
-    }).join("");
+    }).join("") : "";
+
     return `<div class="card" style="padding:0;overflow:hidden">
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 16px;border-bottom:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 16px;cursor:pointer" onclick="toggleHistorySession('${session.id}')">
         <div style="display:flex;align-items:center;gap:7px">
           <i data-lucide="dumbbell" style="width:16px;height:16px;color:var(--text-secondary)"></i>
-          <span style="font-weight:700;font-size:15px;color:var(--text-primary)">${wName}</span>
+          <div>
+            <span style="font-weight:700;font-size:15px;color:var(--text-primary)">${wName}</span>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:3px">${summaryChips}</div>
+          </div>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
           <span style="font-size:12px;color:var(--text-hint);display:flex;align-items:center;gap:3px">
             <i data-lucide="clock" style="width:11px;height:11px"></i> ${formatDate(session.date)}
           </span>
-          <button class="del-btn" data-del-session="${originalIdx}">
+          <button class="del-btn" data-del-session="${originalIdx}" onclick="event.stopPropagation()">
             <i data-lucide="trash-2" style="width:15px;height:15px"></i>
           </button>
+          <i data-lucide="${isExpanded?"chevron-up":"chevron-down"}" style="width:15px;height:15px;color:var(--text-hint)"></i>
         </div>
       </div>
-      <div style="padding:12px 16px">${exRows}</div>
+      ${isExpanded ? `<div style="padding:4px 16px 14px;border-top:1px solid var(--border)">${exRows}</div>` : ""}
     </div>`;
   }).join("")}</div>`;
+}
+
+function toggleHistorySession(id) {
+  if (!state.expandedSessions) state.expandedSessions = new Set();
+  if (state.expandedSessions.has(id)) state.expandedSessions.delete(id);
+  else state.expandedSessions.add(id);
+  render();
 }
 
 function renderManage() {
