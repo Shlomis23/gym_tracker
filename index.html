@@ -88,6 +88,14 @@ body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg);
   from { width: 0%; }
 }
 .anim-bar { animation: fillBar 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+@keyframes dayPop {
+  from { opacity: 0; transform: translateY(10px) scale(0.85); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.day-cell-anim {
+  animation: dayPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  animation-play-state: paused;
+}
 </style>
   <link rel="manifest" href="manifest.json">
 
@@ -610,11 +618,13 @@ function bindScrollAnimations() {
       if (entry.isIntersecting) {
         const card = entry.target;
         card.classList.add("visible");
-        // start count-up for any data-countup inside this card when it becomes visible
         const delay = parseFloat(card.style.animationDelay) || 0;
         setTimeout(() => {
           card.querySelectorAll("[data-countup]").forEach(startCountUp);
-        }, delay * 1000 + 150);
+          card.querySelectorAll(".day-cell-anim").forEach(cell => {
+            cell.style.animationPlayState = "running";
+          });
+        }, delay * 1000 + 100);
         observer.unobserve(card);
       }
     });
@@ -741,7 +751,7 @@ function renderDashboard() {
   const checkIcon = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
 
   const dayOrder = [0,1,2,3,4,5,6];
-  const dayCells = dayOrder.map(dow => {
+  const dayCells = dayOrder.map((dow, idx) => {
     const isToday = dow === todayDow;
     const isPast = todayDow === 0 ? dow === 0 : dow < todayDow || dow === 0 && todayDow > 0;
     const isFuture = !isToday && !isPast;
@@ -752,7 +762,8 @@ function renderDashboard() {
     const boxBorder = worked
       ? isToday ? "2px solid var(--green)" : "1px solid #86efac"
       : isFuture ? "1px dashed var(--border-med)" : "1px solid var(--border)";
-    return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+    const animDelay = (idx * 0.08).toFixed(2);
+    return `<div class="day-cell-anim" style="display:flex;flex-direction:column;align-items:center;gap:4px;opacity:0;animation-delay:${animDelay}s">
       <span style="font-size:10px;color:${labelColor};font-weight:${labelWeight}">${dayNames[dow]}</span>
       <div style="width:100%;aspect-ratio:1;border-radius:8px;background:${boxBg};border:${boxBorder};display:flex;align-items:center;justify-content:center">
         ${worked ? checkIcon : ""}
