@@ -72,6 +72,22 @@ body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg);
 .ex-row-drag.dragging { opacity: 0.4; }
 .toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #111827; color: #fff; padding: 14px 24px; border-radius: 14px; font-size: 14px; font-weight: 600; z-index: 999; opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; display: flex; align-items: center; gap: 8px; max-width: 320px; text-align: center; }
 .toast.show { opacity: 1; }
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(22px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.anim-card {
+  opacity: 0;
+  transform: translateY(22px);
+}
+.anim-card.visible {
+  animation: slideUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes fillBar {
+  from { width: 0%; }
+}
+.anim-bar { animation: fillBar 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
 </style>
   <link rel="manifest" href="manifest.json">
 
@@ -551,6 +567,43 @@ function navigate(screen) {
   render();
 }
 
+function startCountUp(el) {
+  const target = parseFloat(el.dataset.countup);
+  const suffix = el.dataset.suffix || "";
+  if (isNaN(target) || target === 0) { el.textContent = "0" + suffix; return; }
+  const duration = 700;
+  const start = performance.now();
+  const isInt = Number.isInteger(target);
+  function step(now) {
+    const p = Math.min((now - start) / duration, 1);
+    const ease = 1 - Math.pow(1 - p, 3);
+    const val = target * ease;
+    el.textContent = (isInt ? Math.round(val) : val.toFixed(1)) + suffix;
+    if (p < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+function bindScrollAnimations() {
+  const cards = document.querySelectorAll(".anim-card");
+  if (!cards.length) return;
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const card = entry.target;
+        card.classList.add("visible");
+        // start count-up for any data-countup inside this card when it becomes visible
+        const delay = parseFloat(card.style.animationDelay) || 0;
+        setTimeout(() => {
+          card.querySelectorAll("[data-countup]").forEach(startCountUp);
+        }, delay * 1000 + 150);
+        observer.unobserve(card);
+      }
+    });
+  }, { threshold: 0.15 });
+  cards.forEach(card => observer.observe(card));
+}
+
 function render() {
   const el = document.getElementById("main-content");
   if (state.screen === "dashboard") el.innerHTML = renderDashboard();
@@ -562,6 +615,7 @@ function render() {
   bindDragDrop();
   const dot = document.getElementById("inprogress-dot");
   if (dot) dot.style.display = state.workoutId ? "block" : "none";
+  if (state.screen === "dashboard") setTimeout(bindScrollAnimations, 50);
 }
 
 
@@ -623,23 +677,23 @@ function renderDashboard() {
       : `עוד ${workoutsLeft} אימונים להשלמת השבוע`;
     const dayWord = daysLeftInWeek === 1 ? "יום" : "ימים";
     const workoutWord = workoutsLeft === 1 ? "אימון" : "אימונים";
-    urgencyCard = `<div style="background:${urgentBg};border:1px solid ${urgentBorder};border-radius:14px;padding:14px 16px;margin-bottom:16px">
+    urgencyCard = `<div class="anim-card" style="background:${urgentBg};border:1px solid ${urgentBorder};border-radius:14px;padding:14px 16px;margin-bottom:16px;animation-delay:0.35s">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <span style="font-size:13px;font-weight:600;color:${urgentColor}">${msg}</span>
       </div>
       <div style="display:flex;gap:0">
         <div style="flex:1;text-align:center;border-left:1px solid ${urgentBorder}">
-          <div style="font-size:26px;font-weight:700;color:${urgentColor};line-height:1">${daysLeftInWeek}</div>
+          <div style="font-size:26px;font-weight:700;color:${urgentColor};line-height:1"><span data-countup="${daysLeftInWeek}">0</span></div>
           <div style="font-size:11px;color:${urgentColor};margin-top:3px;opacity:0.8">${dayWord} נותרו</div>
         </div>
         <div style="flex:1;text-align:center">
-          <div style="font-size:26px;font-weight:700;color:${urgentColor};line-height:1">${workoutsLeft}</div>
+          <div style="font-size:26px;font-weight:700;color:${urgentColor};line-height:1"><span data-countup="${workoutsLeft}">0</span></div>
           <div style="font-size:11px;color:${urgentColor};margin-top:3px;opacity:0.8">${workoutWord} נותרו</div>
         </div>
       </div>
     </div>`;
   } else {
-    urgencyCard = `<div style="background:var(--green-bg);border:1px solid #86efac;border-radius:14px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
+    urgencyCard = `<div class="anim-card" style="background:var(--green-bg);border:1px solid #86efac;border-radius:14px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px;animation-delay:0.35s">
       <div style="font-size:28px;line-height:1">🏆</div>
       <div>
         <div style="font-size:14px;font-weight:700;color:var(--green)">היעד השבועי הושלם יא מלך!</div>
@@ -691,10 +745,10 @@ function renderDashboard() {
   const dumbbellIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5m-2.5 0a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0 -5 0"/><path d="M17.5 6.5m-2.5 0a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0 -5 0"/><path d="M4 16c0-1.1.9-2 2-2h.5"/><path d="M4 6.5v4"/><path d="M20 6.5v4"/><path d="M9 17h6"/><path d="M15 16.1A2 2 0 0 1 16.5 14H17a2 2 0 0 1 2 2"/><path d="M8 22v-5"/><path d="M16 22v-5"/></svg>`;
   const boltIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>`;
 
-  const weekCard = `<div class="stat-card" style="margin-bottom:16px">
+  const weekCard = `<div class="stat-card anim-card" style="margin-bottom:16px;animation-delay:0.2s">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <span class="stat-label">השבוע</span>
-      <span style="font-size:11px;font-weight:600;color:${pctColor};background:${pctBg};padding:2px 8px;border-radius:20px">${pct}% מהיעד</span>
+      <span style="font-size:11px;font-weight:600;color:${pctColor};background:${pctBg};padding:2px 8px;border-radius:20px"><span data-countup="${pct}" data-suffix="% מהיעד">0% מהיעד</span></span>
     </div>
     <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-bottom:12px">${dayCells}</div>
     <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;justify-content:space-between;align-items:center">
@@ -704,7 +758,7 @@ function renderDashboard() {
       </div>
       <div style="display:flex;align-items:center;gap:5px">
         ${boltIcon}
-        <span style="font-size:12px;color:var(--orange);font-weight:600">Streak: ${streak} שבועות</span>
+        <span style="font-size:12px;color:var(--orange);font-weight:600">Streak: <span data-countup="${streak}" data-suffix=" שבועות">0 שבועות</span></span>
       </div>
     </div>
   </div>`;
@@ -713,12 +767,12 @@ function renderDashboard() {
   const inProgressId = inProgress ? JSON.parse(inProgress).workoutId : null;
   const inProgressW = inProgressId ? getWorkout(inProgressId) : null;
   const nextBtn = inProgressW
-    ? `<button class="next-btn" style="background:var(--orange);border-radius:14px" onclick="navigate('home')">
+    ? `<button class="next-btn anim-card" style="background:var(--orange);border-radius:14px;animation-delay:0.1s" onclick="navigate('home')">
          <i data-lucide="play" style="width:20px;height:20px"></i>
          המשך ${inProgressW.name}
        </button>`
     : next
-    ? `<button class="next-btn" onclick="selectWorkoutDirect('${next.id}')">
+    ? `<button class="next-btn anim-card" style="animation-delay:0.1s" onclick="selectWorkoutDirect('${next.id}')">
          <i data-lucide="play" style="width:20px;height:20px"></i>
          התחל ${next.name}
        </button>`
@@ -768,7 +822,7 @@ function renderDashboard() {
     const cardBorder = needsUpdate ? "var(--orange)" : "var(--border)";
     const cardBg = needsUpdate ? "var(--orange-bg)" : "var(--card)";
 
-    weightCard = `<div style="background:${cardBg};border:1px solid ${cardBorder};border-radius:14px;padding:14px 16px;margin-bottom:16px">
+    weightCard = `<div class="anim-card" style="background:${cardBg};border:1px solid ${cardBorder};border-radius:14px;padding:14px 16px;margin-bottom:16px;animation-delay:0.65s">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:${hasGoal?"12px":"8px"}">
         <div>
           <div class="stat-label">משקל נוכחי</div>
@@ -790,7 +844,7 @@ function renderDashboard() {
           <span>${pctW}% מהדרך</span>
         </div>
         <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
-          <div style="width:${pctW}%;height:100%;background:var(--accent);border-radius:3px"></div>
+          <div class="anim-bar" style="width:${pctW}%;height:100%;background:var(--accent);border-radius:3px;animation-delay:0.45s"></div>
         </div>
       </div>` : ""}
       <div style="display:flex;justify-content:space-between;align-items:center;${hasGoal?"border-top:1px solid var(--border);padding-top:10px":""}">
@@ -810,12 +864,12 @@ function renderDashboard() {
     const msg = d === 0 ? "התאמנת היום - מגיע לך לנוח" : d <= 2 ? "מחר אימון" : d <= 3 ? "קום להתאמן" : "בוא נחזור למסלול";
     const barW = Math.min(Math.round((d / 6) * 100), 100);
     const lastW = getWorkout(daysSince.session.workoutId);
-    daysSinceCard = `<div class="stat-card" style="margin-bottom:16px">
+    daysSinceCard = `<div class="stat-card anim-card" style="margin-bottom:16px;animation-delay:0.5s">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div>
           <div class="stat-label">מאז האימון האחרון</div>
           <div style="display:flex;align-items:baseline;gap:6px;margin-top:2px">
-            <span style="font-size:36px;font-weight:700;color:${color};line-height:1">${d}</span>
+            <span style="font-size:36px;font-weight:700;color:${color};line-height:1"><span data-countup="${d}">0</span></span>
             <span style="font-size:14px;color:${color}">${d === 1 ? "יום" : "ימים"}</span>
           </div>
           <div style="font-size:12px;color:${color};margin-top:2px;font-weight:500">${msg}</div>
@@ -827,7 +881,7 @@ function renderDashboard() {
         </div>
       </div>
       <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
-        <div style="width:${barW}%;height:100%;background:${color};border-radius:3px"></div>
+        <div class="anim-bar" style="width:${barW}%;height:100%;background:${color};border-radius:3px;animation-delay:0.35s"></div>
       </div>
     </div>`;
   }
@@ -842,7 +896,7 @@ function renderDashboard() {
 
     ${weightCard}
 
-    ${prEntries.length ? `<div class="card" style="padding:0;overflow:hidden;margin-bottom:16px">
+    ${prEntries.length ? `<div class="card anim-card" style="padding:0;overflow:hidden;margin-bottom:16px;animation-delay:0.8s">
       <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:7px">
         <i data-lucide="trophy" style="width:15px;height:15px;color:#d97706"></i>
         <span style="font-weight:700;font-size:14px;color:var(--text-primary)">שיאים אישיים</span>
