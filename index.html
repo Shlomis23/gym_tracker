@@ -615,23 +615,35 @@ function startCountUp(el) {
 function bindScrollAnimations() {
   const cards = document.querySelectorAll(".anim-card");
   if (!cards.length) return;
+
+  function activateCard(card) {
+    card.classList.add("visible");
+    const delay = parseFloat(card.style.animationDelay) || 0;
+    setTimeout(() => {
+      card.querySelectorAll("[data-countup]").forEach(startCountUp);
+      card.querySelectorAll(".day-cell-anim").forEach(cell => {
+        cell.style.animationPlayState = "running";
+      });
+    }, delay * 1000 + 100);
+  }
+
   const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        const card = entry.target;
-        card.classList.add("visible");
-        const delay = parseFloat(card.style.animationDelay) || 0;
-        setTimeout(() => {
-          card.querySelectorAll("[data-countup]").forEach(startCountUp);
-          card.querySelectorAll(".day-cell-anim").forEach(cell => {
-            cell.style.animationPlayState = "running";
-          });
-        }, delay * 1000 + 100);
-        observer.unobserve(card);
-      }
+      if (entry.isIntersecting) { activateCard(entry.target); observer.unobserve(entry.target); }
     });
   }, { threshold: 0.15 });
-  cards.forEach(card => observer.observe(card));
+
+  const observerEarly = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) { activateCard(entry.target); observerEarly.unobserve(entry.target); }
+    });
+  }, { threshold: 0.05 });
+
+  cards.forEach(card => {
+    const delay = parseFloat(card.style.animationDelay) || 0;
+    if (delay >= 1.0) observerEarly.observe(card);
+    else observer.observe(card);
+  });
 }
 
 function render() {
@@ -1074,7 +1086,7 @@ function renderWorkout() {
               <input class="inp" type="number" placeholder="${p?p.weight:"ק״ג"}" value="${s.weight||""}" style="${isFailed?"border-color:var(--red);color:var(--red)":s.weight>0?"":"color:var(--text-hint)"}" oninput="updateSet('${name}',${i},'weight',this.value)">
             </div>
             <div style="flex:1">
-              <input class="inp" type="number" placeholder="${p?p.reps+"חז׳":"חז׳"}" value="${s.reps||""}" style="${isFailed?"border-color:var(--red);color:var(--red)":""}" oninput="updateSet('${name}',${i},'reps',this.value)">
+              <input class="inp" type="number" placeholder="${p?p.reps+" חז׳":"חז׳"}" value="${s.reps||""}" style="${isFailed?"border-color:var(--red);color:var(--red)":""}" oninput="updateSet('${name}',${i},'reps',this.value)">
             </div>
             <div style="width:28px;display:flex;align-items:center;justify-content:center">${icon}</div>
           </div>
