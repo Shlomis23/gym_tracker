@@ -711,6 +711,14 @@ function renderDashboard() {
       </div>
       <button onclick="event.stopPropagation();showWeightModal()" style="background:var(--accent);border:none;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px;color:#fff;font-family:inherit;font-weight:600">הגדר</button>
     </div>`;
+  } else if (!latest && hasGoal) {
+    weightCard = `<div style="background:var(--orange-bg);border:1px solid var(--orange);border-radius:14px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="showWeightModal()">
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--orange)">יעד: ${wGoal.goal_weight} ק״ג</div>
+        <div style="font-size:11px;color:var(--orange);margin-top:2px">טרם הוזן משקל — לחץ לעדכון</div>
+      </div>
+      <button onclick="event.stopPropagation();showWeightModal()" style="background:var(--orange);border:none;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px;color:#fff;font-family:inherit;font-weight:600">הזן משקל</button>
+    </div>`;
   } else if (latest) {
     const diff = prev ? (latest.weight - prev.weight) : null;
     const diffColor = diff === null ? "var(--text-hint)" : diff < 0 ? "var(--green)" : diff > 0 ? "var(--red)" : "var(--text-hint)";
