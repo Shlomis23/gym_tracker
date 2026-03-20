@@ -74,20 +74,20 @@ body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg);
 .toast.show { opacity: 1; }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(22px); }
+  from { opacity: 0; transform: translateY(40px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 .anim-card {
   opacity: 0;
-  transform: translateY(22px);
+  transform: translateY(40px);
 }
 .anim-card.visible {
-  animation: slideUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: slideUp 0.75s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 @keyframes fillBar {
   from { width: 0%; }
 }
-.anim-bar { animation: fillBar 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.anim-bar { animation: fillBar 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
 </style>
   <link rel="manifest" href="manifest.json">
 
@@ -571,7 +571,7 @@ function startCountUp(el) {
   const target = parseFloat(el.dataset.countup);
   const suffix = el.dataset.suffix || "";
   if (isNaN(target) || target === 0) { el.textContent = "0" + suffix; return; }
-  const duration = 700;
+  const duration = 1100;
   const start = performance.now();
   const isInt = Number.isInteger(target);
   function step(now) {
@@ -677,7 +677,7 @@ function renderDashboard() {
       : `עוד ${workoutsLeft} אימונים להשלמת השבוע`;
     const dayWord = daysLeftInWeek === 1 ? "יום" : "ימים";
     const workoutWord = workoutsLeft === 1 ? "אימון" : "אימונים";
-    urgencyCard = `<div class="anim-card" style="background:${urgentBg};border:1px solid ${urgentBorder};border-radius:14px;padding:14px 16px;margin-bottom:16px;animation-delay:0.35s">
+    urgencyCard = `<div class="anim-card" style="background:${urgentBg};border:1px solid ${urgentBorder};border-radius:14px;padding:14px 16px;margin-bottom:16px;animation-delay:0.75s">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <span style="font-size:13px;font-weight:600;color:${urgentColor}">${msg}</span>
       </div>
@@ -693,7 +693,7 @@ function renderDashboard() {
       </div>
     </div>`;
   } else {
-    urgencyCard = `<div class="anim-card" style="background:var(--green-bg);border:1px solid #86efac;border-radius:14px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px;animation-delay:0.35s">
+    urgencyCard = `<div class="anim-card" style="background:var(--green-bg);border:1px solid #86efac;border-radius:14px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px;animation-delay:0.75s">
       <div style="font-size:28px;line-height:1">🏆</div>
       <div>
         <div style="font-size:14px;font-weight:700;color:var(--green)">היעד השבועי הושלם יא מלך!</div>
@@ -745,7 +745,7 @@ function renderDashboard() {
   const dumbbellIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5m-2.5 0a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0 -5 0"/><path d="M17.5 6.5m-2.5 0a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0 -5 0"/><path d="M4 16c0-1.1.9-2 2-2h.5"/><path d="M4 6.5v4"/><path d="M20 6.5v4"/><path d="M9 17h6"/><path d="M15 16.1A2 2 0 0 1 16.5 14H17a2 2 0 0 1 2 2"/><path d="M8 22v-5"/><path d="M16 22v-5"/></svg>`;
   const boltIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>`;
 
-  const weekCard = `<div class="stat-card anim-card" style="margin-bottom:16px;animation-delay:0.2s">
+  const weekCard = `<div class="stat-card anim-card" style="margin-bottom:16px;animation-delay:0.25s">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <span class="stat-label">השבוע</span>
       <span style="font-size:11px;font-weight:600;color:${pctColor};background:${pctBg};padding:2px 8px;border-radius:20px"><span data-countup="${pct}" data-suffix="% מהיעד">0% מהיעד</span></span>
@@ -822,7 +822,7 @@ function renderDashboard() {
     const cardBorder = needsUpdate ? "var(--orange)" : "var(--border)";
     const cardBg = needsUpdate ? "var(--orange-bg)" : "var(--card)";
 
-    weightCard = `<div class="anim-card" style="background:${cardBg};border:1px solid ${cardBorder};border-radius:14px;padding:14px 16px;margin-bottom:16px;animation-delay:0.65s">
+    weightCard = `<div class="anim-card" style="background:${cardBg};border:1px solid ${cardBorder};border-radius:14px;padding:14px 16px;margin-bottom:16px;animation-delay:1.0s">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:${hasGoal?"12px":"8px"}">
         <div>
           <div class="stat-label">משקל נוכחי</div>
@@ -844,7 +844,7 @@ function renderDashboard() {
           <span>${pctW}% מהדרך</span>
         </div>
         <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
-          <div class="anim-bar" style="width:${pctW}%;height:100%;background:var(--accent);border-radius:3px;animation-delay:0.45s"></div>
+          <div class="anim-bar" style="width:${pctW}%;height:100%;background:var(--accent);border-radius:3px;animation-delay:0.7s"></div>
         </div>
       </div>` : ""}
       <div style="display:flex;justify-content:space-between;align-items:center;${hasGoal?"border-top:1px solid var(--border);padding-top:10px":""}">
@@ -864,7 +864,7 @@ function renderDashboard() {
     const msg = d === 0 ? "התאמנת היום - מגיע לך לנוח" : d <= 2 ? "מחר אימון" : d <= 3 ? "קום להתאמן" : "בוא נחזור למסלול";
     const barW = Math.min(Math.round((d / 6) * 100), 100);
     const lastW = getWorkout(daysSince.session.workoutId);
-    daysSinceCard = `<div class="stat-card anim-card" style="margin-bottom:16px;animation-delay:0.5s">
+    daysSinceCard = `<div class="stat-card anim-card" style="margin-bottom:16px;animation-delay:0.75s">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div>
           <div class="stat-label">מאז האימון האחרון</div>
@@ -881,7 +881,7 @@ function renderDashboard() {
         </div>
       </div>
       <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
-        <div class="anim-bar" style="width:${barW}%;height:100%;background:${color};border-radius:3px;animation-delay:0.35s"></div>
+        <div class="anim-bar" style="width:${barW}%;height:100%;background:${color};border-radius:3px;animation-delay:0.75s"></div>
       </div>
     </div>`;
   }
@@ -896,7 +896,7 @@ function renderDashboard() {
 
     ${weightCard}
 
-    ${prEntries.length ? `<div class="card anim-card" style="padding:0;overflow:hidden;margin-bottom:16px;animation-delay:0.8s">
+    ${prEntries.length ? `<div class="card anim-card" style="padding:0;overflow:hidden;margin-bottom:16px;animation-delay:1.25s">
       <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:7px">
         <i data-lucide="trophy" style="width:15px;height:15px;color:#d97706"></i>
         <span style="font-weight:700;font-size:14px;color:var(--text-primary)">שיאים אישיים</span>
