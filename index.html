@@ -599,7 +599,7 @@ function renderDashboard() {
   const thisWeek = getThisWeekCount();
   const goal = state.settings.weeklyGoal;
   const prs = getPRs();
-  const prEntries = Object.entries(prs).slice(0, 6);
+  const prEntries = Object.entries(prs).sort((a, b) => b[1].weight - a[1].weight);
   const daysSince = getDaysSinceLastWorkout();
 
   const now = new Date();
