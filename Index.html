@@ -1,0 +1,1696 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>מעקב אימונים</title>
+<script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+input[type=number] { -moz-appearance: textfield; }
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+:root {
+  --bg: #f8f9fa; --surface: #f3f4f6; --card: #ffffff;
+  --border: #e5e7eb; --border-med: #d1d5db;
+  --accent: #111827;
+  --text-primary: #111827; --text-secondary: #4b5563; --text-hint: #9ca3af;
+  --green: #15803d; --green-bg: #dcfce7;
+  --red: #dc2626; --red-bg: #fee2e2;
+  --blue: #1d4ed8; --blue-bg: #dbeafe;
+  --orange: #c2410c; --orange-bg: #fff7ed;
+}
+body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); direction: rtl; touch-action: manipulation; }
+.app { max-width: 420px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); }
+.topbar { background: var(--accent); padding: 16px 18px 12px; position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 10px; }
+.topbar-title { font-weight: 600; font-size: 17px; color: #fff; flex: 1; }
+.content { flex: 1; }
+.bottomnav { background: var(--card); border-top: 1px solid var(--border); display: flex; position: sticky; bottom: 0; }
+.navbtn { flex: 1; padding: 10px 0 8px; background: none; border: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 10px; font-family: inherit; border-top: 2px solid transparent; color: var(--text-hint); }
+.navbtn.active { color: var(--accent); border-top-color: var(--accent); }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; margin-bottom: 10px; overflow: hidden; }
+.card.improved { border-color: var(--green); }
+.ex-header { display: flex; justify-content: space-between; align-items: center; padding: 13px 16px; cursor: pointer; }
+.ex-header:hover { background: var(--surface); }
+.ex-body { padding: 0 16px 14px; border-top: 1px solid var(--border); }
+.inp { width: 100%; text-align: center; font-size: 15px; font-family: inherit; background: var(--surface); border: 1px solid var(--border-med); border-radius: 8px; padding: 8px 4px; color: var(--text-primary); outline: none; }
+.inp:focus { border-color: var(--accent); background: #fff; }
+.inp-text { text-align: right; padding: 8px 10px; }
+.btn-primary { width: 100%; padding: 13px; background: var(--accent); color: #fff; border: none; border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 600; font-family: inherit; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.btn-secondary { width: 100%; padding: 13px; background: var(--surface); border: 1px solid var(--border-med); border-radius: 10px; cursor: pointer; font-size: 14px; color: var(--text-secondary); font-family: inherit; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.btn-success { width: 100%; padding: 13px; background: var(--green-bg); color: var(--green); border: 1px solid #86efac; border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 600; font-family: inherit; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.btn-copy { padding: 5px 10px; background: var(--blue-bg); border: 1px solid #93c5fd; border-radius: 8px; cursor: pointer; font-size: 11px; color: var(--blue); font-family: inherit; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+.badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; }
+.badge-up { background: var(--green-bg); color: var(--green); }
+.badge-down { background: var(--red-bg); color: var(--red); }
+.badge-eq { background: var(--surface); color: var(--text-hint); }
+.choose-btn { flex: 1; padding: 20px 8px; background: var(--card); border: 1px solid var(--border); border-radius: 14px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 7px; font-family: inherit; min-width: 0; }
+.choose-btn:hover { border-color: var(--accent); }
+.workout-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; cursor: pointer; }
+.name-edit-inp { font-weight: 600; font-size: 15px; font-family: inherit; color: var(--text-primary); background: var(--surface); border: 1px solid var(--border-med); border-radius: 8px; padding: 4px 8px; outline: none; width: 150px; text-align: right; }
+.name-edit-inp:focus { border-color: var(--accent); }
+.del-btn { background: none; border: none; cursor: pointer; color: var(--text-hint); padding: 4px; border-radius: 6px; display: flex; align-items: center; }
+.del-btn:hover { color: var(--red); background: var(--red-bg); }
+.icon-btn { background: none; border: none; cursor: pointer; padding: 2px; display: flex; align-items: center; color: var(--text-hint); }
+.icon-btn:hover { color: var(--text-primary); }
+.rest-chip { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--orange); background: var(--orange-bg); padding: 2px 7px; border-radius: 20px; }
+.stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.stat-label { font-size: 11px; color: var(--text-hint); font-weight: 600; margin-bottom: 4px; }
+.stat-value { font-size: 22px; font-weight: 700; color: var(--text-primary); }
+.stat-sub { font-size: 11px; color: var(--text-hint); margin-top: 2px; }
+.next-btn { width: 100%; padding: 16px; background: var(--accent); color: #fff; border: none; border-radius: 14px; cursor: pointer; font-size: 16px; font-weight: 700; font-family: inherit; display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 16px; }
+.pr-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.pr-row:last-child { border-bottom: none; }
+.week-dot { width: 10px; height: 10px; border-radius: 50%; }
+.choose-btn.selected { border: 2px solid var(--accent); background: var(--surface); }
+.drag-handle { cursor: grab; color: var(--text-hint); display:flex;align-items:center;padding:0 4px; touch-action: none; }
+.drag-handle:active { cursor: grabbing; }
+.ex-row-drag { transition: opacity 0.15s; }
+.ex-row-drag.dragging { opacity: 0.4; }
+.toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #111827; color: #fff; padding: 14px 24px; border-radius: 14px; font-size: 14px; font-weight: 600; z-index: 999; opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; display: flex; align-items: center; gap: 8px; max-width: 320px; text-align: center; }
+.toast.show { opacity: 1; }
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(40px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.anim-card {
+  opacity: 0;
+  transform: translateY(40px);
+}
+.anim-card.visible {
+  animation: slideUp 0.75s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes fillBar {
+  from { width: 0%; }
+}
+.anim-bar { animation: fillBar 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+@keyframes dayPop {
+  from { opacity: 0; transform: translateY(10px) scale(0.85); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.day-cell-anim {
+  animation: dayPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  animation-play-state: paused;
+}
+</style>
+  <link rel="manifest" href="manifest.json">
+
+<meta name="theme-color" content="#000000">
+
+<link rel="apple-touch-icon" href="icon-192x192.png">
+</head>
+<body>
+<div id="app-loader" style="position:fixed;inset:0;background:#ffffff;z-index:9999;display:flex;align-items:center;justify-content:center;transition:opacity 0.35s ease">
+  <svg xmlns="http://www.w3.org/2000/svg" width="64" height="28" viewBox="0 0 164 72" style="animation:dumbPulse 1.1s ease-in-out infinite">
+    <!-- bar -->
+    <rect x="27" y="33" width="110" height="6" rx="3" fill="#111827"/>
+    <!-- left plate stack -->
+    <rect x="0" y="18" width="16" height="36" rx="2" fill="#111827"/>
+    <rect x="16" y="24" width="12" height="24" rx="2" fill="#111827"/>
+    <!-- right plate stack -->
+    <rect x="136" y="24" width="12" height="24" rx="2" fill="#111827"/>
+    <rect x="148" y="18" width="16" height="36" rx="2" fill="#111827"/>
+  </svg>
+  <style>
+    @keyframes dumbPulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.4; transform: scale(0.88); }
+    }
+  </style>
+</div>
+<div id="toast" class="toast"></div>
+<div class="app">
+  <div class="topbar">
+    <i data-lucide="dumbbell" style="width:20px;height:20px;color:#fff"></i>
+    <span class="topbar-title" id="screen-title">דשבורד</span>
+  </div>
+  <div class="content" id="main-content"></div>
+  <div class="bottomnav">
+    <button class="navbtn active" id="nav-dashboard" onclick="navigate('dashboard')">
+      <i data-lucide="layout-dashboard" style="width:18px;height:18px"></i><span>דשבורד</span>
+    </button>
+    <button class="navbtn" id="nav-home" onclick="navigate('home')" style="position:relative">
+      <i data-lucide="dumbbell" style="width:18px;height:18px"></i><span>אימון</span>
+      <span id="inprogress-dot" style="display:none;position:absolute;top:8px;right:calc(50% - 12px);width:7px;height:7px;background:#dc2626;border-radius:50%;border:1.5px solid #fff"></span>
+    </button>
+    <button class="navbtn" id="nav-history" onclick="navigate('history')">
+      <i data-lucide="calendar" style="width:18px;height:18px"></i><span>היסטוריה</span>
+    </button>
+    <button class="navbtn" id="nav-manage" onclick="navigate('manage')">
+      <i data-lucide="list-checks" style="width:18px;height:18px"></i><span>ניהול תוכנית</span>
+    </button>
+  </div>
+</div>
+
+<script>
+// ── Supabase ─────────────────────────────────────────────────────
+const SUPABASE_URL = "https://jezibgdemidhebbcpdch.supabase.co";
+const SUPABASE_KEY = "sb_publishable_NDyz8DAcTO8kOs6JhAjTFw_uRTgb5nf";
+
+const SB_HEADERS = {
+  apikey: SUPABASE_KEY,
+  Authorization: "Bearer " + SUPABASE_KEY,
+  "Content-Type": "application/json",
+  Prefer: "return=representation"
+};
+
+async function sbGet(path) {
+  const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, { headers: SB_HEADERS });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+async function sbPost(path, body) {
+  const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, { method:"POST", headers: SB_HEADERS, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+async function sbDelete(path) {
+  const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, { method:"DELETE", headers: SB_HEADERS });
+  if (!r.ok) throw new Error(await r.text());
+}
+// ─────────────────────────────────────────────────────────────────
+
+const STORAGE_SESSIONS = "gym_sessions_v2";
+const STORAGE_WORKOUTS = "gym_workouts_v4";
+const STORAGE_SETTINGS = "gym_settings_v1";
+const DEFAULT_WORKOUTS = [
+  { id: "A", name: "אימון A", exercises: [
+    { name: "לחיצת חזה", rest: 90 }, { name: "כתפיים קדמי", rest: 60 },
+    { name: "טרייספס", rest: 60 }, { name: "בטן", rest: 45 }
+  ]},
+  { id: "B", name: "אימון B", exercises: [
+    { name: "גב רחב", rest: 90 }, { name: "בייספס", rest: 60 },
+    { name: "כתפיים אחורי", rest: 60 }, { name: "כרעיים", rest: 90 }
+  ]}
+];
+const DEFAULT_SETTINGS = { weeklyGoal: 4 };
+
+function loadWorkouts() {
+  try {
+    const s = localStorage.getItem(STORAGE_WORKOUTS);
+    if (s) return JSON.parse(s);
+    const old = localStorage.getItem("gym_workouts_v3");
+    if (old) {
+      const parsed = JSON.parse(old);
+      return parsed.map(w => ({ ...w, exercises: w.exercises.map(e => typeof e === "string" ? { name: e, rest: 60 } : e) }));
+    }
+    return JSON.parse(JSON.stringify(DEFAULT_WORKOUTS));
+  } catch { return JSON.parse(JSON.stringify(DEFAULT_WORKOUTS)); }
+}
+function loadSettings() {
+  try { return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(STORAGE_SETTINGS) || "{}") }; }
+  catch { return { ...DEFAULT_SETTINGS }; }
+}
+
+let state = {
+  screen: "dashboard", workoutId: null, openExercise: null, exercises: {},
+  sessions: [], workouts: loadWorkouts(), settings: loadSettings(),
+  manageOpenId: null, editingNameId: null, selectedWorkoutId: null, expandedSessions: new Set(),
+  weightLogs: [], weightGoal: { start_weight: null, goal_weight: null }, historyTab: "workouts"
+};
+try { state.sessions = JSON.parse(localStorage.getItem(STORAGE_SESSIONS) || "[]"); } catch {}
+
+function saveSessions() { localStorage.setItem(STORAGE_SESSIONS, JSON.stringify(state.sessions)); }
+
+async function saveSessionToSupabase(session) {
+  try {
+    const rows = await sbPost("workout_sessions", {
+      local_id: session.id,
+      workout_id: session.workoutId,
+      workout_name: getWorkout(session.workoutId)?.name || session.workoutId,
+      date: session.date
+    });
+    const sessionRow = rows[0];
+    const sets = [];
+    Object.entries(session.exercises || {}).forEach(([exName, exSets]) => {
+      exSets.forEach(s => {
+        if (s.weight > 0 || s.reps > 0) {
+          sets.push({ session_id: sessionRow.id, exercise_name: exName, set_number: s.num, weight: s.weight, reps: s.reps, failed: !!s.failed });
+        }
+      });
+    });
+    if (sets.length) await sbPost("session_exercises", sets);
+  } catch(e) {
+    console.error("Supabase save failed:", e);
+  }
+}
+
+async function loadSessionsFromSupabase() {
+  try {
+    const rows = await sbGet("workout_sessions?select=*,sets:session_exercises(*)&order=date.asc");
+    state.sessions = rows.map(row => {
+      const exercises = {};
+      (row.sets || []).forEach(s => {
+        if (!exercises[s.exercise_name]) exercises[s.exercise_name] = [];
+        exercises[s.exercise_name].push({ num: s.set_number, weight: s.weight, reps: s.reps, failed: s.failed });
+      });
+      Object.values(exercises).forEach(arr => arr.sort((a,b) => a.num - b.num));
+      return { id: row.local_id || row.id, workoutId: row.workout_id, date: row.date, exercises };
+    });
+    localStorage.setItem(STORAGE_SESSIONS, JSON.stringify(state.sessions));
+  } catch(e) {
+    console.error("Supabase load failed, using localStorage:", e);
+    try { state.sessions = JSON.parse(localStorage.getItem(STORAGE_SESSIONS) || "[]"); } catch {}
+  }
+}
+
+async function deleteSessionFromSupabase(localId) {
+  try {
+    await sbDelete("workout_sessions?local_id=eq." + encodeURIComponent(localId));
+  } catch(e) {
+    console.error("Supabase delete failed:", e);
+  }
+}
+
+async function loadWeightData() {
+  try {
+    const logs = await sbGet("weight_logs?select=*&order=date.asc");
+    state.weightLogs = logs || [];
+    const goals = await sbGet("weight_goal?select=*&order=updated_at.desc&limit=1");
+    if (goals && goals.length) state.weightGoal = goals[0];
+  } catch(e) { console.error("Weight load failed:", e); }
+}
+
+async function saveWeightLog(weight) {
+  try {
+    const row = await sbPost("weight_logs", { weight, date: new Date().toISOString() });
+    state.weightLogs.push(row[0]);
+    showToast("המשקל נשמר ✓");
+  } catch(e) { console.error("Weight save failed:", e); showToast("שגיאה בשמירת משקל ⚠️"); throw e; }
+}
+
+async function saveWeightGoal(startWeight, goalWeight) {
+  try {
+    await sbDelete("weight_goal?id=neq.00000000-0000-0000-0000-000000000000");
+    const row = await sbPost("weight_goal", { start_weight: startWeight, goal_weight: goalWeight });
+    state.weightGoal = row[0];
+  } catch(e) { console.error("Weight goal save failed:", e); showToast("שגיאה בשמירת יעד"); throw e; }
+}
+
+async function deleteWeightLog(id) {
+  try {
+    await sbDelete("weight_logs?id=eq." + id);
+    state.weightLogs = state.weightLogs.filter(l => l.id !== id);
+    render();
+  } catch(e) { console.error("Weight delete failed:", e); showToast("שגיאה במחיקה"); }
+}
+
+function getLatestWeight() {
+  if (!state.weightLogs.length) return null;
+  return state.weightLogs[state.weightLogs.length - 1];
+}
+
+function getPrevWeight() {
+  if (state.weightLogs.length < 2) return null;
+  return state.weightLogs[state.weightLogs.length - 2];
+}
+
+function daysSinceWeight() {
+  const latest = getLatestWeight();
+  if (!latest) return null;
+  return Math.floor((new Date() - new Date(latest.date)) / (1000 * 60 * 60 * 24));
+}
+
+function buildInp(type, step, placeholder, fontSize) {
+  const inp = document.createElement("input");
+  inp.type = type; inp.step = step; inp.placeholder = placeholder;
+  inp.style.cssText = `width:100%;text-align:center;font-size:${fontSize};font-family:inherit;background:var(--surface);border:1px solid var(--border-med);border-radius:10px;padding:10px;color:var(--text-primary);outline:none;box-sizing:border-box`;
+  return inp;
+}
+function buildLabel(text) {
+  const l = document.createElement("label");
+  l.style.cssText = "font-size:12px;color:var(--text-secondary);font-weight:600;display:block;margin-bottom:6px";
+  l.innerHTML = text; return l;
+}
+function buildWrap(mb) {
+  const d = document.createElement("div"); d.style.marginBottom = mb || "16px"; return d;
+}
+
+function showWeightModal(changeGoal) {
+  const latest = getLatestWeight();
+  const wGoal = state.weightGoal;
+  const hasGoal = !!(wGoal && wGoal.start_weight && wGoal.goal_weight);
+  const isChangingGoal = !!changeGoal;
+
+  document.getElementById("weight-modal")?.remove();
+
+  const overlay = document.createElement("div");
+  overlay.id = "weight-modal";
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:flex-end;justify-content:center";
+
+  const sheet = document.createElement("div");
+  sheet.style.cssText = "background:var(--card);border-radius:20px 20px 0 0;padding:24px 20px;width:100%;max-width:420px;direction:rtl";
+
+  // Header
+  const header = document.createElement("div");
+  header.style.cssText = "display:flex;justify-content:space-between;align-items:center;margin-bottom:20px";
+  const titleEl = document.createElement("span");
+  titleEl.style.cssText = "font-weight:700;font-size:16px;color:var(--text-primary)";
+  titleEl.textContent = isChangingGoal ? "שינוי יעד" : "עדכון משקל";
+  header.appendChild(titleEl);
+  const closeBtn = document.createElement("button");
+  closeBtn.textContent = "×";
+  closeBtn.style.cssText = "background:none;border:none;cursor:pointer;color:var(--text-hint);font-size:22px;line-height:1";
+  closeBtn.addEventListener("click", () => overlay.remove());
+  header.appendChild(closeBtn);
+  sheet.appendChild(header);
+
+  let currentInp = null;
+  let startInp = null;
+  let goalInp = null;
+
+  if (!isChangingGoal) {
+    // Current weight
+    const cWrap = buildWrap("16px");
+    cWrap.appendChild(buildLabel("משקל נוכחי (ק״ג)"));
+    currentInp = buildInp("number", "0.1", latest ? String(latest.weight) : "85.0", "22px");
+    currentInp.style.fontWeight = "700";
+    cWrap.appendChild(currentInp);
+    sheet.appendChild(cWrap);
+  }
+
+  if (!hasGoal || isChangingGoal) {
+    // Start weight
+    const sWrap = buildWrap("12px");
+    sWrap.appendChild(buildLabel("משקל התחלתי (ק״ג)"));
+    startInp = buildInp("number", "0.1", hasGoal ? String(wGoal.start_weight) : "91.0", "16px");
+    if (hasGoal) startInp.value = wGoal.start_weight;
+    sWrap.appendChild(startInp);
+    sheet.appendChild(sWrap);
+  }
+
+  // Goal weight
+  const gWrap = buildWrap("16px");
+  const gLabelText = hasGoal && !isChangingGoal
+    ? `יעד משקל (ק״ג) <span style="font-weight:400;color:var(--text-hint)">— נוכחי: ${wGoal.goal_weight}</span>`
+    : "יעד משקל (ק״ג)";
+  gWrap.appendChild(buildLabel(gLabelText));
+  goalInp = buildInp("number", "0.1", hasGoal ? String(wGoal.goal_weight) : "78.0", "16px");
+  if (hasGoal && isChangingGoal) goalInp.value = wGoal.goal_weight;
+  gWrap.appendChild(goalInp);
+  sheet.appendChild(gWrap);
+
+  // Submit
+  const submitBtn = document.createElement("button");
+  submitBtn.textContent = "שמור";
+  submitBtn.style.cssText = "width:100%;padding:14px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer;font-size:15px;font-weight:700;font-family:inherit;margin-bottom:" + (hasGoal && !isChangingGoal ? "0" : "0");
+  submitBtn.addEventListener("click", async () => {
+    try {
+      if (isChangingGoal) {
+        const newStart = parseFloat(startInp.value);
+        const newGoal = parseFloat(goalInp.value);
+        if (!newStart || !newGoal || isNaN(newStart) || isNaN(newGoal)) { showToast("הזן ערכים תקינים"); return; }
+        await saveWeightGoal(newStart, newGoal);
+        overlay.remove(); haptic("medium"); render(); showToast("היעד עודכן ✓");
+        return;
+      }
+      const current = parseFloat(currentInp.value);
+      if (!current || isNaN(current)) { showToast("הזן משקל תקין"); return; }
+      const goalVal = parseFloat(goalInp.value);
+      const startVal = startInp ? parseFloat(startInp.value) : null;
+      if (!hasGoal) {
+        if (!startVal || !goalVal || isNaN(startVal) || isNaN(goalVal)) { showToast("הזן משקל התחלתי ויעד"); return; }
+        await saveWeightGoal(startVal, goalVal);
+      } else if (goalVal && !isNaN(goalVal)) {
+        await saveWeightGoal(wGoal.start_weight, goalVal);
+      }
+      await saveWeightLog(current);
+      overlay.remove(); haptic("medium"); render(); showToast("המשקל עודכן ✓");
+    } catch(e) { console.error("save error:", e); showToast("שגיאה: " + e.message); }
+  });
+  sheet.appendChild(submitBtn);
+
+  // Change goal button (only when has goal and not already changing)
+  if (hasGoal && !isChangingGoal) {
+    const changeBtn = document.createElement("button");
+    changeBtn.textContent = "שנה יעד / משקל התחלתי";
+    changeBtn.style.cssText = "width:100%;padding:11px;background:transparent;color:var(--text-hint);border:none;cursor:pointer;font-size:13px;font-family:inherit;margin-top:8px;text-decoration:underline";
+    changeBtn.addEventListener("click", () => { overlay.remove(); showWeightModal(true); });
+    sheet.appendChild(changeBtn);
+  }
+
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
+  setTimeout(() => (currentInp || startInp)?.focus(), 100);
+}
+
+
+function haptic(type) {
+  if (!navigator.vibrate) return;
+  if (type === "light") navigator.vibrate(10);
+  else if (type === "medium") navigator.vibrate(30);
+  else if (type === "success") navigator.vibrate([40, 30, 60]);
+}
+function showToast(msg, icon) {
+  const el = document.getElementById("toast");
+  if (!el) return;
+  el.innerHTML = icon ? `<span>${icon}</span>${msg}` : msg;
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), 2800);
+}
+function saveWorkouts() {
+  localStorage.setItem(STORAGE_WORKOUTS, JSON.stringify(state.workouts));
+  saveWorkoutsToSupabase();
+}
+function saveSettings() { localStorage.setItem(STORAGE_SETTINGS, JSON.stringify(state.settings)); }
+
+async function saveWorkoutsToSupabase() {
+  try {
+    await sbDelete("workout_plans?id=neq.00000000-0000-0000-0000-000000000000");
+    const rows = state.workouts.map((w, i) => ({
+      plan_id: w.id,
+      name: w.name,
+      exercises: w.exercises,
+      sort_order: i
+    }));
+    if (rows.length) await sbPost("workout_plans", rows);
+    showToast("התוכנית נשמרה ✓");
+  } catch(e) { console.error("Workout plan save failed:", e); showToast("שגיאה בשמירת התוכנית ⚠️"); }
+}
+
+async function loadWorkoutsFromSupabase() {
+  try {
+    const rows = await sbGet("workout_plans?select=*&order=sort_order.asc");
+    if (rows && rows.length) {
+      state.workouts = rows.map(r => ({ id: r.plan_id, name: r.name, exercises: r.exercises }));
+      localStorage.setItem(STORAGE_WORKOUTS, JSON.stringify(state.workouts));
+    }
+  } catch(e) { console.error("Workout plan load failed:", e); }
+}
+function formatDate(iso) { return new Date(iso).toLocaleDateString("he-IL", { day:"numeric", month:"numeric", year:"2-digit", weekday:"short" }); }
+function formatDateShort(iso) { return new Date(iso).toLocaleDateString("he-IL", { day:"numeric", month:"numeric" }); }
+function calcVolume(sets) { return sets.reduce((s,r) => s + (r.weight||0)*(r.reps||0), 0); }
+function getWorkout(id) { return state.workouts.find(w => w.id === id); }
+function getLastSession(id) { return [...state.sessions].reverse().find(s => s.workoutId === id) || null; }
+function formatRest(sec) { return sec >= 60 ? Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0")+" דק׳" : sec+" שנ׳"; }
+function getExNames(w) { return w.exercises.map(e => typeof e === "string" ? e : e.name); }
+function getExRest(w, name) { const e = w.exercises.find(ex => (typeof ex==="string"?ex:ex.name)===name); return e?.rest||60; }
+
+function getNextWorkout() {
+  if (!state.sessions.length) return state.workouts[0] || null;
+  const last = state.sessions[state.sessions.length - 1];
+  const lastIdx = state.workouts.findIndex(w => w.id === last.workoutId);
+  if (lastIdx === -1) return state.workouts[0] || null;
+  return state.workouts[(lastIdx + 1) % state.workouts.length];
+}
+
+function getWeekStreak() {
+  if (!state.sessions.length) return 0;
+  const goal = state.settings.weeklyGoal;
+  const getWeekKey = (iso) => {
+    const d = new Date(iso); const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    const mon = new Date(d.setDate(diff));
+    return mon.toISOString().slice(0,10);
+  };
+  const weekCounts = {};
+  state.sessions.forEach(s => {
+    const k = getWeekKey(s.date);
+    weekCounts[k] = (weekCounts[k] || 0) + 1;
+  });
+  const weeks = Object.keys(weekCounts).sort().reverse();
+  let streak = 0;
+  for (const w of weeks) {
+    if (weekCounts[w] >= goal) streak++;
+    else break;
+  }
+  return streak;
+}
+
+function getThisWeekCount() {
+  const now = new Date(); const day = now.getDay();
+  const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+  const mon = new Date(now); mon.setDate(diff); mon.setHours(0,0,0,0);
+  return state.sessions.filter(s => new Date(s.date) >= mon).length;
+}
+
+function getPRs() {
+  const prs = {};
+  state.sessions.forEach(session => {
+    Object.entries(session.exercises||{}).forEach(([name, sets]) => {
+      sets.forEach(s => {
+        if (s.weight > (prs[name]?.weight || 0)) {
+          prs[name] = { weight: s.weight, date: session.date };
+        }
+      });
+    });
+  });
+  return prs;
+}
+
+
+function saveInProgress() {
+  if (state.workoutId) {
+    sessionStorage.setItem("gym_in_progress", JSON.stringify({
+      workoutId: state.workoutId,
+      exercises: state.exercises,
+      openExercise: state.openExercise
+    }));
+  } else {
+    sessionStorage.removeItem("gym_in_progress");
+  }
+}
+
+function loadInProgress() {
+  try {
+    const s = sessionStorage.getItem("gym_in_progress");
+    if (!s) return;
+    const data = JSON.parse(s);
+    if (data.workoutId && getWorkout(data.workoutId)) {
+      state.workoutId = data.workoutId;
+      state.exercises = data.exercises;
+      state.openExercise = data.openExercise;
+    }
+  } catch {}
+}
+
+function navigate(screen) {
+  if (state.screen === "manage" && screen !== "manage") {
+    const empty = state.workouts.filter(w => w.exercises.length === 0);
+    if (empty.length > 0) {
+      const names = empty.map(w => w.name).join(", ");
+      if (confirm("השארת אימון ריק (" + names + "), האם למחוק?")) {
+        state.workouts = state.workouts.filter(w => w.exercises.length > 0);
+        saveWorkouts();
+      } else {
+        return;
+      }
+    }
+  }
+  if (state.workoutId) saveInProgress();
+  state.screen = screen;
+  if (screen === "home") {
+    loadInProgress();
+  }
+  ["dashboard","home","history","manage"].forEach(s => {
+    const el = document.getElementById("nav-"+s);
+    if (el) el.classList.toggle("active", s === screen);
+  });
+  const titles = { dashboard:"דשבורד", home:"אימון חדש", history:"היסטוריה", manage:"ניהול תוכנית" };
+  document.getElementById("screen-title").textContent = titles[screen] || "";
+  render();
+}
+
+function startCountUp(el) {
+  const target = parseFloat(el.dataset.countup);
+  const suffix = el.dataset.suffix || "";
+  if (isNaN(target) || target === 0) { el.textContent = "0" + suffix; return; }
+  const duration = 1100;
+  const start = performance.now();
+  const isInt = Number.isInteger(target);
+  function step(now) {
+    const p = Math.min((now - start) / duration, 1);
+    const ease = 1 - Math.pow(1 - p, 3);
+    const val = target * ease;
+    el.textContent = (isInt ? Math.round(val) : val.toFixed(1)) + suffix;
+    if (p < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+function bindScrollAnimations() {
+  const cards = document.querySelectorAll(".anim-card");
+  if (!cards.length) return;
+
+  function activateCard(card) {
+    card.classList.add("visible");
+    const delay = parseFloat(card.style.animationDelay) || 0;
+    setTimeout(() => {
+      card.querySelectorAll("[data-countup]").forEach(startCountUp);
+      card.querySelectorAll(".day-cell-anim").forEach(cell => {
+        cell.style.animationPlayState = "running";
+      });
+    }, delay * 1000 + 100);
+  }
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) { activateCard(entry.target); observer.unobserve(entry.target); }
+    });
+  }, { threshold: 0.15 });
+
+  const observerEarly = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) { activateCard(entry.target); observerEarly.unobserve(entry.target); }
+    });
+  }, { threshold: 0.05 });
+
+  cards.forEach(card => {
+    const delay = parseFloat(card.style.animationDelay) || 0;
+    if (delay >= 1.0) observerEarly.observe(card);
+    else observer.observe(card);
+  });
+}
+
+function render() {
+  const el = document.getElementById("main-content");
+  if (state.screen === "dashboard") el.innerHTML = renderDashboard();
+  else if (state.screen === "home") el.innerHTML = state.workoutId ? renderWorkout() : renderChoose();
+  else if (state.screen === "history") el.innerHTML = renderHistory();
+  else el.innerHTML = renderManage();
+  if (window.lucide) lucide.createIcons();
+  bindDelButtons();
+  bindDragDrop();
+  const dot = document.getElementById("inprogress-dot");
+  if (dot) dot.style.display = state.workoutId ? "block" : "none";
+  if (state.screen === "dashboard") setTimeout(bindScrollAnimations, 50);
+}
+
+
+function bindDelButtons() {
+  document.querySelectorAll("[data-del-session]").forEach(btn => {
+    btn.addEventListener("click", function() {
+      const idx = parseInt(this.dataset.delSession);
+      if (confirm("למחוק את האימון מההיסטוריה?")) {
+        const session = state.sessions[idx];
+        if (session) deleteSessionFromSupabase(session.id);
+        state.sessions.splice(idx, 1); saveSessions(); render();
+      }
+    });
+  });
+  document.querySelectorAll("[data-del-weight]").forEach(btn => {
+    btn.addEventListener("click", function() {
+      const id = this.dataset.delWeight;
+      if (confirm("למחוק שקילה זו?")) {
+        deleteWeightLog(id);
+      }
+    });
+  });
+}
+
+function getDaysSinceLastWorkout() {
+  if (!state.sessions.length) return null;
+  const last = state.sessions[state.sessions.length - 1];
+  const today = new Date(); today.setHours(0,0,0,0);
+  const lastDay = new Date(last.date); lastDay.setHours(0,0,0,0);
+  const days = Math.round((today - lastDay) / (1000 * 60 * 60 * 24));
+  return { days, session: last };
+}
+
+function renderDashboard() {
+  const next = getNextWorkout();
+  const streak = getWeekStreak();
+  const thisWeek = getThisWeekCount();
+  const goal = state.settings.weeklyGoal;
+  const prs = getPRs();
+  const prEntries = Object.entries(prs).sort((a, b) => b[1].weight - a[1].weight);
+  const daysSince = getDaysSinceLastWorkout();
+
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  const daysLeftInWeek = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
+  const workoutsLeft = Math.max(0, goal - thisWeek);
+  const goalReached = thisWeek >= goal;
+
+  let urgencyCard = "";
+  if (!goalReached) {
+    const isUrgent = daysLeftInWeek <= workoutsLeft;
+    const urgentColor = isUrgent ? "var(--red)" : daysLeftInWeek <= 2 ? "var(--orange)" : "var(--text-primary)";
+    const urgentBg = isUrgent ? "var(--red-bg)" : daysLeftInWeek <= 2 ? "var(--orange-bg)" : "var(--surface)";
+    const urgentBorder = isUrgent ? "var(--red)" : daysLeftInWeek <= 2 ? "var(--orange)" : "var(--border)";
+    const msg = isUrgent
+      ? "⚠ לא יהיה מספיק זמן — התאמן היום!"
+      : daysLeftInWeek === 0
+      ? "היום הוא יום ראשון — שבוע חדש מתחיל"
+      : workoutsLeft === 1
+      ? "עוד אימון אחד ותשלים את היעד השבועי"
+      : `עוד ${workoutsLeft} אימונים להשלמת השבוע`;
+    const dayWord = daysLeftInWeek === 1 ? "יום" : "ימים";
+    const workoutWord = workoutsLeft === 1 ? "אימון" : "אימונים";
+    urgencyCard = `<div class="anim-card" style="background:${urgentBg};border:1px solid ${urgentBorder};border-radius:14px;padding:14px 16px;margin-bottom:16px;animation-delay:0.75s">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <span style="font-size:13px;font-weight:600;color:${urgentColor}">${msg}</span>
+      </div>
+      <div style="display:flex;gap:0">
+        <div style="flex:1;text-align:center;border-left:1px solid ${urgentBorder}">
+          <div style="font-size:26px;font-weight:700;color:${urgentColor};line-height:1"><span data-countup="${daysLeftInWeek}">0</span></div>
+          <div style="font-size:11px;color:${urgentColor};margin-top:3px;opacity:0.8">${dayWord} נותרו</div>
+        </div>
+        <div style="flex:1;text-align:center">
+          <div style="font-size:26px;font-weight:700;color:${urgentColor};line-height:1"><span data-countup="${workoutsLeft}">0</span></div>
+          <div style="font-size:11px;color:${urgentColor};margin-top:3px;opacity:0.8">${workoutWord} נותרו</div>
+        </div>
+      </div>
+    </div>`;
+  } else {
+    urgencyCard = `<div class="anim-card" style="background:var(--green-bg);border:1px solid #86efac;border-radius:14px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px;animation-delay:0.75s">
+      <div style="font-size:28px;line-height:1">🏆</div>
+      <div>
+        <div style="font-size:14px;font-weight:700;color:var(--green)">היעד השבועי הושלם יא מלך!</div>
+        <div style="font-size:12px;color:var(--green);margin-top:2px;opacity:0.8">${thisWeek} מתוך ${goal} אימונים הושלמו</div>
+      </div>
+    </div>`;
+  }
+
+  const dayNames = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
+  const todayDow = new Date().getDay();
+  const weekStart = new Date();
+  weekStart.setDate(weekStart.getDate() - (todayDow === 0 ? 6 : todayDow - 0));
+  weekStart.setHours(0,0,0,0);
+
+  const workedDays = new Set();
+  state.sessions.forEach(s => {
+    const d = new Date(s.date);
+    if (d >= weekStart) {
+      workedDays.add(d.getDay());
+    }
+  });
+
+  const pct = goal > 0 ? Math.round((thisWeek / goal) * 100) : 0;
+  const pctColor = pct >= 100 ? "var(--green)" : pct >= 50 ? "var(--orange)" : "var(--text-hint)";
+  const pctBg = pct >= 100 ? "var(--green-bg)" : pct >= 50 ? "var(--orange-bg)" : "var(--surface)";
+
+  const checkIcon = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+
+  const dayOrder = [0,1,2,3,4,5,6];
+  const dayCells = dayOrder.map((dow, idx) => {
+    const isToday = dow === todayDow;
+    const isPast = todayDow === 0 ? dow === 0 : dow < todayDow || dow === 0 && todayDow > 0;
+    const isFuture = !isToday && !isPast;
+    const worked = workedDays.has(dow);
+    const labelColor = worked ? "var(--green)" : isFuture ? "var(--border-med)" : "var(--text-hint)";
+    const labelWeight = isToday ? "700" : "600";
+    const boxBg = worked ? "var(--green-bg)" : isFuture ? "var(--card)" : "var(--surface)";
+    const boxBorder = worked
+      ? isToday ? "2px solid var(--green)" : "1px solid #86efac"
+      : isFuture ? "1px dashed var(--border-med)" : "1px solid var(--border)";
+    const animDelay = (idx * 0.08).toFixed(2);
+    return `<div class="day-cell-anim" style="display:flex;flex-direction:column;align-items:center;gap:4px;opacity:0;animation-delay:${animDelay}s">
+      <span style="font-size:10px;color:${labelColor};font-weight:${labelWeight}">${dayNames[dow]}</span>
+      <div style="width:100%;aspect-ratio:1;border-radius:8px;background:${boxBg};border:${boxBorder};display:flex;align-items:center;justify-content:center">
+        ${worked ? checkIcon : ""}
+      </div>
+    </div>`;
+  }).join("");
+
+  const dumbbellIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5m-2.5 0a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0 -5 0"/><path d="M17.5 6.5m-2.5 0a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0 -5 0"/><path d="M4 16c0-1.1.9-2 2-2h.5"/><path d="M4 6.5v4"/><path d="M20 6.5v4"/><path d="M9 17h6"/><path d="M15 16.1A2 2 0 0 1 16.5 14H17a2 2 0 0 1 2 2"/><path d="M8 22v-5"/><path d="M16 22v-5"/></svg>`;
+  const boltIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>`;
+
+  const weekCard = `<div class="stat-card anim-card" style="margin-bottom:16px;animation-delay:0.25s">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <span class="stat-label">השבוע</span>
+      <span style="font-size:11px;font-weight:600;color:${pctColor};background:${pctBg};padding:2px 8px;border-radius:20px"><span data-countup="${pct}" data-suffix="% מהיעד">0% מהיעד</span></span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-bottom:12px">${dayCells}</div>
+    <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;justify-content:space-between;align-items:center">
+      <div style="display:flex;align-items:center;gap:6px">
+        ${dumbbellIcon}
+        <span style="font-size:12px;color:var(--text-secondary);font-weight:500">${thisWeek} מתוך ${goal} אימונים</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:5px">
+        ${boltIcon}
+        <span style="font-size:12px;color:var(--orange);font-weight:600">Streak: <span data-countup="${streak}" data-suffix=" שבועות">0 שבועות</span></span>
+      </div>
+    </div>
+  </div>`;
+
+  const inProgress = sessionStorage.getItem("gym_in_progress");
+  const inProgressId = inProgress ? JSON.parse(inProgress).workoutId : null;
+  const inProgressW = inProgressId ? getWorkout(inProgressId) : null;
+  const nextBtn = inProgressW
+    ? `<button class="next-btn anim-card" style="background:var(--orange);border-radius:14px;animation-delay:0.1s" onclick="navigate('home')">
+         <i data-lucide="play" style="width:20px;height:20px"></i>
+         המשך ${inProgressW.name}
+       </button>`
+    : next
+    ? `<button class="next-btn anim-card" style="animation-delay:0.1s" onclick="selectWorkoutDirect('${next.id}')">
+         <i data-lucide="play" style="width:20px;height:20px"></i>
+         התחל ${next.name}
+       </button>`
+    : "";
+
+
+  // ── Weight card ──────────────────────────────────────────────────
+  const latest = getLatestWeight();
+  const prev = getPrevWeight();
+  const wGoal = state.weightGoal || {};
+  const hasGoal = !!(wGoal.start_weight && wGoal.goal_weight);
+  const dSinceW = daysSinceWeight();
+  const needsUpdate = dSinceW === null || dSinceW >= 7;
+
+  let weightCard = "";
+  if (!latest && !hasGoal) {
+    weightCard = `<div style="background:var(--surface);border:1px dashed var(--border-med);border-radius:14px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="showWeightModal()">
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--text-secondary)">מעקב משקל</div>
+        <div style="font-size:11px;color:var(--text-hint);margin-top:2px">לחץ להגדרת יעד ומשקל</div>
+      </div>
+      <button onclick="event.stopPropagation();showWeightModal()" style="background:var(--accent);border:none;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px;color:#fff;font-family:inherit;font-weight:600">הגדר</button>
+    </div>`;
+  } else if (!latest && hasGoal) {
+    weightCard = `<div style="background:var(--orange-bg);border:1px solid var(--orange);border-radius:14px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="showWeightModal()">
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--orange)">יעד: ${wGoal.goal_weight} ק״ג</div>
+        <div style="font-size:11px;color:var(--orange);margin-top:2px">טרם הוזן משקל — לחץ לעדכון</div>
+      </div>
+      <button onclick="event.stopPropagation();showWeightModal()" style="background:var(--orange);border:none;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px;color:#fff;font-family:inherit;font-weight:600">הזן משקל</button>
+    </div>`;
+  } else if (latest) {
+    const diff = prev ? (latest.weight - prev.weight) : null;
+    const diffColor = diff === null ? "var(--text-hint)" : diff < 0 ? "var(--green)" : diff > 0 ? "var(--red)" : "var(--text-hint)";
+    const diffArrow = diff === null ? "" : diff < 0
+      ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>`
+      : diff > 0
+      ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`
+      : "";
+    const diffText = diff === null ? "" : `${diff > 0 ? "+" : ""}${diff.toFixed(1)} ק״ג מהשבוע הקודם`;
+    const startW = hasGoal ? wGoal.start_weight : latest.weight;
+    const goalW = hasGoal ? wGoal.goal_weight : null;
+    const totalToLose = hasGoal ? Math.abs(startW - goalW) : 0;
+    const lost = hasGoal ? Math.abs(startW - latest.weight) : 0;
+    const pctW = hasGoal && totalToLose > 0 ? Math.min(Math.round((lost / totalToLose) * 100), 100) : 0;
+    const remaining = hasGoal ? Math.abs(latest.weight - goalW).toFixed(1) : null;
+    const cardBorder = needsUpdate ? "var(--orange)" : "var(--border)";
+    const cardBg = needsUpdate ? "var(--orange-bg)" : "var(--card)";
+
+    weightCard = `<div class="anim-card" style="background:${cardBg};border:1px solid ${cardBorder};border-radius:14px;padding:14px 16px;margin-bottom:16px;animation-delay:1.0s">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:${hasGoal?"12px":"8px"}">
+        <div>
+          <div class="stat-label">משקל נוכחי</div>
+          <div style="display:flex;align-items:baseline;gap:5px;margin-top:3px">
+            <span style="font-size:32px;font-weight:700;color:var(--text-primary);line-height:1">${latest.weight}</span>
+            <span style="font-size:14px;color:var(--text-hint)">ק״ג</span>
+          </div>
+          ${diff !== null ? `<div style="display:flex;align-items:center;gap:4px;margin-top:4px">${diffArrow}<span style="font-size:12px;color:${diffColor};font-weight:600">${diffText}</span></div>` : ""}
+        </div>
+        ${hasGoal ? `<div style="text-align:left">
+          <div class="stat-label">יעד</div>
+          <div style="font-size:18px;font-weight:700;color:var(--text-primary);margin-top:2px">${goalW}</div>
+          ${remaining !== null ? `<div style="font-size:11px;color:var(--text-hint);margin-top:2px">נותרו ${remaining} ק״ג</div>` : ""}
+        </div>` : ""}
+      </div>
+      ${hasGoal ? `<div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-hint);margin-bottom:4px">
+          <span>התחלה: ${startW} ק״ג</span>
+          <span>${pctW}% מהדרך</span>
+        </div>
+        <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+          <div class="anim-bar" style="width:${pctW}%;height:100%;background:var(--accent);border-radius:3px;animation-delay:0.7s"></div>
+        </div>
+      </div>` : ""}
+      <div style="display:flex;justify-content:space-between;align-items:center;${hasGoal?"border-top:1px solid var(--border);padding-top:10px":""}">
+        <span style="font-size:11px;color:var(--text-hint)">${needsUpdate ? "לא שקלת השבוע" : "עודכן לפני " + dSinceW + " ימים"}</span>
+        <button onclick="showWeightModal()" style="display:flex;align-items:center;gap:5px;background:${needsUpdate?"var(--orange)":"var(--surface)"};border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;color:${needsUpdate?"#fff":"var(--text-secondary)"};font-family:inherit;font-weight:600">
+          ${needsUpdate ? "הזן משקל שבועי" : "עדכן משקל"}
+        </button>
+      </div>
+    </div>`;
+  }
+  // ─────────────────────────────────────────────────────────────────
+
+  let daysSinceCard = "";
+  if (daysSince) {
+    const d = daysSince.days;
+    const color = d <= 2 ? "var(--green)" : d <= 3 ? "var(--orange)" : "var(--red)";
+    const msg = d === 0 ? "התאמנת היום - מגיע לך לנוח" : d <= 2 ? "מחר אימון" : d <= 3 ? "קום להתאמן" : "בוא נחזור למסלול";
+    const barW = Math.min(Math.round((d / 6) * 100), 100);
+    const lastW = getWorkout(daysSince.session.workoutId);
+    daysSinceCard = `<div class="stat-card anim-card" style="margin-bottom:16px;animation-delay:0.75s">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div>
+          <div class="stat-label">מאז האימון האחרון</div>
+          <div style="display:flex;align-items:baseline;gap:6px;margin-top:2px">
+            <span style="font-size:36px;font-weight:700;color:${color};line-height:1"><span data-countup="${d}">0</span></span>
+            <span style="font-size:14px;color:${color}">${d === 1 ? "יום" : "ימים"}</span>
+          </div>
+          <div style="font-size:12px;color:${color};margin-top:2px;font-weight:500">${msg}</div>
+        </div>
+        <div style="text-align:left">
+          <div class="stat-label">אימון אחרון</div>
+          <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-top:2px">${lastW?.name || ""}</div>
+          <div style="font-size:11px;color:var(--text-hint);margin-top:1px">${formatDate(daysSince.session.date)}</div>
+        </div>
+      </div>
+      <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
+        <div class="anim-bar" style="width:${barW}%;height:100%;background:${color};border-radius:3px;animation-delay:0.75s"></div>
+      </div>
+    </div>`;
+  }
+
+  return `<div style="padding:16px 14px">
+    ${nextBtn}
+
+    ${weekCard}
+
+    ${urgencyCard}
+    ${daysSinceCard}
+
+    ${weightCard}
+
+    ${prEntries.length ? `<div class="card anim-card" style="padding:0;overflow:hidden;margin-bottom:16px;animation-delay:1.25s">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:7px">
+        <i data-lucide="trophy" style="width:15px;height:15px;color:#d97706"></i>
+        <span style="font-weight:700;font-size:14px;color:var(--text-primary)">שיאים אישיים</span>
+      </div>
+      <div style="padding:0 16px">
+        ${prEntries.map(([name, pr]) => `
+          <div class="pr-row" onclick="showExerciseGraph('${name.replace(/'/g,"\'")}')" style="cursor:pointer">
+            <span style="color:var(--text-secondary)">${name}</span>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-weight:700;color:var(--text-primary)">${pr.weight} ק"ג</span>
+              <span style="font-size:10px;color:var(--text-hint)">${formatDateShort(pr.date)}</span>
+              <i data-lucide="chevron-left" style="width:12px;height:12px;color:var(--text-hint)"></i>
+            </div>
+          </div>`).join("")}
+      </div>
+    </div>` : ""}
+  </div>`;
+}
+
+function selectWorkoutDirect(id) {
+  navigate("home");
+  setTimeout(() => { selectWorkout(id); }, 50);
+}
+
+function renderChoose() {
+  if (!state.workouts.length) return `<div style="padding:40px;text-align:center;color:var(--text-hint);font-size:14px">אין אימונים — הוסף דרך ניהול תוכנית</div>`;
+  const cols = state.workouts.length <= 3 ? state.workouts.length : 2;
+  return `<div style="padding:20px 16px">
+    <p style="font-size:13px;color:var(--text-hint);margin-bottom:16px;text-align:center">איזה אימון היום?</p>
+    <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:12px">
+      ${state.workouts.map(w => {
+        const last = getLastSession(w.id);
+        return `<button class="choose-btn" onclick="selectWorkout('${w.id}')">
+          <i data-lucide="dumbbell" style="width:24px;height:24px;color:var(--text-hint)"></i>
+          <span style="font-size:18px;font-weight:700;color:var(--text-primary)">${w.name}</span>
+          <span style="font-size:11px;color:var(--text-secondary);display:flex;align-items:center;gap:3px">
+            <i data-lucide="clock" style="width:11px;height:11px"></i>
+            ${last ? formatDate(last.date) : "לא בוצע עדיין"}
+          </span>
+          <span style="font-size:10px;color:var(--text-hint);text-align:center;line-height:1.6">${getExNames(w).join(" · ")}</span>
+        </button>`;
+      }).join("")}
+    </div>
+  </div>`;
+}
+
+function selectWorkout(id) {
+  const inProgress = sessionStorage.getItem("gym_in_progress");
+  if (inProgress) {
+    const data = JSON.parse(inProgress);
+    if (data.workoutId && data.workoutId !== id) {
+      showConfirmSheet(
+        "יש אימון בתהליך",
+        `האם לבטל את ${getWorkout(data.workoutId)?.name || "האימון הקודם"} ולהתחיל ${getWorkout(id)?.name || ""}?`,
+        "התחל חדש", "המשך קודם",
+        () => { sessionStorage.removeItem("gym_in_progress"); _doSelectWorkout(id); },
+        () => { _doSelectWorkout(data.workoutId); }
+      );
+      return;
+    }
+  }
+  _doSelectWorkout(id);
+}
+
+function _doSelectWorkout(id) {
+  haptic("medium");
+  state.workoutId = id;
+  const w = getWorkout(id); const last = getLastSession(id);
+  const names = getExNames(w);
+  state.exercises = {};
+  state.openExercise = names[0];
+  names.forEach(name => {
+    const prev = last?.exercises?.[name];
+    state.exercises[name] = prev
+      ? prev.map((s,i) => ({ num:i+1, weight:s.weight, reps:0 }))
+      : [{num:1,weight:0,reps:0},{num:2,weight:0,reps:0},{num:3,weight:0,reps:0}];
+  });
+  render();
+}
+
+function toggleExercise(name) {
+  state.openExercise = state.openExercise === name ? null : name;
+  saveInProgress(); render();
+}
+
+
+
+function renderWorkout() {
+  const w = getWorkout(state.workoutId);
+  const names = getExNames(w);
+  const last = getLastSession(state.workoutId);
+
+  const cards = names.map(name => {
+    const sets = state.exercises[name] || [];
+    const prevSets = last?.exercises?.[name] || null;
+    const isOpen = state.openExercise === name;
+    const improved = prevSets && sets.some((s,i) => prevSets[i] && s.weight > prevSets[i].weight);
+    const hasData = sets.some(s => s.reps > 0);
+    const curVol = calcVolume(sets); const prevVol = prevSets ? calcVolume(prevSets) : null;
+    const volDiff = prevVol && curVol > 0 ? Math.round(((curVol-prevVol)/prevVol)*100) : null;
+    const rest = getExRest(w, name);
+
+    const statusDot = hasData
+      ? `<span style="width:8px;height:8px;border-radius:50%;background:${improved?"var(--green)":"#6b7280"};flex-shrink:0"></span>`
+      : `<span style="width:8px;height:8px;border-radius:50%;border:1.5px solid var(--border-med);flex-shrink:0"></span>`;
+
+    const header = `<div class="ex-header" onclick="toggleExercise('${name}')">
+      <div style="display:flex;align-items:center;gap:9px;min-width:0">
+        ${statusDot}
+        <div style="min-width:0">
+          <div style="font-weight:600;font-size:14px;color:var(--text-primary)">${name}</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap">
+            <span class="rest-chip"><i data-lucide="timer" style="width:10px;height:10px"></i> ${formatRest(rest)}</span>
+            ${hasData ? `<span style="font-size:11px;color:var(--text-hint)">${sets.filter(s=>s.weight>0||s.reps>0).length} סטים</span>` : ""}
+            ${volDiff !== null ? `<span class="badge ${volDiff>0?"badge-up":volDiff<0?"badge-down":"badge-eq"}" style="font-size:10px">${volDiff>0?"+":""}${volDiff}%</span>` : ""}
+            ${improved ? `<span style="font-size:11px;color:var(--green);font-weight:600;display:flex;align-items:center;gap:2px"><i data-lucide="trending-up" style="width:11px;height:11px"></i> שיפרת</span>` : ""}
+          </div>
+        </div>
+      </div>
+      <i data-lucide="${isOpen?"chevron-up":"chevron-down"}" style="width:16px;height:16px;color:var(--text-hint);flex-shrink:0"></i>
+    </div>`;
+
+    if (!isOpen) return `<div class="card ${improved&&hasData?"improved":""}">${header}</div>`;
+
+
+    const setsHtml = sets.map((s,i) => {
+      const p = prevSets?.[i]; const imp = p && s.weight > p.weight; const reg = p && s.weight > 0 && s.weight < p.weight;
+      const isLast = i === sets.length - 1;
+      const isFailed = !!s.failed;
+      const icon = s.reps > 0 && p
+        ? `<span style="display:flex;align-items:center;color:${imp?"var(--green)":reg?"var(--red)":"var(--text-hint)"}">
+             <i data-lucide="${imp?"trending-up":reg?"trending-down":"minus"}" style="width:14px;height:14px"></i>
+           </span>`
+        : `<button onclick="removeSet('${name}',${i})" class="icon-btn"><i data-lucide="x" style="width:16px;height:16px"></i></button>`;
+      const failedChk = isLast ? `<label style="display:flex;align-items:center;gap:4px;margin-top:6px;cursor:pointer;font-size:11px;color:${isFailed?"var(--red)":"var(--text-hint)"}">
+        <input type="checkbox" ${isFailed?"checked":""} onchange="toggleFailed('${name}',${i})" style="accent-color:var(--red);width:13px;height:13px">
+        כשל
+      </label>` : "";
+      return `<div style="margin-bottom:${isLast?"8px":"14px"}">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="min-width:16px;font-size:12px;color:${isFailed?"var(--red)":"var(--text-hint)"};font-weight:600">${s.num}</span>
+          <div style="flex:1;display:flex;gap:8px">
+            <div style="flex:1">
+              <input class="inp" type="number" placeholder="${p?p.weight:"ק״ג"}" value="${s.weight||""}" style="${isFailed?"border-color:var(--red);color:var(--red)":s.weight>0?"":"color:var(--text-hint)"}" oninput="updateSet('${name}',${i},'weight',this.value)">
+            </div>
+            <div style="flex:1">
+              <input class="inp" type="number" placeholder="${p?p.reps+" חז׳":"חז׳"}" value="${s.reps||""}" style="${isFailed?"border-color:var(--red);color:var(--red)":""}" oninput="updateSet('${name}',${i},'reps',this.value)">
+            </div>
+            <div style="width:28px;display:flex;align-items:center;justify-content:center">${icon}</div>
+          </div>
+        </div>
+        ${failedChk}
+      </div>`;
+    }).join("");
+
+    return `<div class="card ${improved&&hasData?"improved":""}">
+      ${header}
+      <div class="ex-body">
+        ${last ? `<p style="font-size:11px;color:var(--text-hint);margin-bottom:10px;margin-top:10px;display:flex;align-items:center;gap:4px">
+          <i data-lucide="clock" style="width:11px;height:11px"></i> אימון קודם: ${formatDate(last.date)}
+        </p>` : ""}
+        <div style="display:flex;margin-bottom:12px">
+          <span style="flex:0 0 24px"></span>
+          <div style="flex:1;display:flex;gap:8px">
+            <span style="flex:1;text-align:center;font-size:11px;color:var(--text-hint);font-weight:600">משקל ק״ג</span>
+            <span style="flex:1;text-align:center;font-size:11px;color:var(--text-hint);font-weight:600">חזרות</span>
+            <span style="width:28px"></span>
+          </div>
+        </div>
+        ${setsHtml}
+        <button onclick="addSet('${name}')" style="width:100%;background:var(--surface);border:1px dashed var(--border-med);border-radius:8px;padding:8px;cursor:pointer;font-size:13px;color:var(--text-secondary);font-family:inherit;display:flex;align-items:center;justify-content:center;gap:5px">
+          <i data-lucide="plus" style="width:14px;height:14px"></i> הוסף סט
+        </button>
+      </div>
+    </div>`;
+  }).join("");
+
+  const done = names.filter(n => state.exercises[n]?.some(s => s.reps>0)).length;
+
+  return `<div style="padding:16px 14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <button onclick="showCancelMenu()" style="background:none;border:none;cursor:pointer;padding:6px;color:var(--text-hint);display:flex;align-items:center;border-radius:8px">
+        <i data-lucide="more-horizontal" style="width:20px;height:20px"></i>
+      </button>
+      <span style="font-weight:600;font-size:15px;color:var(--text-primary)">${w.name}</span>
+      <span style="font-size:12px;color:var(--text-hint);background:var(--surface);padding:4px 10px;border-radius:20px">${done}/${names.length}</span>
+    </div>
+    ${cards}
+    <button class="btn-success" onclick="finishWorkout()" style="margin-top:6px">
+      <i data-lucide="check-circle" style="width:16px;height:16px"></i> סיום אימון
+    </button>
+  </div>`;
+}
+
+function updateSet(name,i,field,val) {
+  const parsed = field==="weight" ? parseFloat(val)||0 : parseInt(val)||0;
+  state.exercises[name][i][field] = parsed;
+  saveInProgress();
+}
+function addSet(name) {
+  const sets = state.exercises[name];
+  sets.push({ num:sets.length+1, weight:0, reps:0, failed:false });
+  saveInProgress(); render();
+}
+function removeSet(name,i) { state.exercises[name].splice(i,1); state.exercises[name].forEach((s,idx) => s.num=idx+1); saveInProgress(); render(); }
+function toggleFailed(name,i) { state.exercises[name][i].failed = !state.exercises[name][i].failed; saveInProgress(); render(); }
+
+function finishWorkout() {
+  showConfirmSheet(
+    "סיום אימון",
+    "לשמור ולסיים את האימון?",
+    "שמור אימון", "המשך לערוך",
+    () => {
+      const session = { id:"s_"+Date.now(), workoutId:state.workoutId, date:new Date().toISOString(), exercises:JSON.parse(JSON.stringify(state.exercises)) };
+      state.sessions.push(session);
+      sessionStorage.removeItem("gym_in_progress");
+      state.workoutId = null; state.exercises = {}; state.openExercise = null; state.selectedWorkoutId = null;
+      saveSessions();
+      saveSessionToSupabase(session).then(() => {
+        showToast("נשמר ✓", "");
+      }).catch(() => {
+        showToast("שגיאה בשמירה — נסה שוב", "⚠️");
+      });
+      haptic("success");
+      navigate("dashboard");
+      setTimeout(() => showToast("כל הכבוד! האימון הושלם 💪", ""), 300);
+    },
+    null
+  );
+}
+
+function cancelWorkout() {
+  showConfirmSheet(
+    "ביטול אימון",
+    "האימון לא יישמר. בטוח?",
+    "בטל אימון", "המשך",
+    () => {
+      haptic("light");
+      sessionStorage.removeItem("gym_in_progress");
+      state.workoutId = null; state.exercises = {}; state.openExercise = null; state.selectedWorkoutId = null;
+      navigate("home");
+    },
+    null,
+    true
+  );
+}
+
+function showCancelMenu() {
+  showConfirmSheet(
+    "אפשרויות אימון",
+    null,
+    "בטל אימון", "המשך",
+    () => cancelWorkout(),
+    null,
+    true
+  );
+}
+
+function showConfirmSheet(title, subtitle, confirmLabel, cancelLabel, onConfirm, onCancel, isDanger) {
+  document.getElementById("confirm-sheet")?.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "confirm-sheet";
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:2000;display:flex;align-items:flex-end;justify-content:center";
+  const sheet = document.createElement("div");
+  sheet.style.cssText = "background:var(--card);border-radius:20px 20px 0 0;padding:24px 20px 32px;width:100%;max-width:420px;direction:rtl;animation:slideUp 0.3s cubic-bezier(0.22,1,0.36,1) both";
+  sheet.innerHTML = `
+    <div style="font-size:16px;font-weight:700;color:var(--text-primary);margin-bottom:${subtitle?"6px":"16px"}">${title}</div>
+    ${subtitle ? `<div style="font-size:13px;color:var(--text-secondary);margin-bottom:18px">${subtitle}</div>` : ""}
+    <button id="cs-confirm" style="width:100%;padding:14px;background:${isDanger?"var(--red)":"var(--accent)"};color:#fff;border:none;border-radius:12px;cursor:pointer;font-size:15px;font-weight:700;font-family:inherit;margin-bottom:10px">${confirmLabel}</button>
+    ${cancelLabel ? `<button id="cs-cancel" style="width:100%;padding:14px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:12px;cursor:pointer;font-size:15px;font-family:inherit">${cancelLabel}</button>` : ""}
+  `;
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
+  overlay.addEventListener("click", e => { if(e.target===overlay) overlay.remove(); });
+  sheet.querySelector("#cs-confirm").addEventListener("click", () => { overlay.remove(); onConfirm && onConfirm(); });
+  const cancelBtn = sheet.querySelector("#cs-cancel");
+  if (cancelBtn) cancelBtn.addEventListener("click", () => { overlay.remove(); onCancel && onCancel(); });
+}
+
+function renderHistory() {
+  const tab = state.historyTab || "workouts";
+  const tabs = `<div style="display:flex;gap:0;margin:0 14px 14px;background:var(--surface);border-radius:10px;padding:3px">
+    <button onclick="state.historyTab='workouts';render()" style="flex:1;padding:8px;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;background:${tab==='workouts'?'var(--card)':'transparent'};color:${tab==='workouts'?'var(--text-primary)':'var(--text-hint)'}">אימונים</button>
+    <button onclick="state.historyTab='weight';render()" style="flex:1;padding:8px;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;background:${tab==='weight'?'var(--card)':'transparent'};color:${tab==='weight'?'var(--text-primary)':'var(--text-hint)'}">משקל</button>
+  </div>`;
+
+  if (tab === "weight") {
+    const logs = [...state.weightLogs].reverse();
+    if (!logs.length) return `<div style="padding:0 14px">${tabs}<div style="padding:40px;text-align:center;color:var(--text-hint);font-size:14px">אין נתוני משקל עדיין</div></div>`;
+    const rows = logs.map((log, ri) => {
+      const prev = logs[ri + 1];
+      const diff = prev ? (log.weight - prev.weight) : null;
+      const diffColor = diff === null ? "" : diff < 0 ? "var(--green)" : diff > 0 ? "var(--red)" : "var(--text-hint)";
+      const diffText = diff === null ? "" : `${diff > 0 ? "+" : ""}${diff.toFixed(1)} ק״ג`;
+      const diffIcon = diff === null ? "" : diff < 0
+        ? `<i data-lucide="trending-down" style="width:13px;height:13px;color:var(--green)"></i>`
+        : diff > 0 ? `<i data-lucide="trending-up" style="width:13px;height:13px;color:var(--red)"></i>`
+        : `<i data-lucide="minus" style="width:13px;height:13px;color:var(--text-hint)"></i>`;
+      return `<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px">
+        <div>
+          <div style="font-size:22px;font-weight:700;color:var(--text-primary);line-height:1">${log.weight} <span style="font-size:13px;font-weight:400;color:var(--text-hint)">ק״ג</span></div>
+          <div style="font-size:11px;color:var(--text-hint);margin-top:3px;display:flex;align-items:center;gap:3px">
+            <i data-lucide="clock" style="width:10px;height:10px"></i> ${formatDate(log.date)}
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          ${diff !== null ? `<div style="display:flex;align-items:center;gap:3px">${diffIcon}<span style="font-size:12px;font-weight:600;color:${diffColor}">${diffText}</span></div>` : ""}
+          <button data-del-weight="${log.id}" class="del-btn">
+            <i data-lucide="trash-2" style="width:15px;height:15px"></i>
+          </button>
+        </div>
+      </div>`;
+    }).join("");
+    return `<div style="padding:14px 14px 0">${tabs}${rows}</div>`;
+  }
+
+  const exportBtn = `<div style="padding:0 0 10px;display:flex;justify-content:flex-start">
+    <button onclick="exportCSV()" style="display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border-med);border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px;font-family:inherit;color:var(--text-secondary)">
+      <i data-lucide="download" style="width:13px;height:13px"></i> ייצוא CSV
+    </button>
+  </div>`;
+
+  if (!state.sessions.length) return `<div style="padding:14px">${tabs}${exportBtn}<div style="padding:30px;text-align:center;color:var(--text-hint);font-size:14px">אין אימונים עדיין</div></div>`;
+  const reversed = [...state.sessions].reverse();
+  if (!state.expandedSessions) state.expandedSessions = new Set();
+  return `<div style="padding:14px">${tabs}${exportBtn}${reversed.map((session, ri) => {
+    const originalIdx = state.sessions.length - 1 - ri;
+    const w = getWorkout(session.workoutId);
+    const wName = w ? w.name : session.workoutId;
+    const prevSameType = state.sessions.slice(0, originalIdx).reverse().find(s => s.workoutId === session.workoutId);
+    const isExpanded = state.expandedSessions.has(session.id);
+
+    const exNames = Object.keys(session.exercises);
+    const totalEx = exNames.length;
+    const improved = exNames.filter(name => {
+      const sets = (session.exercises[name]||[]).filter(s=>s.weight>0||s.reps>0);
+      const prevSets = prevSameType?.exercises?.[name]||[];
+      return prevSets.length>0 && sets.some((s,i)=>prevSets[i]&&s.weight>prevSets[i].weight);
+    }).length;
+
+    const summaryChips = `
+      <span style="font-size:11px;color:var(--text-hint)">${totalEx} תרגילים</span>
+      ${improved > 0 ? `<span style="font-size:11px;color:var(--green);font-weight:600;display:inline-flex;align-items:center;gap:2px"><i data-lucide="trending-up" style="width:11px;height:11px"></i> ${improved} שיפרת</span>` : (prevSameType ? `<span style="font-size:11px;color:var(--text-hint)">ללא שינוי</span>` : "")}
+    `;
+
+    const exRows = isExpanded ? exNames.map(name => {
+      const sets = (session.exercises[name]||[]).filter(s => s.weight>0||s.reps>0);
+      if (!sets.length) return "";
+      const prevSets = prevSameType?.exercises?.[name]||[];
+      const exImproved = prevSets.length>0 && sets.some((s,i) => prevSets[i] && s.weight>prevSets[i].weight);
+      const rest = w ? getExRest(w, name) : null;
+      const setsTable = sets.map((s,i) => {
+        const p=prevSets[i]; const imp=p&&s.weight>p.weight; const reg=p&&s.weight>0&&s.weight<p.weight;
+        const failed = !!s.failed;
+        return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0">
+          <span style="min-width:14px;font-size:11px;color:${failed?"var(--red)":"var(--text-hint)"};font-weight:600">${s.num}</span>
+          <span style="font-size:13px;color:${failed?"var(--red)":"var(--text-primary)"};font-weight:500;min-width:56px">${s.weight} ק״ג</span>
+          <span style="font-size:13px;color:${failed?"var(--red)":"var(--text-secondary)"};min-width:44px">× ${s.reps}</span>
+          ${failed ? `<span style="font-size:10px;color:var(--red);font-weight:600">כשל</span>` : p?`<i data-lucide="${imp?"trending-up":reg?"trending-down":"minus"}" style="width:13px;height:13px;color:${imp?"var(--green)":reg?"var(--red)":"var(--text-hint)"}"></i>`:""}
+        </div>`;
+      }).join("");
+      return `<div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+          <div style="display:flex;align-items:center;gap:7px">
+            <span style="font-size:13px;font-weight:600;color:var(--text-primary)">${name}</span>
+            ${rest ? `<span class="rest-chip"><i data-lucide="timer" style="width:10px;height:10px"></i> ${formatRest(rest)}</span>` : ""}
+          </div>
+          ${exImproved ? `<span style="font-size:11px;color:var(--green);font-weight:600;display:flex;align-items:center;gap:3px"><i data-lucide="trending-up" style="width:12px;height:12px"></i> שיפרת</span>` : prevSets.length>0 ? `<span style="font-size:11px;color:var(--text-hint)">ללא שינוי</span>` : ""}
+        </div>
+        <div style="padding-right:4px">${setsTable}</div>
+      </div>`;
+    }).join("") : "";
+
+    return `<div class="card" style="padding:0;overflow:hidden">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 16px;cursor:pointer" onclick="toggleHistorySession('${session.id}')">
+        <div style="display:flex;align-items:center;gap:7px">
+          <i data-lucide="dumbbell" style="width:16px;height:16px;color:var(--text-secondary)"></i>
+          <div>
+            <span style="font-weight:700;font-size:15px;color:var(--text-primary)">${wName}</span>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:3px">${summaryChips}</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:12px;color:var(--text-hint);display:flex;align-items:center;gap:3px">
+            <i data-lucide="clock" style="width:11px;height:11px"></i> ${formatDate(session.date)}
+          </span>
+          <button class="del-btn" data-del-session="${originalIdx}" onclick="event.stopPropagation()">
+            <i data-lucide="trash-2" style="width:15px;height:15px"></i>
+          </button>
+          <i data-lucide="${isExpanded?"chevron-up":"chevron-down"}" style="width:15px;height:15px;color:var(--text-hint)"></i>
+        </div>
+      </div>
+      ${isExpanded ? `<div style="padding:4px 16px 14px;border-top:1px solid var(--border)">${exRows}</div>` : ""}
+    </div>`;
+  }).join("")}</div>`;
+}
+
+function toggleHistorySession(id) {
+  if (!state.expandedSessions) state.expandedSessions = new Set();
+  if (state.expandedSessions.has(id)) state.expandedSessions.delete(id);
+  else state.expandedSessions.add(id);
+  render();
+}
+
+function renderManage() {
+  const workoutSections = state.workouts.map(w => {
+    const isOpen = state.manageOpenId === w.id;
+    const isEditing = state.editingNameId === w.id;
+    const nameEl = isEditing
+      ? `<input class="name-edit-inp" id="name-inp-${w.id}" value="${w.name}"
+           onblur="saveWorkoutName('${w.id}')"
+           onkeydown="if(event.key==='Enter')saveWorkoutName('${w.id}');if(event.key==='Escape'){state.editingNameId=null;render();}">`
+      : `<span style="font-weight:700;font-size:15px;color:var(--text-primary)">${w.name}</span>
+         <button onclick="event.stopPropagation();startEditName('${w.id}')" class="icon-btn" style="margin-right:4px">
+           <i data-lucide="pencil" style="width:13px;height:13px"></i>
+         </button>`;
+    const exRows = isOpen ? `<div id="drag-list-${w.id}">${w.exercises.map((ex,i) => {
+      const name = typeof ex === "string" ? ex : ex.name;
+      const rest = typeof ex === "string" ? 60 : (ex.rest||60);
+      return `<div class="ex-row-drag" draggable="true" data-wid="${w.id}" data-idx="${i}"
+        style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--border)">
+        <span class="drag-handle"><i data-lucide="grip-vertical" style="width:14px;height:14px"></i></span>
+        <span style="flex:1;font-size:14px;color:var(--text-primary)">${name}</span>
+        <div style="display:flex;align-items:center;gap:5px">
+          <i data-lucide="timer" style="width:13px;height:13px;color:var(--orange)"></i>
+          <input type="number" value="${rest}" min="15" max="600" step="15"
+            onchange="updateExRest('${w.id}',${i},this.value)"
+            style="width:54px;text-align:center;font-size:13px;font-family:inherit;background:var(--surface);border:1px solid var(--border-med);border-radius:6px;padding:4px;color:var(--text-primary);outline:none">
+          <span style="font-size:11px;color:var(--text-hint)">שנ׳</span>
+        </div>
+        <button onclick="removeExercise('${w.id}',${i})" class="icon-btn" style="color:var(--red)">
+          <i data-lucide="x" style="width:16px;height:16px"></i>
+        </button>
+      </div>`;
+    }).join("")}</div>` : "";
+    const addRow = isOpen ? `
+      <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+        <input class="inp inp-text" id="new-ex-${w.id}" placeholder="שם תרגיל..." style="flex:1"
+          onkeydown="if(event.key==='Enter')addExercise('${w.id}')">
+        <div style="display:flex;align-items:center;gap:4px">
+          <i data-lucide="timer" style="width:13px;height:13px;color:var(--orange)"></i>
+          <input type="number" id="new-rest-${w.id}" value="60" min="15" max="600" step="15"
+            style="width:54px;text-align:center;font-size:13px;font-family:inherit;background:var(--surface);border:1px solid var(--border-med);border-radius:6px;padding:6px 4px;color:var(--text-primary);outline:none">
+          <span style="font-size:11px;color:var(--text-hint)">שנ׳</span>
+        </div>
+        <button onclick="addExercise('${w.id}')" style="padding:0 12px;height:38px;background:var(--accent);border:none;border-radius:8px;cursor:pointer;color:#fff;display:flex;align-items:center;">
+          <i data-lucide="plus" style="width:16px;height:16px"></i>
+        </button>
+      </div>` : "";
+    return `<div class="card" style="padding:0;overflow:hidden;margin-bottom:10px">
+      <div class="workout-header" onclick="toggleManageOpen('${w.id}')">
+        <div style="display:flex;align-items:center;gap:6px" onclick="event.stopPropagation()">${nameEl}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:12px;color:var(--text-hint)">${w.exercises.length} תרגילים</span>
+          <button onclick="event.stopPropagation();deleteWorkout('${w.id}')" class="del-btn">
+            <i data-lucide="trash-2" style="width:15px;height:15px"></i>
+          </button>
+          <i data-lucide="${isOpen?"chevron-up":"chevron-down"}" style="width:16px;height:16px;color:var(--text-hint)"></i>
+        </div>
+      </div>
+      ${isOpen ? `<div style="padding:0 14px 14px">${exRows}${addRow}</div>` : ""}
+    </div>`;
+  }).join("");
+
+  return `<div style="padding:14px">
+    <div class="card" style="padding:14px 16px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:12px">
+        <i data-lucide="target" style="width:15px;height:15px;color:var(--text-secondary)"></i>
+        <span style="font-weight:700;font-size:14px;color:var(--text-primary)">יעד שבועי</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:13px;color:var(--text-secondary)">אימונים בשבוע:</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button onclick="updateGoal(-1)" style="width:32px;height:32px;background:var(--surface);border:1px solid var(--border-med);border-radius:8px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;color:var(--text-primary)">−</button>
+          <span style="font-size:20px;font-weight:700;color:var(--text-primary);min-width:24px;text-align:center" id="goal-display">${state.settings.weeklyGoal}</span>
+          <button onclick="updateGoal(1)" style="width:32px;height:32px;background:var(--surface);border:1px solid var(--border-med);border-radius:8px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;color:var(--text-primary)">+</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px;padding:0 2px">
+      <i data-lucide="dumbbell" style="width:15px;height:15px;color:var(--text-secondary)"></i>
+      <span style="font-weight:700;font-size:14px;color:var(--text-primary)">אימונים ותרגילים</span>
+    </div>
+    ${workoutSections}
+    <div style="padding:14px 16px;background:var(--card);border:1px solid var(--border);border-radius:14px">
+      <p style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:10px;display:flex;align-items:center;gap:5px">
+        <i data-lucide="plus-circle" style="width:14px;height:14px"></i> הוסף אימון חדש
+      </p>
+      <div style="display:flex;gap:8px">
+        <input class="inp inp-text" id="new-workout-name" placeholder='למשל "אימון C"' style="flex:1">
+        <button onclick="addWorkout()" style="padding:0 16px;background:var(--accent);border:none;border-radius:8px;cursor:pointer;font-size:14px;color:#fff;font-family:inherit;white-space:nowrap;display:flex;align-items:center;gap:5px">
+          <i data-lucide="plus" style="width:16px;height:16px"></i> הוסף
+        </button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function updateGoal(delta) {
+  state.settings.weeklyGoal = Math.max(1, Math.min(7, state.settings.weeklyGoal + delta));
+  saveSettings();
+  const el = document.getElementById("goal-display");
+  if (el) el.textContent = state.settings.weeklyGoal;
+}
+
+function toggleManageOpen(id) { state.manageOpenId = state.manageOpenId===id ? null : id; state.editingNameId=null; render(); }
+function startEditName(id) {
+  state.editingNameId=id; if(state.manageOpenId!==id) state.manageOpenId=id;
+  render(); setTimeout(()=>{ const inp=document.getElementById("name-inp-"+id); if(inp){inp.focus();inp.select();} },30);
+}
+function saveWorkoutName(id) {
+  const inp=document.getElementById("name-inp-"+id); const val=inp?inp.value.trim():"";
+  if(val){ const w=getWorkout(id); if(w) w.name=val; saveWorkouts(); }
+  state.editingNameId=null; render();
+}
+function addWorkout() {
+  const inp=document.getElementById("new-workout-name"); const name=inp?inp.value.trim():"";
+  if(!name) return;
+  state.workouts.push({id:"w_"+Date.now(), name, exercises:[]});
+  state.manageOpenId=state.workouts[state.workouts.length-1].id;
+  state.editingNameId=null; saveWorkouts(); render();
+}
+function deleteWorkout(id) {
+  if(!confirm("למחוק את האימון לצמיתות?")) return;
+  state.workouts=state.workouts.filter(w=>w.id!==id);
+  if(state.manageOpenId===id) state.manageOpenId=null;
+  saveWorkouts(); render();
+}
+function addExercise(workoutId) {
+  const inp=document.getElementById("new-ex-"+workoutId); const val=inp?inp.value.trim():"";
+  const restInp=document.getElementById("new-rest-"+workoutId);
+  const rest=restInp?parseInt(restInp.value)||60:60;
+  if(!val) return; const w=getWorkout(workoutId);
+  if(w){ w.exercises.push({name:val, rest}); saveWorkouts(); render(); }
+}
+function removeExercise(workoutId,i) {
+  const w=getWorkout(workoutId);
+  if(!w) return;
+  if(w.exercises.length === 1) {
+    if(confirm("אם תמחק תרגיל זה, האימון יישאר ריק. האם למחוק את האימון לגמרי?")) {
+      state.workouts = state.workouts.filter(x => x.id !== workoutId);
+      if(state.manageOpenId === workoutId) state.manageOpenId = null;
+      saveWorkouts(); render();
+    }
+    return;
+  }
+  w.exercises.splice(i,1); saveWorkouts(); render();
+}
+function updateExRest(workoutId,i,val) {
+  const w=getWorkout(workoutId);
+  if(w && w.exercises[i]){ w.exercises[i].rest=parseInt(val)||60; saveWorkouts(); }
+}
+
+function exportCSV() {
+  if (!state.sessions.length) { showToast("אין נתונים לייצוא"); return; }
+  const rows = [["תאריך","אימון","תרגיל","סט","משקל","חזרות","כשל"]];
+  state.sessions.forEach(session => {
+    const w = getWorkout(session.workoutId);
+    const wName = w ? w.name : session.workoutId;
+    Object.entries(session.exercises||{}).forEach(([exName, sets]) => {
+      sets.forEach(s => {
+        if (s.weight > 0 || s.reps > 0) {
+          rows.push([
+            new Date(session.date).toLocaleDateString("he-IL"),
+            wName, exName, s.num, s.weight, s.reps, s.failed ? "כן" : "לא"
+          ]);
+        }
+      });
+    });
+  });
+  const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(",")).join("\n");
+  const blob = new Blob(["﻿"+csv], {type:"text/csv;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "gym-tracker.csv"; a.click();
+  URL.revokeObjectURL(url);
+  showToast("הנתונים יוצאו בהצלחה ✓");
+}
+
+let dragSrc = null;
+let touchDragSrc = null;
+let touchPlaceholder = null;
+
+function bindDragDrop() {
+  document.querySelectorAll(".ex-row-drag").forEach(row => {
+
+    // ── Desktop drag ──────────────────────────────────────────────
+    row.setAttribute("draggable", "true");
+    row.addEventListener("dragstart", e => {
+      dragSrc = row;
+      row.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+    });
+    row.addEventListener("dragend", () => {
+      row.classList.remove("dragging");
+      dragSrc = null;
+    });
+    row.addEventListener("dragover", e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+    });
+    row.addEventListener("drop", e => {
+      e.preventDefault();
+      if (!dragSrc || dragSrc === row) return;
+      const wid = row.dataset.wid;
+      const fromIdx = parseInt(dragSrc.dataset.idx);
+      const toIdx = parseInt(row.dataset.idx);
+      const w = getWorkout(wid);
+      if (!w) return;
+      const moved = w.exercises.splice(fromIdx, 1)[0];
+      w.exercises.splice(toIdx, 0, moved);
+      saveWorkouts(); render();
+    });
+
+    // ── Mobile touch ──────────────────────────────────────────────
+    const handle = row.querySelector(".drag-handle");
+    if (!handle) return;
+
+    handle.addEventListener("touchstart", e => {
+      touchDragSrc = row;
+      row.classList.add("dragging");
+      e.preventDefault();
+    }, { passive: false });
+
+    handle.addEventListener("touchmove", e => {
+      if (!touchDragSrc) return;
+      e.preventDefault();
+      const touch = e.touches[0];
+      const el = document.elementFromPoint(touch.clientX, touch.clientY);
+      const target = el ? el.closest(".ex-row-drag") : null;
+      document.querySelectorAll(".ex-row-drag").forEach(r => r.style.borderTop = "");
+      if (target && target !== touchDragSrc) {
+        target.style.borderTop = "2px solid var(--accent)";
+      }
+    }, { passive: false });
+
+    handle.addEventListener("touchend", e => {
+      if (!touchDragSrc) return;
+      const touch = e.changedTouches[0];
+      const el = document.elementFromPoint(touch.clientX, touch.clientY);
+      const target = el ? el.closest(".ex-row-drag") : null;
+      document.querySelectorAll(".ex-row-drag").forEach(r => r.style.borderTop = "");
+      touchDragSrc.classList.remove("dragging");
+      if (target && target !== touchDragSrc) {
+        const wid = target.dataset.wid;
+        const fromIdx = parseInt(touchDragSrc.dataset.idx);
+        const toIdx = parseInt(target.dataset.idx);
+        const w = getWorkout(wid);
+        if (w) {
+          const moved = w.exercises.splice(fromIdx, 1)[0];
+          w.exercises.splice(toIdx, 0, moved);
+          saveWorkouts(); render();
+        }
+      }
+      touchDragSrc = null;
+    }, { passive: false });
+  });
+}
+
+
+function showExerciseGraph(exName) {
+  document.getElementById("ex-graph-modal")?.remove();
+  const dataPoints = [];
+  state.sessions.forEach(session => {
+    const sets = session.exercises?.[exName];
+    if (!sets || !sets.length) return;
+    const maxW = Math.max(...sets.map(s => s.weight || 0));
+    if (maxW > 0) dataPoints.push({ date: session.date, weight: maxW });
+  });
+  if (!dataPoints.length) { showToast("אין נתונים לתרגיל זה"); return; }
+
+  const overlay = document.createElement("div");
+  overlay.id = "ex-graph-modal";
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2000;display:flex;align-items:flex-end;justify-content:center";
+
+  const maxW = Math.max(...dataPoints.map(d => d.weight));
+  const minW = Math.min(...dataPoints.map(d => d.weight));
+  const pad = 40; const W = 340; const H = 180; const gH = H - pad*0.8;
+
+  const pts = dataPoints.map((d, i) => {
+    const x = pad + (i / Math.max(dataPoints.length - 1, 1)) * (W - pad*1.5);
+    const y = pad*0.4 + (1 - (d.weight - minW) / Math.max(maxW - minW, 1)) * gH;
+    return { x, y, ...d };
+  });
+
+  const polyline = pts.map(p => `${p.x},${p.y}`).join(" ");
+  const areaPath = `M${pts[0].x},${H} ` + pts.map(p=>`L${p.x},${p.y}`).join(" ") + ` L${pts[pts.length-1].x},${H} Z`;
+
+  const dots = pts.map((p,i) => `
+    <circle cx="${p.x}" cy="${p.y}" r="4" fill="#111827" stroke="#fff" stroke-width="2"/>
+    ${i === pts.length-1 ? `<text x="${p.x}" y="${p.y-10}" text-anchor="middle" font-size="11" font-weight="700" fill="#111827">${p.weight}</text>` : ""}
+  `).join("");
+
+  const labels = pts.filter((_,i) => i===0 || i===pts.length-1 || pts.length<=5).map(p =>
+    `<text x="${p.x}" y="${H+14}" text-anchor="middle" font-size="10" fill="#9ca3af">${new Date(p.date).toLocaleDateString("he-IL",{day:"numeric",month:"numeric"})}</text>`
+  ).join("");
+
+  const sheet = document.createElement("div");
+  sheet.style.cssText = "background:var(--card);border-radius:20px 20px 0 0;padding:20px 20px 32px;width:100%;max-width:420px;direction:rtl;animation:slideUp 0.3s cubic-bezier(0.22,1,0.36,1) both";
+  sheet.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div>
+        <div style="font-size:16px;font-weight:700;color:var(--text-primary)">${exName}</div>
+        <div style="font-size:12px;color:var(--text-hint);margin-top:2px">שיא: ${maxW} ק"ג · ${dataPoints.length} אימונים</div>
+      </div>
+      <button onclick="document.getElementById('ex-graph-modal').remove()" style="background:var(--surface);border:none;border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:18px;color:var(--text-hint);display:flex;align-items:center;justify-content:center">×</button>
+    </div>
+    <svg viewBox="0 0 ${W} ${H+20}" width="100%" style="overflow:visible">
+      <defs>
+        <linearGradient id="gfill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#111827" stop-opacity="0.12"/>
+          <stop offset="100%" stop-color="#111827" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d="${areaPath}" fill="url(#gfill)"/>
+      <polyline points="${polyline}" fill="none" stroke="#111827" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      ${dots}
+      ${labels}
+    </svg>
+  `;
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
+  overlay.addEventListener("click", e => { if(e.target===overlay) overlay.remove(); });
+}
+
+window.addEventListener("load", async function() {
+  state.screen = "dashboard";
+  const loader = document.getElementById("app-loader");
+  await Promise.all([loadSessionsFromSupabase(), loadWeightData(), loadWorkoutsFromSupabase()]);
+  if (loader) {
+    loader.style.opacity = "0";
+    setTimeout(() => loader.remove(), 350);
+  }
+  render();
+});
+</script>
+  <script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js')
+        .then(registration => {
+          console.log('ServiceWorker registration successful:', registration.scope);
+        })
+        .catch(err => {
+          console.log('ServiceWorker registration failed:', err);
+        });
+    });
+  }
+</script>
+</body>
+</html>
