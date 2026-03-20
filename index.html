@@ -305,24 +305,36 @@ function showWeightModal() {
 }
 
 async function submitWeight(hasGoal) {
+  console.log("submitWeight called, hasGoal:", hasGoal);
   const currentInp = document.getElementById("w-current");
   const goalInp = document.getElementById("w-goal");
   const startInp = document.getElementById("w-start");
   const current = parseFloat(currentInp?.value);
+  console.log("current weight value:", current);
   if (!current || isNaN(current)) { showToast("הזן משקל תקין"); return; }
   const goalVal = parseFloat(goalInp?.value);
   const startVal = parseFloat(startInp?.value);
-  if (!hasGoal) {
-    if (!startVal || !goalVal) { showToast("הזן משקל התחלתי ויעד"); return; }
-    await saveWeightGoal(startVal, goalVal);
-  } else if (goalVal && !isNaN(goalVal)) {
-    await saveWeightGoal(state.weightGoal.start_weight || startVal, goalVal);
+  console.log("goalVal:", goalVal, "startVal:", startVal);
+  try {
+    if (!hasGoal) {
+      if (!startVal || !goalVal) { showToast("הזן משקל התחלתי ויעד"); return; }
+      console.log("saving goal...");
+      await saveWeightGoal(startVal, goalVal);
+      console.log("goal saved");
+    } else if (goalVal && !isNaN(goalVal)) {
+      await saveWeightGoal(state.weightGoal.start_weight || startVal, goalVal);
+    }
+    console.log("saving weight log...");
+    await saveWeightLog(current);
+    console.log("weight saved, removing modal");
+    document.getElementById("weight-modal")?.remove();
+    haptic("medium");
+    render();
+    showToast("המשקל עודכן ✓");
+  } catch(e) {
+    console.error("submitWeight error:", e);
+    showToast("שגיאה בשמירה: " + e.message);
   }
-  await saveWeightLog(current);
-  document.getElementById("weight-modal")?.remove();
-  haptic("medium");
-  render();
-  showToast("המשקל עודכן ✓");
 }
 function haptic(type) {
   if (!navigator.vibrate) return;
