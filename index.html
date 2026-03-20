@@ -101,8 +101,8 @@ body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg);
 
 <script>
 // ── Supabase ─────────────────────────────────────────────────────
-const SUPABASE_URL = "https://jezibgdemidhebbcpdch.supabase.co";
-const SUPABASE_KEY = "sb_publishable_NDyz8DAcTO8kOs6JhAjTFw_uRTgb5nf";
+const SUPABASE_URL = "REPLACE_WITH_YOUR_URL";
+const SUPABASE_KEY = "REPLACE_WITH_YOUR_KEY";
 
 const SB_HEADERS = {
   apikey: SUPABASE_KEY,
@@ -232,8 +232,7 @@ async function saveWeightLog(weight) {
   try {
     const row = await sbPost("weight_logs", { weight, date: new Date().toISOString() });
     state.weightLogs.push(row[0]);
-    render();
-  } catch(e) { console.error("Weight save failed:", e); showToast("שגיאה בשמירת משקל"); }
+  } catch(e) { console.error("Weight save failed:", e); showToast("שגיאה בשמירת משקל"); throw e; }
 }
 
 async function saveWeightGoal(startWeight, goalWeight) {
@@ -241,8 +240,7 @@ async function saveWeightGoal(startWeight, goalWeight) {
     await sbDelete("weight_goal?id=neq.00000000-0000-0000-0000-000000000000");
     const row = await sbPost("weight_goal", { start_weight: startWeight, goal_weight: goalWeight });
     state.weightGoal = row[0];
-    render();
-  } catch(e) { console.error("Weight goal save failed:", e); showToast("שגיאה בשמירת יעד"); }
+  } catch(e) { console.error("Weight goal save failed:", e); showToast("שגיאה בשמירת יעד"); throw e; }
 }
 
 function getLatestWeight() {
@@ -323,6 +321,7 @@ async function submitWeight(hasGoal) {
   await saveWeightLog(current);
   document.getElementById("weight-modal")?.remove();
   haptic("medium");
+  render();
   showToast("המשקל עודכן ✓");
 }
 function haptic(type) {
