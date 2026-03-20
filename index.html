@@ -187,7 +187,7 @@ const DEFAULT_WORKOUTS = [
     { name: "כתפיים אחורי", rest: 60 }, { name: "כרעיים", rest: 90 }
   ]}
 ];
-const DEFAULT_SETTINGS = { weeklyGoal: 4 };
+const DEFAULT_SETTINGS = { weeklyGoal: 4, goalHistory: [] };
 
 function loadWorkouts() {
   try {
@@ -202,8 +202,27 @@ function loadWorkouts() {
   } catch { return JSON.parse(JSON.stringify(DEFAULT_WORKOUTS)); }
 }
 function loadSettings() {
-  try { return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(STORAGE_SETTINGS) || "{}") }; }
-  catch { return { ...DEFAULT_SETTINGS }; }
+  try {
+    const s = { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(STORAGE_SETTINGS) || "{}") };
+    if (!s.goalHistory || !s.goalHistory.length) {
+      s.goalHistory = [{ goal: s.weeklyGoal, from: "2020-01-06" }];
+    }
+    return s;
+  } catch { return { ...DEFAULT_SETTINGS, goalHistory: [{ goal: 4, from: "2020-01-06" }] }; }
+}
+
+function getWeekStart(date) {
+  const d = new Date(date); const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  d.setDate(diff); d.setHours(0,0,0,0);
+  return d;
+}
+
+function getGoalForWeek(weekStartIso) {
+  const history = state.settings.goalHistory || [];
+  const sorted = [...history].sort((a,b) => a.from > b.from ? -1 : 1);
+  const entry = sorted.find(e => e.from <= weekStartIso);
+  return entry ? entry.goal : (state.settings.weeklyGoal || 4);
 }
 
 let state = {
@@ -211,7 +230,7 @@ let state = {
   sessions: [], workouts: loadWorkouts(), settings: loadSettings(),
   manageOpenId: null, editingNameId: null, selectedWorkoutId: null, expandedSessions: new Set(),
   weightLogs: [], weightGoal: { start_weight: null, goal_weight: null }, historyTab: "workouts",
-  workoutNote: "", monthViewYear: null, monthViewMonth: null
+  workoutNote: "", monthViewYear: null, monthViewMonth: null, pendingGoal: null
 };
 try { state.sessions = JSON.parse(localStorage.getItem(STORAGE_SESSIONS) || "[]"); } catch {}
 
@@ -507,11 +526,10 @@ function getNextWorkout() {
 
 function getWeekStreak() {
   if (!state.sessions.length) return 0;
-  const goal = state.settings.weeklyGoal;
   const getWeekKey = (iso) => {
     const d = new Date(iso); const day = d.getDay();
     const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    const mon = new Date(d.setDate(diff));
+    const mon = new Date(d); mon.setDate(diff); mon.setHours(0,0,0,0);
     return mon.toISOString().slice(0,10);
   };
   const weekCounts = {};
@@ -519,11 +537,29 @@ function getWeekStreak() {
     const k = getWeekKey(s.date);
     weekCounts[k] = (weekCounts[k] || 0) + 1;
   });
-  const weeks = Object.keys(weekCounts).sort().reverse();
+  // אל תחשב שבוע נוכחי שעדיין לא הסתיים כשבור streak
+  const todayWeekKey = getWeekKey(new Date().toISOString());
+  const weeks = Object.keys(weekCounts).sort().reverse().filter(w => w !== todayWeekKey);
+  // הוסף שבוע נוכחי אם יש כבר אימונים בו
+  if (weekCounts[todayWeekKey]) weeks.unshift(todayWeekKey);
+
   let streak = 0;
+  let prevWeekKey = null;
   for (const w of weeks) {
-    if (weekCounts[w] >= goal) streak++;
-    else break;
+    const goalForWeek = getGoalForWeek(w);
+    if (weekCounts[w] >= goalForWeek) {
+      // וודא שאין חור — שבוע שעבר בדיוק צריך להיות הקודם
+      if (prevWeekKey !== null) {
+        const prevDate = new Date(prevWeekKey);
+        const thisDate = new Date(w);
+        const diffWeeks = Math.round((prevDate - thisDate) / (7 * 86400000));
+        if (diffWeeks > 1) break;
+      }
+      streak++;
+      prevWeekKey = w;
+    } else {
+      break;
+    }
   }
   return streak;
 }
@@ -577,6 +613,8 @@ function loadInProgress() {
 
 function navigate(screen) {
   if (state.screen === "manage" && screen !== "manage") {
+    // נקה pending goal אם לא נשמר
+    state.pendingGoal = null;
     const empty = state.workouts.filter(w => w.exercises.length === 0);
     if (empty.length > 0) {
       const names = empty.map(w => w.name).join(", ");
@@ -702,7 +740,8 @@ function renderDashboard() {
   const next = getNextWorkout();
   const streak = getWeekStreak();
   const thisWeek = getThisWeekCount();
-  const goal = state.settings.weeklyGoal;
+  const thisWeekIso = getWeekStart(new Date()).toISOString().slice(0,10);
+  const goal = getGoalForWeek(thisWeekIso);
   const prs = getPRs();
   const prEntries = Object.entries(prs).sort((a, b) => b[1].weight - a[1].weight);
   const daysSince = getDaysSinceLastWorkout();
@@ -1585,14 +1624,18 @@ function renderManage() {
         <i data-lucide="target" style="width:15px;height:15px;color:var(--text-secondary)"></i>
         <span style="font-weight:700;font-size:14px;color:var(--text-primary)">יעד שבועי</span>
       </div>
-      <div style="display:flex;align-items:center;gap:10px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
         <span style="font-size:13px;color:var(--text-secondary)">אימונים בשבוע:</span>
         <div style="display:flex;align-items:center;gap:8px">
-          <button onclick="updateGoal(-1)" style="width:32px;height:32px;background:var(--surface);border:1px solid var(--border-med);border-radius:8px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;color:var(--text-primary)">−</button>
-          <span style="font-size:20px;font-weight:700;color:var(--text-primary);min-width:24px;text-align:center" id="goal-display">${state.settings.weeklyGoal}</span>
-          <button onclick="updateGoal(1)" style="width:32px;height:32px;background:var(--surface);border:1px solid var(--border-med);border-radius:8px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;color:var(--text-primary)">+</button>
+          <button onclick="changeGoalTemp(-1)" style="width:32px;height:32px;background:var(--surface);border:1px solid var(--border-med);border-radius:8px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;color:var(--text-primary)">−</button>
+          <span style="font-size:20px;font-weight:700;color:var(--text-primary);min-width:24px;text-align:center" id="goal-display">${state.pendingGoal ?? state.settings.weeklyGoal}</span>
+          <button onclick="changeGoalTemp(1)" style="width:32px;height:32px;background:var(--surface);border:1px solid var(--border-med);border-radius:8px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;color:var(--text-primary)">+</button>
         </div>
       </div>
+      ${(state.pendingGoal != null && state.pendingGoal !== state.settings.weeklyGoal) ? `
+      <button onclick="promptSaveGoal()" style="width:100%;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer;font-size:14px;font-weight:600;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">
+        <i data-lucide="check" style="width:15px;height:15px"></i> שמור יעד (${state.pendingGoal} אימונים)
+      </button>` : ""}
     </div>
 
     <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px;padding:0 2px">
@@ -1614,11 +1657,46 @@ function renderManage() {
   </div>`;
 }
 
-function updateGoal(delta) {
-  state.settings.weeklyGoal = Math.max(1, Math.min(7, state.settings.weeklyGoal + delta));
-  saveSettings();
+function changeGoalTemp(delta) {
+  const base = state.pendingGoal ?? state.settings.weeklyGoal;
+  const next = Math.max(1, Math.min(7, base + delta));
+  state.pendingGoal = next;
   const el = document.getElementById("goal-display");
-  if (el) el.textContent = state.settings.weeklyGoal;
+  if (el) el.textContent = next;
+  render();
+}
+
+function promptSaveGoal() {
+  const newGoal = state.pendingGoal;
+  if (newGoal == null || newGoal === state.settings.weeklyGoal) return;
+
+  const thisWeekStart = getWeekStart(new Date());
+  const thisWeekIso = thisWeekStart.toISOString().slice(0,10);
+  const nextWeekStart = new Date(thisWeekStart.getTime() + 7 * 86400000);
+  const nextWeekIso = nextWeekStart.toISOString().slice(0,10);
+
+  const curGoal = state.settings.weeklyGoal;
+
+  showConfirmSheet(
+    `עדכון יעד ל-${newGoal} אימונים`,
+    "מאיזה שבוע לתחיל?",
+    "החל מהשבוע הנוכחי",
+    "החל משבוע הבא",
+    () => { applyGoal(newGoal, thisWeekIso); },
+    () => { applyGoal(newGoal, nextWeekIso); }
+  );
+}
+
+function applyGoal(newGoal, fromIso) {
+  state.settings.weeklyGoal = newGoal;
+  state.pendingGoal = null;
+  if (!state.settings.goalHistory) state.settings.goalHistory = [];
+  state.settings.goalHistory = state.settings.goalHistory.filter(e => e.from !== fromIso);
+  state.settings.goalHistory.push({ goal: newGoal, from: fromIso });
+  saveSettings();
+  haptic("medium");
+  showToast("היעד עודכן ✓");
+  render();
 }
 
 function toggleManageOpen(id) { state.manageOpenId = state.manageOpenId===id ? null : id; state.editingNameId=null; render(); }
