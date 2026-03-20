@@ -73,6 +73,11 @@ body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg);
 .toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #111827; color: #fff; padding: 14px 24px; border-radius: 14px; font-size: 14px; font-weight: 600; z-index: 999; opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; display: flex; align-items: center; gap: 8px; max-width: 320px; text-align: center; }
 .toast.show { opacity: 1; }
 </style>
+  <link rel="manifest" href="manifest.json">
+
+<meta name="theme-color" content="#000000">
+
+<link rel="apple-touch-icon" href="icon-192x192.png">
 </head>
 <body>
 <div id="toast" class="toast"></div>
