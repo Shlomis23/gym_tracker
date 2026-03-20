@@ -163,7 +163,7 @@ let state = {
   screen: "dashboard", workoutId: null, openExercise: null, exercises: {},
   sessions: [], workouts: loadWorkouts(), settings: loadSettings(),
   manageOpenId: null, editingNameId: null, selectedWorkoutId: null, expandedSessions: new Set(),
-  weightLogs: [], weightGoal: { start_weight: null, goal_weight: null }
+  weightLogs: [], weightGoal: { start_weight: null, goal_weight: null }, historyTab: "workouts"
 };
 try { state.sessions = JSON.parse(localStorage.getItem(STORAGE_SESSIONS) || "[]"); } catch {}
 
@@ -241,6 +241,14 @@ async function saveWeightGoal(startWeight, goalWeight) {
     const row = await sbPost("weight_goal", { start_weight: startWeight, goal_weight: goalWeight });
     state.weightGoal = row[0];
   } catch(e) { console.error("Weight goal save failed:", e); showToast("שגיאה בשמירת יעד"); throw e; }
+}
+
+async function deleteWeightLog(id) {
+  try {
+    await sbDelete("weight_logs?id=eq." + id);
+    state.weightLogs = state.weightLogs.filter(l => l.id !== id);
+    render();
+  } catch(e) { console.error("Weight delete failed:", e); showToast("שגיאה במחיקה"); }
 }
 
 function getLatestWeight() {
@@ -513,6 +521,14 @@ function bindDelButtons() {
         const session = state.sessions[idx];
         if (session) deleteSessionFromSupabase(session.id);
         state.sessions.splice(idx, 1); saveSessions(); render();
+      }
+    });
+  });
+  document.querySelectorAll("[data-del-weight]").forEach(btn => {
+    btn.addEventListener("click", function() {
+      const id = this.dataset.delWeight;
+      if (confirm("למחוק שקילה זו?")) {
+        deleteWeightLog(id);
       }
     });
   });
@@ -1002,15 +1018,52 @@ function cancelWorkout() {
 }
 
 function renderHistory() {
-  if (!state.sessions.length) return `<div style="padding:40px;text-align:center;color:var(--text-hint);font-size:14px">אין אימונים עדיין</div>`;
-  const reversed = [...state.sessions].reverse();
-  const exportBtn = `<div style="padding:0 14px 10px;display:flex;justify-content:flex-start">
+  const tab = state.historyTab || "workouts";
+  const tabs = `<div style="display:flex;gap:0;margin:0 14px 14px;background:var(--surface);border-radius:10px;padding:3px">
+    <button onclick="state.historyTab='workouts';render()" style="flex:1;padding:8px;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;background:${tab==='workouts'?'var(--card)':'transparent'};color:${tab==='workouts'?'var(--text-primary)':'var(--text-hint)'}">אימונים</button>
+    <button onclick="state.historyTab='weight';render()" style="flex:1;padding:8px;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;background:${tab==='weight'?'var(--card)':'transparent'};color:${tab==='weight'?'var(--text-primary)':'var(--text-hint)'}">משקל</button>
+  </div>`;
+
+  if (tab === "weight") {
+    const logs = [...state.weightLogs].reverse();
+    if (!logs.length) return `<div style="padding:0 14px">${tabs}<div style="padding:40px;text-align:center;color:var(--text-hint);font-size:14px">אין נתוני משקל עדיין</div></div>`;
+    const rows = logs.map((log, ri) => {
+      const prev = logs[ri + 1];
+      const diff = prev ? (log.weight - prev.weight) : null;
+      const diffColor = diff === null ? "" : diff < 0 ? "var(--green)" : diff > 0 ? "var(--red)" : "var(--text-hint)";
+      const diffText = diff === null ? "" : `${diff > 0 ? "+" : ""}${diff.toFixed(1)} ק״ג`;
+      const diffIcon = diff === null ? "" : diff < 0
+        ? `<i data-lucide="trending-down" style="width:13px;height:13px;color:var(--green)"></i>`
+        : diff > 0 ? `<i data-lucide="trending-up" style="width:13px;height:13px;color:var(--red)"></i>`
+        : `<i data-lucide="minus" style="width:13px;height:13px;color:var(--text-hint)"></i>`;
+      return `<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px">
+        <div>
+          <div style="font-size:22px;font-weight:700;color:var(--text-primary);line-height:1">${log.weight} <span style="font-size:13px;font-weight:400;color:var(--text-hint)">ק״ג</span></div>
+          <div style="font-size:11px;color:var(--text-hint);margin-top:3px;display:flex;align-items:center;gap:3px">
+            <i data-lucide="clock" style="width:10px;height:10px"></i> ${formatDate(log.date)}
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          ${diff !== null ? `<div style="display:flex;align-items:center;gap:3px">${diffIcon}<span style="font-size:12px;font-weight:600;color:${diffColor}">${diffText}</span></div>` : ""}
+          <button data-del-weight="${log.id}" class="del-btn">
+            <i data-lucide="trash-2" style="width:15px;height:15px"></i>
+          </button>
+        </div>
+      </div>`;
+    }).join("");
+    return `<div style="padding:14px 14px 0">${tabs}${rows}</div>`;
+  }
+
+  const exportBtn = `<div style="padding:0 0 10px;display:flex;justify-content:flex-start">
     <button onclick="exportCSV()" style="display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border-med);border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px;font-family:inherit;color:var(--text-secondary)">
       <i data-lucide="download" style="width:13px;height:13px"></i> ייצוא CSV
     </button>
   </div>`;
+
+  if (!state.sessions.length) return `<div style="padding:14px">${tabs}${exportBtn}<div style="padding:30px;text-align:center;color:var(--text-hint);font-size:14px">אין אימונים עדיין</div></div>`;
+  const reversed = [...state.sessions].reverse();
   if (!state.expandedSessions) state.expandedSessions = new Set();
-  return `<div style="padding:14px">${exportBtn}${reversed.map((session, ri) => {
+  return `<div style="padding:14px">${tabs}${exportBtn}${reversed.map((session, ri) => {
     const originalIdx = state.sessions.length - 1 - ri;
     const w = getWorkout(session.workoutId);
     const wName = w ? w.name : session.workoutId;
