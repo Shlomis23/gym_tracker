@@ -210,7 +210,8 @@ let state = {
   screen: "dashboard", workoutId: null, openExercise: null, exercises: {},
   sessions: [], workouts: loadWorkouts(), settings: loadSettings(),
   manageOpenId: null, editingNameId: null, selectedWorkoutId: null, expandedSessions: new Set(),
-  weightLogs: [], weightGoal: { start_weight: null, goal_weight: null }, historyTab: "workouts"
+  weightLogs: [], weightGoal: { start_weight: null, goal_weight: null }, historyTab: "workouts",
+  workoutNote: "", monthViewYear: null, monthViewMonth: null
 };
 try { state.sessions = JSON.parse(localStorage.getItem(STORAGE_SESSIONS) || "[]"); } catch {}
 
@@ -484,6 +485,12 @@ async function loadWorkoutsFromSupabase() {
 function formatDate(iso) { return new Date(iso).toLocaleDateString("he-IL", { day:"numeric", month:"numeric", year:"2-digit", weekday:"short" }); }
 function formatDateShort(iso) { return new Date(iso).toLocaleDateString("he-IL", { day:"numeric", month:"numeric" }); }
 function calcVolume(sets) { return sets.reduce((s,r) => s + (r.weight||0)*(r.reps||0), 0); }
+function calcSessionVolume(exercises) {
+  return Object.values(exercises||{}).reduce((total, sets) => total + calcVolume(sets), 0);
+}
+function formatVolume(v) {
+  return v >= 1000 ? (v/1000).toFixed(1) + " טון" : v + " ק״ג";
+}
 function getWorkout(id) { return state.workouts.find(w => w.id === id); }
 function getLastSession(id) { return [...state.sessions].reverse().find(s => s.workoutId === id) || null; }
 function formatRest(sec) { return sec >= 60 ? Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0")+" דק׳" : sec+" שנ׳"; }
@@ -1080,10 +1087,10 @@ function renderWorkout() {
           <span style="min-width:16px;font-size:12px;color:${isFailed?"var(--red)":"var(--text-hint)"};font-weight:600">${s.num}</span>
           <div style="flex:1;display:flex;gap:8px">
             <div style="flex:1">
-              <input class="inp" type="number" placeholder="${p?p.weight:"ק״ג"}" value="${s.weight||""}" style="${isFailed?"border-color:var(--red);color:var(--red)":s.weight>0?"":"color:var(--text-hint)"}" oninput="updateSet('${name}',${i},'weight',this.value)">
+              <input class="inp" type="number" inputmode="decimal" placeholder="${p?p.weight:"ק״ג"}" value="${s.weight||""}" style="${isFailed?"border-color:var(--red);color:var(--red)":s.weight>0?"":"color:var(--text-hint)"}" oninput="updateSet('${name}',${i},'weight',this.value)">
             </div>
             <div style="flex:1">
-              <input class="inp" type="number" placeholder="${p?p.reps+" חז׳":"חז׳"}" value="${s.reps||""}" style="${isFailed?"border-color:var(--red);color:var(--red)":""}" oninput="updateSet('${name}',${i},'reps',this.value)">
+              <input class="inp" type="number" inputmode="numeric" placeholder="${p?p.reps+" חז׳":"חז׳"}" value="${s.reps||""}" style="${isFailed?"border-color:var(--red);color:var(--red)":""}" oninput="updateSet('${name}',${i},'reps',this.value)">
             </div>
             <div style="width:28px;display:flex;align-items:center;justify-content:center">${icon}</div>
           </div>
@@ -1125,7 +1132,15 @@ function renderWorkout() {
       <span style="font-size:12px;color:var(--text-hint);background:var(--surface);padding:4px 10px;border-radius:20px">${done}/${names.length}</span>
     </div>
     ${cards}
-    <button class="btn-success" onclick="finishWorkout()" style="margin-top:6px">
+    <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin:10px 0 8px;font-size:12px;color:var(--text-hint)">
+      <i data-lucide="zap" style="width:13px;height:13px;color:var(--orange)"></i>
+      <span>נפח כולל: <strong style="color:var(--text-primary)">${formatVolume(calcSessionVolume(state.exercises))}</strong></span>
+    </div>
+    <textarea id="workout-note-inp"
+      placeholder="הערה לאימון (אופציונלי)..."
+      oninput="state.workoutNote=this.value"
+      style="width:100%;resize:none;height:64px;font-family:inherit;font-size:13px;color:var(--text-primary);background:var(--surface);border:1px solid var(--border-med);border-radius:10px;padding:10px 12px;outline:none;box-sizing:border-box;margin-bottom:8px;direction:rtl">${state.workoutNote||""}</textarea>
+    <button class="btn-success" onclick="finishWorkout()" style="margin-top:0">
       <i data-lucide="check-circle" style="width:16px;height:16px"></i> סיום אימון
     </button>
   </div>`;
@@ -1150,9 +1165,10 @@ function finishWorkout() {
     "לשמור ולסיים את האימון?",
     "שמור אימון", "המשך לערוך",
     () => {
-      const session = { id:"s_"+Date.now(), workoutId:state.workoutId, date:new Date().toISOString(), exercises:JSON.parse(JSON.stringify(state.exercises)) };
+      const session = { id:"s_"+Date.now(), workoutId:state.workoutId, date:new Date().toISOString(), exercises:JSON.parse(JSON.stringify(state.exercises)), note: state.workoutNote||"" };
       state.sessions.push(session);
       sessionStorage.removeItem("gym_in_progress");
+      state.workoutNote = "";
       state.workoutId = null; state.exercises = {}; state.openExercise = null; state.selectedWorkoutId = null;
       saveSessions();
       saveSessionToSupabase(session).then(() => {
@@ -1219,9 +1235,14 @@ function showConfirmSheet(title, subtitle, confirmLabel, cancelLabel, onConfirm,
 function renderHistory() {
   const tab = state.historyTab || "workouts";
   const tabs = `<div style="display:flex;gap:0;margin:0 14px 14px;background:var(--surface);border-radius:10px;padding:3px">
-    <button onclick="state.historyTab='workouts';render()" style="flex:1;padding:8px;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;background:${tab==='workouts'?'var(--card)':'transparent'};color:${tab==='workouts'?'var(--text-primary)':'var(--text-hint)'}">אימונים</button>
-    <button onclick="state.historyTab='weight';render()" style="flex:1;padding:8px;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;background:${tab==='weight'?'var(--card)':'transparent'};color:${tab==='weight'?'var(--text-primary)':'var(--text-hint)'}">משקל</button>
+    <button onclick="state.historyTab='workouts';render()" style="flex:1;padding:8px;border:none;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;background:${tab==='workouts'?'var(--card)':'transparent'};color:${tab==='workouts'?'var(--text-primary)':'var(--text-hint)'}">אימונים</button>
+    <button onclick="state.historyTab='month';render()" style="flex:1;padding:8px;border:none;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;background:${tab==='month'?'var(--card)':'transparent'};color:${tab==='month'?'var(--text-primary)':'var(--text-hint)'}">החודש שלי</button>
+    <button onclick="state.historyTab='weight';render()" style="flex:1;padding:8px;border:none;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;background:${tab==='weight'?'var(--card)':'transparent'};color:${tab==='weight'?'var(--text-primary)':'var(--text-hint)'}">משקל</button>
   </div>`;
+
+  if (tab === "month") {
+    return renderMonthTab(tabs);
+  }
 
   if (tab === "weight") {
     const logs = [...state.weightLogs].reverse();
@@ -1277,8 +1298,11 @@ function renderHistory() {
       return prevSets.length>0 && sets.some((s,i)=>prevSets[i]&&s.weight>prevSets[i].weight);
     }).length;
 
+    const sessionVol = calcSessionVolume(session.exercises);
     const summaryChips = `
       <span style="font-size:11px;color:var(--text-hint)">${totalEx} תרגילים</span>
+      <span style="font-size:11px;color:var(--text-hint)">·</span>
+      <span style="font-size:11px;color:var(--text-hint)">${formatVolume(sessionVol)}</span>
       ${improved > 0 ? `<span style="font-size:11px;color:var(--green);font-weight:600;display:inline-flex;align-items:center;gap:2px"><i data-lucide="trending-up" style="width:11px;height:11px"></i> ${improved} שיפרת</span>` : (prevSameType ? `<span style="font-size:11px;color:var(--text-hint)">ללא שינוי</span>` : "")}
     `;
 
@@ -1329,9 +1353,154 @@ function renderHistory() {
           <i data-lucide="${isExpanded?"chevron-up":"chevron-down"}" style="width:15px;height:15px;color:var(--text-hint)"></i>
         </div>
       </div>
-      ${isExpanded ? `<div style="padding:4px 16px 14px;border-top:1px solid var(--border)">${exRows}</div>` : ""}
+      ${isExpanded ? `<div style="padding:4px 16px 14px;border-top:1px solid var(--border)">
+        ${session.note ? `<div style="display:flex;align-items:flex-start;gap:6px;padding:8px 0 10px;border-bottom:1px solid var(--border);margin-bottom:8px">
+          <i data-lucide="message-square" style="width:13px;height:13px;color:var(--text-hint);margin-top:1px;flex-shrink:0"></i>
+          <span style="font-size:12px;color:var(--text-secondary);line-height:1.5">${session.note}</span>
+        </div>` : ""}
+        ${exRows}
+      </div>` : ""}
     </div>`;
   }).join("")}</div>`;
+}
+
+
+function renderMonthTab(tabs) {
+  const now = new Date();
+  const monthNames = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+
+  const viewYear = state.monthViewYear ?? now.getFullYear();
+  const viewMonth = state.monthViewMonth ?? now.getMonth();
+  state.monthViewYear = viewYear;
+  state.monthViewMonth = viewMonth;
+
+  const monthStart = new Date(viewYear, viewMonth, 1);
+  const monthEnd = new Date(viewYear, viewMonth + 1, 0);
+
+  const sessions = state.sessions.filter(s => {
+    const d = new Date(s.date);
+    return d >= monthStart && d <= monthEnd;
+  });
+
+  const totalVol = sessions.reduce((t, s) => t + calcSessionVolume(s.exercises), 0);
+  const totalSets = sessions.reduce((t, s) =>
+    t + Object.values(s.exercises||{}).reduce((tt, sets) => tt + sets.filter(x=>x.reps>0).length, 0), 0);
+
+  // PRs broken this month
+  const allPRs = {};
+  state.sessions.forEach(s => {
+    const d = new Date(s.date);
+    const inMonth = d >= monthStart && d <= monthEnd;
+    Object.entries(s.exercises||{}).forEach(([name, sets]) => {
+      const maxW = Math.max(...sets.map(x=>x.weight||0));
+      if (!allPRs[name]) allPRs[name] = { before: 0, inMonth: 0 };
+      if (inMonth) allPRs[name].inMonth = Math.max(allPRs[name].inMonth, maxW);
+      else allPRs[name].before = Math.max(allPRs[name].before, maxW);
+    });
+  });
+  const newPRs = Object.entries(allPRs).filter(([,v]) => v.inMonth > v.before && v.inMonth > 0).length;
+
+  // Most improved exercise
+  const improvements = {};
+  sessions.forEach(s => {
+    const d = new Date(s.date);
+    const prevSession = state.sessions.filter(x => new Date(x.date) < monthStart && x.workoutId === s.workoutId).slice(-1)[0];
+    if (!prevSession) return;
+    Object.entries(s.exercises||{}).forEach(([name, sets]) => {
+      const cur = Math.max(...sets.map(x=>x.weight||0));
+      const prev = Math.max(...(prevSession.exercises?.[name]||[]).map(x=>x.weight||0));
+      if (cur > prev) improvements[name] = (improvements[name]||0) + (cur - prev);
+    });
+  });
+  const topEx = Object.entries(improvements).sort((a,b)=>b[1]-a[1])[0];
+
+  // calendar grid
+  const firstDow = monthStart.getDay();
+  const daysInMonth = monthEnd.getDate();
+  const workoutDays = new Set(sessions.map(s => new Date(s.date).getDate()));
+  const dayNames = ["א","ב","ג","ד","ה","ו","ש"];
+  const calCells = [];
+  for (let i = 0; i < firstDow; i++) calCells.push(`<div></div>`);
+  for (let d = 1; d <= daysInMonth; d++) {
+    const isToday = d === now.getDate() && viewMonth === now.getMonth() && viewYear === now.getFullYear();
+    const worked = workoutDays.has(d);
+    const bg = worked ? "var(--green-bg)" : isToday ? "var(--surface)" : "transparent";
+    const border = worked ? "1px solid #86efac" : isToday ? "1px solid var(--border-med)" : "none";
+    const color = worked ? "var(--green)" : isToday ? "var(--text-primary)" : "var(--text-hint)";
+    const fw = isToday ? "700" : "400";
+    calCells.push(`<div style="aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:8px;background:${bg};border:${border};font-size:13px;color:${color};font-weight:${fw}">${d}</div>`);
+  }
+
+  const isPrev = viewMonth > 0 || viewYear > 2020;
+  const isNext = viewMonth < now.getMonth() || viewYear < now.getFullYear();
+
+  return `<div style="padding:0 14px 16px">
+    ${tabs}
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding:0 2px">
+      <button onclick="prevMonth()" style="background:none;border:none;cursor:pointer;padding:6px;color:${isPrev?"var(--text-primary)":"var(--border-med)"};display:flex" ${isPrev?"":"disabled"}>
+        <i data-lucide="chevron-right" style="width:18px;height:18px"></i>
+      </button>
+      <span style="font-weight:700;font-size:15px;color:var(--text-primary)">${monthNames[viewMonth]} ${viewYear}</span>
+      <button onclick="nextMonth()" style="background:none;border:none;cursor:pointer;padding:6px;color:${isNext?"var(--text-primary)":"var(--border-med)"};display:flex" ${isNext?"":"disabled"}>
+        <i data-lucide="chevron-left" style="width:18px;height:18px"></i>
+      </button>
+    </div>
+
+    <div class="card" style="padding:14px;margin-bottom:14px">
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:8px">
+        ${dayNames.map(d=>`<div style="text-align:center;font-size:10px;color:var(--text-hint);font-weight:600;padding:4px 0">${d}</div>`).join("")}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">
+        ${calCells.join("")}
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+      <div class="stat-card">
+        <div class="stat-label">אימונים</div>
+        <div class="stat-value">${sessions.length}</div>
+        <div class="stat-sub">החודש</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">נפח כולל</div>
+        <div class="stat-value" style="font-size:18px">${formatVolume(totalVol)}</div>
+        <div class="stat-sub">סה״כ הורם</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">סטים</div>
+        <div class="stat-value">${totalSets}</div>
+        <div class="stat-sub">כולל חזרות</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">שיאים חדשים</div>
+        <div class="stat-value" style="color:${newPRs>0?"var(--green)":"var(--text-primary)"}">${newPRs}</div>
+        <div class="stat-sub">נשברו החודש</div>
+      </div>
+    </div>
+
+    ${topEx ? `<div class="card" style="padding:12px 16px;display:flex;align-items:center;gap:10px">
+      <i data-lucide="trending-up" style="width:18px;height:18px;color:var(--green);flex-shrink:0"></i>
+      <div>
+        <div style="font-size:11px;color:var(--text-hint);font-weight:600">הכי השתפרת</div>
+        <div style="font-size:14px;font-weight:700;color:var(--text-primary);margin-top:2px">${topEx[0]}</div>
+        <div style="font-size:11px;color:var(--green)">+${topEx[1]} ק״ג מעל האימון הקודם</div>
+      </div>
+    </div>` : sessions.length === 0 ? `<div style="padding:30px;text-align:center;color:var(--text-hint);font-size:14px">אין אימונים בחודש זה</div>` : ""}
+  </div>`;
+}
+
+function prevMonth() {
+  if (state.monthViewMonth === 0) { state.monthViewYear--; state.monthViewMonth = 11; }
+  else state.monthViewMonth--;
+  render();
+}
+function nextMonth() {
+  const now = new Date();
+  if (state.monthViewYear > now.getFullYear() || (state.monthViewYear === now.getFullYear() && state.monthViewMonth >= now.getMonth())) return;
+  if (state.monthViewMonth === 11) { state.monthViewYear++; state.monthViewMonth = 0; }
+  else state.monthViewMonth++;
+  render();
 }
 
 function toggleHistorySession(id) {
@@ -1626,10 +1795,19 @@ function showExerciseGraph(exName) {
   const polyline = pts.map(p => `${p.x},${p.y}`).join(" ");
   const areaPath = `M${pts[0].x},${H} ` + pts.map(p=>`L${p.x},${p.y}`).join(" ") + ` L${pts[pts.length-1].x},${H} Z`;
 
-  const dots = pts.map((p,i) => `
-    <circle cx="${p.x}" cy="${p.y}" r="4" fill="#111827" stroke="#fff" stroke-width="2"/>
-    ${i === pts.length-1 ? `<text x="${p.x}" y="${p.y-10}" text-anchor="middle" font-size="11" font-weight="700" fill="#111827">${p.weight}</text>` : ""}
-  `).join("");
+  const dots = pts.map((p,i) => {
+    const isFirst = i === 0;
+    const isLast = i === pts.length - 1;
+    const isPR = p.weight === maxW;
+    const showLabel = isFirst || isLast || isPR || pts.length <= 6;
+    const anchor = isFirst ? "start" : isLast ? "end" : "middle";
+    const labelColor = isPR ? "#15803d" : "#111827";
+    const labelY = p.y > 28 ? p.y - 10 : p.y + 20;
+    return `
+      <circle cx="${p.x}" cy="${p.y}" r="${isPR ? 5 : 4}" fill="${isPR ? "#15803d" : "#111827"}" stroke="#fff" stroke-width="2"/>
+      ${showLabel ? `<text x="${p.x}" y="${labelY}" text-anchor="${anchor}" font-size="11" font-weight="700" fill="${labelColor}">${p.weight}</text>` : ""}
+    `;
+  }).join("");
 
   const labels = pts.filter((_,i) => i===0 || i===pts.length-1 || pts.length<=5).map(p =>
     `<text x="${p.x}" y="${H+14}" text-anchor="middle" font-size="10" fill="#9ca3af">${new Date(p.date).toLocaleDateString("he-IL",{day:"numeric",month:"numeric"})}</text>`
