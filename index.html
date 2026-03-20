@@ -1162,8 +1162,8 @@ function toggleFailed(name,i) { state.exercises[name][i].failed = !state.exercis
 function finishWorkout() {
   showConfirmSheet(
     "סיום אימון",
-    "לשמור ולסיים את האימון?",
-    "שמור אימון", "המשך לערוך",
+    "לשמור את האימון?",
+    "סיימתי", "המשך לערוך",
     () => {
       const session = { id:"s_"+Date.now(), workoutId:state.workoutId, date:new Date().toISOString(), exercises:JSON.parse(JSON.stringify(state.exercises)), note: state.workoutNote||"" };
       state.sessions.push(session);
