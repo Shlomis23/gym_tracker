@@ -409,8 +409,34 @@ function showToast(msg, icon) {
   el.classList.add("show");
   setTimeout(() => el.classList.remove("show"), 2800);
 }
-function saveWorkouts() { localStorage.setItem(STORAGE_WORKOUTS, JSON.stringify(state.workouts)); }
+function saveWorkouts() {
+  localStorage.setItem(STORAGE_WORKOUTS, JSON.stringify(state.workouts));
+  saveWorkoutsToSupabase();
+}
 function saveSettings() { localStorage.setItem(STORAGE_SETTINGS, JSON.stringify(state.settings)); }
+
+async function saveWorkoutsToSupabase() {
+  try {
+    await sbDelete("workout_plans?id=neq.00000000-0000-0000-0000-000000000000");
+    const rows = state.workouts.map((w, i) => ({
+      plan_id: w.id,
+      name: w.name,
+      exercises: w.exercises,
+      sort_order: i
+    }));
+    if (rows.length) await sbPost("workout_plans", rows);
+  } catch(e) { console.error("Workout plan save failed:", e); }
+}
+
+async function loadWorkoutsFromSupabase() {
+  try {
+    const rows = await sbGet("workout_plans?select=*&order=sort_order.asc");
+    if (rows && rows.length) {
+      state.workouts = rows.map(r => ({ id: r.plan_id, name: r.name, exercises: r.exercises }));
+      localStorage.setItem(STORAGE_WORKOUTS, JSON.stringify(state.workouts));
+    }
+  } catch(e) { console.error("Workout plan load failed:", e); }
+}
 function formatDate(iso) { return new Date(iso).toLocaleDateString("he-IL", { day:"numeric", month:"numeric", year:"2-digit", weekday:"short" }); }
 function formatDateShort(iso) { return new Date(iso).toLocaleDateString("he-IL", { day:"numeric", month:"numeric" }); }
 function calcVolume(sets) { return sets.reduce((s,r) => s + (r.weight||0)*(r.reps||0), 0); }
@@ -1435,7 +1461,7 @@ function bindDragDrop() {
 window.addEventListener("load", async function() {
   state.screen = "dashboard";
   render();
-  await Promise.all([loadSessionsFromSupabase(), loadWeightData()]);
+  await Promise.all([loadSessionsFromSupabase(), loadWeightData(), loadWorkoutsFromSupabase()]);
   render();
 });
 </script>
