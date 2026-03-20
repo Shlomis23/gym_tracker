@@ -1162,8 +1162,8 @@ function toggleFailed(name,i) { state.exercises[name][i].failed = !state.exercis
 function finishWorkout() {
   showConfirmSheet(
     "סיום אימון",
-    "לשמור את האימון?",
-    "סיימתי", "המשך לערוך",
+    "לשמור ולסיים את האימון?",
+    "שמור אימון", "המשך לערוך",
     () => {
       const session = { id:"s_"+Date.now(), workoutId:state.workoutId, date:new Date().toISOString(), exercises:JSON.parse(JSON.stringify(state.exercises)), note: state.workoutNote||"" };
       state.sessions.push(session);
@@ -1431,7 +1431,11 @@ function renderMonthTab(tabs) {
     calCells.push(`<div style="aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:8px;background:${bg};border:${border};font-size:13px;color:${color};font-weight:${fw}">${d}</div>`);
   }
 
-  const isPrev = viewMonth > 0 || viewYear > 2020;
+  const firstSession = state.sessions.length ? state.sessions[0] : null;
+  const firstD = firstSession ? new Date(firstSession.date) : now;
+  const firstYear = firstD.getFullYear();
+  const firstMonth = firstD.getMonth();
+  const isPrev = viewYear > firstYear || (viewYear === firstYear && viewMonth > firstMonth);
   const isNext = viewMonth < now.getMonth() || viewYear < now.getFullYear();
 
   return `<div style="padding:0 14px 16px">
@@ -1491,6 +1495,11 @@ function renderMonthTab(tabs) {
 }
 
 function prevMonth() {
+  const firstSession = state.sessions.length ? state.sessions[0] : null;
+  const firstD = firstSession ? new Date(firstSession.date) : new Date();
+  const firstYear = firstD.getFullYear();
+  const firstMonth = firstD.getMonth();
+  if (state.monthViewYear === firstYear && state.monthViewMonth <= firstMonth) return;
   if (state.monthViewMonth === 0) { state.monthViewYear--; state.monthViewMonth = 11; }
   else state.monthViewMonth--;
   render();
