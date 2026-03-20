@@ -685,8 +685,10 @@ function bindDelButtons() {
 function getDaysSinceLastWorkout() {
   if (!state.sessions.length) return null;
   const last = state.sessions[state.sessions.length - 1];
-  const diff = (new Date() - new Date(last.date)) / (1000 * 60 * 60 * 24);
-  return { days: Math.floor(diff), session: last };
+  const today = new Date(); today.setHours(0,0,0,0);
+  const lastDay = new Date(last.date); lastDay.setHours(0,0,0,0);
+  const days = Math.round((today - lastDay) / (1000 * 60 * 60 * 24));
+  return { days, session: last };
 }
 
 function renderDashboard() {
