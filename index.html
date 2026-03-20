@@ -279,7 +279,8 @@ async function saveWeightLog(weight) {
   try {
     const row = await sbPost("weight_logs", { weight, date: new Date().toISOString() });
     state.weightLogs.push(row[0]);
-  } catch(e) { console.error("Weight save failed:", e); showToast("שגיאה בשמירת משקל"); throw e; }
+    showToast("המשקל נשמר ✓");
+  } catch(e) { console.error("Weight save failed:", e); showToast("שגיאה בשמירת משקל ⚠️"); throw e; }
 }
 
 async function saveWeightGoal(startWeight, goalWeight) {
@@ -467,7 +468,8 @@ async function saveWorkoutsToSupabase() {
       sort_order: i
     }));
     if (rows.length) await sbPost("workout_plans", rows);
-  } catch(e) { console.error("Workout plan save failed:", e); }
+    showToast("התוכנית נשמרה ✓");
+  } catch(e) { console.error("Workout plan save failed:", e); showToast("שגיאה בשמירת התוכנית ⚠️"); }
 }
 
 async function loadWorkoutsFromSupabase() {
@@ -932,11 +934,12 @@ function renderDashboard() {
       </div>
       <div style="padding:0 16px">
         ${prEntries.map(([name, pr]) => `
-          <div class="pr-row">
+          <div class="pr-row" onclick="showExerciseGraph('${name.replace(/'/g,"\'")}')" style="cursor:pointer">
             <span style="color:var(--text-secondary)">${name}</span>
             <div style="display:flex;align-items:center;gap:8px">
               <span style="font-weight:700;color:var(--text-primary)">${pr.weight} ק"ג</span>
               <span style="font-size:10px;color:var(--text-hint)">${formatDateShort(pr.date)}</span>
+              <i data-lucide="chevron-left" style="width:12px;height:12px;color:var(--text-hint)"></i>
             </div>
           </div>`).join("")}
       </div>
@@ -952,16 +955,13 @@ function selectWorkoutDirect(id) {
 function renderChoose() {
   if (!state.workouts.length) return `<div style="padding:40px;text-align:center;color:var(--text-hint);font-size:14px">אין אימונים — הוסף דרך ניהול תוכנית</div>`;
   const cols = state.workouts.length <= 3 ? state.workouts.length : 2;
-  const sel = state.selectedWorkoutId;
-  const selW = sel ? getWorkout(sel) : null;
   return `<div style="padding:20px 16px">
     <p style="font-size:13px;color:var(--text-hint);margin-bottom:16px;text-align:center">איזה אימון היום?</p>
-    <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:12px;margin-bottom:16px">
+    <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:12px">
       ${state.workouts.map(w => {
         const last = getLastSession(w.id);
-        const isSel = sel === w.id;
-        return `<button class="choose-btn${isSel?" selected":""}" onclick="pickWorkout('${w.id}')">
-          <i data-lucide="dumbbell" style="width:24px;height:24px;color:${isSel?"var(--accent)":"var(--text-hint)"}"></i>
+        return `<button class="choose-btn" onclick="selectWorkout('${w.id}')">
+          <i data-lucide="dumbbell" style="width:24px;height:24px;color:var(--text-hint)"></i>
           <span style="font-size:18px;font-weight:700;color:var(--text-primary)">${w.name}</span>
           <span style="font-size:11px;color:var(--text-secondary);display:flex;align-items:center;gap:3px">
             <i data-lucide="clock" style="width:11px;height:11px"></i>
@@ -971,20 +971,28 @@ function renderChoose() {
         </button>`;
       }).join("")}
     </div>
-    ${sel ? `<button class="next-btn" style="margin-bottom:0" onclick="selectWorkout('${sel}')">
-      <i data-lucide="play" style="width:20px;height:20px"></i>
-      התחל ${selW?.name || ""}
-    </button>` : ""}
   </div>`;
 }
 
-function pickWorkout(id) {
-  haptic("light");
-  state.selectedWorkoutId = state.selectedWorkoutId === id ? null : id;
-  render();
+function selectWorkout(id) {
+  const inProgress = sessionStorage.getItem("gym_in_progress");
+  if (inProgress) {
+    const data = JSON.parse(inProgress);
+    if (data.workoutId && data.workoutId !== id) {
+      showConfirmSheet(
+        "יש אימון בתהליך",
+        `האם לבטל את ${getWorkout(data.workoutId)?.name || "האימון הקודם"} ולהתחיל ${getWorkout(id)?.name || ""}?`,
+        "התחל חדש", "המשך קודם",
+        () => { sessionStorage.removeItem("gym_in_progress"); _doSelectWorkout(id); },
+        () => { _doSelectWorkout(data.workoutId); }
+      );
+      return;
+    }
+  }
+  _doSelectWorkout(id);
 }
 
-function selectWorkout(id) {
+function _doSelectWorkout(id) {
   haptic("medium");
   state.workoutId = id;
   const w = getWorkout(id); const last = getLastSession(id);
@@ -994,7 +1002,7 @@ function selectWorkout(id) {
   names.forEach(name => {
     const prev = last?.exercises?.[name];
     state.exercises[name] = prev
-      ? prev.map((_,i) => ({ num:i+1, weight:0, reps:0 }))
+      ? prev.map((s,i) => ({ num:i+1, weight:s.weight, reps:0 }))
       : [{num:1,weight:0,reps:0},{num:2,weight:0,reps:0},{num:3,weight:0,reps:0}];
   });
   render();
@@ -1005,12 +1013,7 @@ function toggleExercise(name) {
   saveInProgress(); render();
 }
 
-function copyPrevSets(name) {
-  const prev = getLastSession(state.workoutId)?.exercises?.[name];
-  if (!prev) return;
-  state.exercises[name] = prev.map((s,i) => ({ num:i+1, weight:s.weight, reps:s.reps }));
-  saveInProgress(); render();
-}
+
 
 function renderWorkout() {
   const w = getWorkout(state.workoutId);
@@ -1022,7 +1025,7 @@ function renderWorkout() {
     const prevSets = last?.exercises?.[name] || null;
     const isOpen = state.openExercise === name;
     const improved = prevSets && sets.some((s,i) => prevSets[i] && s.weight > prevSets[i].weight);
-    const hasData = sets.some(s => s.weight > 0 || s.reps > 0);
+    const hasData = sets.some(s => s.reps > 0);
     const curVol = calcVolume(sets); const prevVol = prevSets ? calcVolume(prevSets) : null;
     const volDiff = prevVol && curVol > 0 ? Math.round(((curVol-prevVol)/prevVol)*100) : null;
     const rest = getExRest(w, name);
@@ -1049,16 +1052,12 @@ function renderWorkout() {
 
     if (!isOpen) return `<div class="card ${improved&&hasData?"improved":""}">${header}</div>`;
 
-    const copyBtn = prevSets
-      ? `<button class="btn-copy" onclick="copyPrevSets('${name}')">
-           <i data-lucide="copy" style="width:12px;height:12px"></i> אימון אחרון
-         </button>` : "";
 
     const setsHtml = sets.map((s,i) => {
       const p = prevSets?.[i]; const imp = p && s.weight > p.weight; const reg = p && s.weight > 0 && s.weight < p.weight;
       const isLast = i === sets.length - 1;
       const isFailed = !!s.failed;
-      const icon = s.weight > 0 && p
+      const icon = s.reps > 0 && p
         ? `<span style="display:flex;align-items:center;color:${imp?"var(--green)":reg?"var(--red)":"var(--text-hint)"}">
              <i data-lucide="${imp?"trending-up":reg?"trending-down":"minus"}" style="width:14px;height:14px"></i>
            </span>`
@@ -1072,12 +1071,10 @@ function renderWorkout() {
           <span style="min-width:16px;font-size:12px;color:${isFailed?"var(--red)":"var(--text-hint)"};font-weight:600">${s.num}</span>
           <div style="flex:1;display:flex;gap:8px">
             <div style="flex:1">
-              <input class="inp" type="number" placeholder="ק״ג" value="${s.weight||""}" style="${isFailed?"border-color:var(--red);color:var(--red)":""}" oninput="updateSet('${name}',${i},'weight',this.value)">
-              ${p?`<div style="text-align:center;font-size:10px;color:var(--text-hint);margin-top:3px">לפני: ${p.weight}</div>`:""}
+              <input class="inp" type="number" placeholder="${p?p.weight:"ק״ג"}" value="${s.weight||""}" style="${isFailed?"border-color:var(--red);color:var(--red)":s.weight>0?"":"color:var(--text-hint)"}" oninput="updateSet('${name}',${i},'weight',this.value)">
             </div>
             <div style="flex:1">
-              <input class="inp" type="number" placeholder="חז׳" value="${s.reps||""}" style="${isFailed?"border-color:var(--red);color:var(--red)":""}" oninput="updateSet('${name}',${i},'reps',this.value)">
-              ${p?`<div style="text-align:center;font-size:10px;color:var(--text-hint);margin-top:3px">לפני: ${p.reps}</div>`:""}
+              <input class="inp" type="number" placeholder="${p?p.reps+"חז׳":"חז׳"}" value="${s.reps||""}" style="${isFailed?"border-color:var(--red);color:var(--red)":""}" oninput="updateSet('${name}',${i},'reps',this.value)">
             </div>
             <div style="width:28px;display:flex;align-items:center;justify-content:center">${icon}</div>
           </div>
@@ -1089,8 +1086,7 @@ function renderWorkout() {
     return `<div class="card ${improved&&hasData?"improved":""}">
       ${header}
       <div class="ex-body">
-        <div style="display:flex;justify-content:flex-start;padding:10px 0 8px">${copyBtn}</div>
-        ${last ? `<p style="font-size:11px;color:var(--text-hint);margin-bottom:8px;display:flex;align-items:center;gap:4px">
+        ${last ? `<p style="font-size:11px;color:var(--text-hint);margin-bottom:10px;margin-top:10px;display:flex;align-items:center;gap:4px">
           <i data-lucide="clock" style="width:11px;height:11px"></i> אימון קודם: ${formatDate(last.date)}
         </p>` : ""}
         <div style="display:flex;margin-bottom:12px">
@@ -1109,12 +1105,12 @@ function renderWorkout() {
     </div>`;
   }).join("");
 
-  const done = names.filter(n => state.exercises[n]?.some(s => s.weight>0||s.reps>0)).length;
+  const done = names.filter(n => state.exercises[n]?.some(s => s.reps>0)).length;
 
   return `<div style="padding:16px 14px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-      <button onclick="cancelWorkout()" class="btn-secondary" style="width:auto;padding:7px 12px;font-size:13px;gap:4px;color:var(--red);border-color:var(--red)">
-        <i data-lucide="x" style="width:14px;height:14px"></i> בטל
+      <button onclick="showCancelMenu()" style="background:none;border:none;cursor:pointer;padding:6px;color:var(--text-hint);display:flex;align-items:center;border-radius:8px">
+        <i data-lucide="more-horizontal" style="width:20px;height:20px"></i>
       </button>
       <span style="font-weight:600;font-size:15px;color:var(--text-primary)">${w.name}</span>
       <span style="font-size:12px;color:var(--text-hint);background:var(--surface);padding:4px 10px;border-radius:20px">${done}/${names.length}</span>
@@ -1140,24 +1136,75 @@ function removeSet(name,i) { state.exercises[name].splice(i,1); state.exercises[
 function toggleFailed(name,i) { state.exercises[name][i].failed = !state.exercises[name][i].failed; saveInProgress(); render(); }
 
 function finishWorkout() {
-  if (!confirm("האם לשמור את האימון?")) return;
-  const session = { id:"s_"+Date.now(), workoutId:state.workoutId, date:new Date().toISOString(), exercises:JSON.parse(JSON.stringify(state.exercises)) };
-  state.sessions.push(session);
-  sessionStorage.removeItem("gym_in_progress");
-  state.workoutId = null; state.exercises = {}; state.openExercise = null; state.selectedWorkoutId = null;
-  saveSessions();
-  saveSessionToSupabase(session);
-  haptic("success");
-  navigate("dashboard");
-  setTimeout(() => showToast("כל הכבוד! האימון הושלם 💪", ""), 300);
+  showConfirmSheet(
+    "סיום אימון",
+    "לשמור ולסיים את האימון?",
+    "שמור אימון", "המשך לערוך",
+    () => {
+      const session = { id:"s_"+Date.now(), workoutId:state.workoutId, date:new Date().toISOString(), exercises:JSON.parse(JSON.stringify(state.exercises)) };
+      state.sessions.push(session);
+      sessionStorage.removeItem("gym_in_progress");
+      state.workoutId = null; state.exercises = {}; state.openExercise = null; state.selectedWorkoutId = null;
+      saveSessions();
+      saveSessionToSupabase(session).then(() => {
+        showToast("נשמר ✓", "");
+      }).catch(() => {
+        showToast("שגיאה בשמירה — נסה שוב", "⚠️");
+      });
+      haptic("success");
+      navigate("dashboard");
+      setTimeout(() => showToast("כל הכבוד! האימון הושלם 💪", ""), 300);
+    },
+    null
+  );
 }
 
 function cancelWorkout() {
-  if (!confirm("האם אתה בטוח? האימון לא יישמר.")) return;
-  haptic("light");
-  sessionStorage.removeItem("gym_in_progress");
-  state.workoutId = null; state.exercises = {}; state.openExercise = null; state.selectedWorkoutId = null;
-  navigate("home");
+  showConfirmSheet(
+    "ביטול אימון",
+    "האימון לא יישמר. בטוח?",
+    "בטל אימון", "המשך",
+    () => {
+      haptic("light");
+      sessionStorage.removeItem("gym_in_progress");
+      state.workoutId = null; state.exercises = {}; state.openExercise = null; state.selectedWorkoutId = null;
+      navigate("home");
+    },
+    null,
+    true
+  );
+}
+
+function showCancelMenu() {
+  showConfirmSheet(
+    "אפשרויות אימון",
+    null,
+    "בטל אימון", "המשך",
+    () => cancelWorkout(),
+    null,
+    true
+  );
+}
+
+function showConfirmSheet(title, subtitle, confirmLabel, cancelLabel, onConfirm, onCancel, isDanger) {
+  document.getElementById("confirm-sheet")?.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "confirm-sheet";
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:2000;display:flex;align-items:flex-end;justify-content:center";
+  const sheet = document.createElement("div");
+  sheet.style.cssText = "background:var(--card);border-radius:20px 20px 0 0;padding:24px 20px 32px;width:100%;max-width:420px;direction:rtl;animation:slideUp 0.3s cubic-bezier(0.22,1,0.36,1) both";
+  sheet.innerHTML = `
+    <div style="font-size:16px;font-weight:700;color:var(--text-primary);margin-bottom:${subtitle?"6px":"16px"}">${title}</div>
+    ${subtitle ? `<div style="font-size:13px;color:var(--text-secondary);margin-bottom:18px">${subtitle}</div>` : ""}
+    <button id="cs-confirm" style="width:100%;padding:14px;background:${isDanger?"var(--red)":"var(--accent)"};color:#fff;border:none;border-radius:12px;cursor:pointer;font-size:15px;font-weight:700;font-family:inherit;margin-bottom:10px">${confirmLabel}</button>
+    ${cancelLabel ? `<button id="cs-cancel" style="width:100%;padding:14px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:12px;cursor:pointer;font-size:15px;font-family:inherit">${cancelLabel}</button>` : ""}
+  `;
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
+  overlay.addEventListener("click", e => { if(e.target===overlay) overlay.remove(); });
+  sheet.querySelector("#cs-confirm").addEventListener("click", () => { overlay.remove(); onConfirm && onConfirm(); });
+  const cancelBtn = sheet.querySelector("#cs-cancel");
+  if (cancelBtn) cancelBtn.addEventListener("click", () => { overlay.remove(); onCancel && onCancel(); });
 }
 
 function renderHistory() {
@@ -1539,6 +1586,72 @@ function bindDragDrop() {
       touchDragSrc = null;
     }, { passive: false });
   });
+}
+
+
+function showExerciseGraph(exName) {
+  document.getElementById("ex-graph-modal")?.remove();
+  const dataPoints = [];
+  state.sessions.forEach(session => {
+    const sets = session.exercises?.[exName];
+    if (!sets || !sets.length) return;
+    const maxW = Math.max(...sets.map(s => s.weight || 0));
+    if (maxW > 0) dataPoints.push({ date: session.date, weight: maxW });
+  });
+  if (!dataPoints.length) { showToast("אין נתונים לתרגיל זה"); return; }
+
+  const overlay = document.createElement("div");
+  overlay.id = "ex-graph-modal";
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2000;display:flex;align-items:flex-end;justify-content:center";
+
+  const maxW = Math.max(...dataPoints.map(d => d.weight));
+  const minW = Math.min(...dataPoints.map(d => d.weight));
+  const pad = 40; const W = 340; const H = 180; const gH = H - pad*0.8;
+
+  const pts = dataPoints.map((d, i) => {
+    const x = pad + (i / Math.max(dataPoints.length - 1, 1)) * (W - pad*1.5);
+    const y = pad*0.4 + (1 - (d.weight - minW) / Math.max(maxW - minW, 1)) * gH;
+    return { x, y, ...d };
+  });
+
+  const polyline = pts.map(p => `${p.x},${p.y}`).join(" ");
+  const areaPath = `M${pts[0].x},${H} ` + pts.map(p=>`L${p.x},${p.y}`).join(" ") + ` L${pts[pts.length-1].x},${H} Z`;
+
+  const dots = pts.map((p,i) => `
+    <circle cx="${p.x}" cy="${p.y}" r="4" fill="#111827" stroke="#fff" stroke-width="2"/>
+    ${i === pts.length-1 ? `<text x="${p.x}" y="${p.y-10}" text-anchor="middle" font-size="11" font-weight="700" fill="#111827">${p.weight}</text>` : ""}
+  `).join("");
+
+  const labels = pts.filter((_,i) => i===0 || i===pts.length-1 || pts.length<=5).map(p =>
+    `<text x="${p.x}" y="${H+14}" text-anchor="middle" font-size="10" fill="#9ca3af">${new Date(p.date).toLocaleDateString("he-IL",{day:"numeric",month:"numeric"})}</text>`
+  ).join("");
+
+  const sheet = document.createElement("div");
+  sheet.style.cssText = "background:var(--card);border-radius:20px 20px 0 0;padding:20px 20px 32px;width:100%;max-width:420px;direction:rtl;animation:slideUp 0.3s cubic-bezier(0.22,1,0.36,1) both";
+  sheet.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div>
+        <div style="font-size:16px;font-weight:700;color:var(--text-primary)">${exName}</div>
+        <div style="font-size:12px;color:var(--text-hint);margin-top:2px">שיא: ${maxW} ק"ג · ${dataPoints.length} אימונים</div>
+      </div>
+      <button onclick="document.getElementById('ex-graph-modal').remove()" style="background:var(--surface);border:none;border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:18px;color:var(--text-hint);display:flex;align-items:center;justify-content:center">×</button>
+    </div>
+    <svg viewBox="0 0 ${W} ${H+20}" width="100%" style="overflow:visible">
+      <defs>
+        <linearGradient id="gfill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#111827" stop-opacity="0.12"/>
+          <stop offset="100%" stop-color="#111827" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d="${areaPath}" fill="url(#gfill)"/>
+      <polyline points="${polyline}" fill="none" stroke="#111827" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      ${dots}
+      ${labels}
+    </svg>
+  `;
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
+  overlay.addEventListener("click", e => { if(e.target===overlay) overlay.remove(); });
 }
 
 window.addEventListener("load", async function() {
