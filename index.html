@@ -101,8 +101,8 @@ body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg);
 
 <script>
 // ── Supabase ─────────────────────────────────────────────────────
-const SUPABASE_URL = "https://jezibgdemidhebbcpdch.supabase.co";
-const SUPABASE_KEY = "sb_publishable_NDyz8DAcTO8kOs6JhAjTFw_uRTgb5nf";
+const SUPABASE_URL = "REPLACE_WITH_YOUR_URL";
+const SUPABASE_KEY = "REPLACE_WITH_YOUR_KEY";
 
 const SB_HEADERS = {
   apikey: SUPABASE_KEY,
@@ -162,7 +162,8 @@ function loadSettings() {
 let state = {
   screen: "dashboard", workoutId: null, openExercise: null, exercises: {},
   sessions: [], workouts: loadWorkouts(), settings: loadSettings(),
-  manageOpenId: null, editingNameId: null, selectedWorkoutId: null, expandedSessions: new Set()
+  manageOpenId: null, editingNameId: null, selectedWorkoutId: null, expandedSessions: new Set(),
+  weightLogs: [], weightGoal: { start_weight: null, goal_weight: null }
 };
 try { state.sessions = JSON.parse(localStorage.getItem(STORAGE_SESSIONS) || "[]"); } catch {}
 
@@ -216,6 +217,101 @@ async function deleteSessionFromSupabase(localId) {
   } catch(e) {
     console.error("Supabase delete failed:", e);
   }
+}
+
+async function loadWeightData() {
+  try {
+    const logs = await sbGet("weight_logs?select=*&order=date.asc");
+    state.weightLogs = logs || [];
+    const goals = await sbGet("weight_goal?select=*&order=updated_at.desc&limit=1");
+    if (goals && goals.length) state.weightGoal = goals[0];
+  } catch(e) { console.error("Weight load failed:", e); }
+}
+
+async function saveWeightLog(weight) {
+  try {
+    const row = await sbPost("weight_logs", { weight, date: new Date().toISOString() });
+    state.weightLogs.push(row[0]);
+    render();
+  } catch(e) { console.error("Weight save failed:", e); showToast("שגיאה בשמירת משקל"); }
+}
+
+async function saveWeightGoal(startWeight, goalWeight) {
+  try {
+    await sbDelete("weight_goal?id=neq.00000000-0000-0000-0000-000000000000");
+    const row = await sbPost("weight_goal", { start_weight: startWeight, goal_weight: goalWeight });
+    state.weightGoal = row[0];
+    render();
+  } catch(e) { console.error("Weight goal save failed:", e); showToast("שגיאה בשמירת יעד"); }
+}
+
+function getLatestWeight() {
+  if (!state.weightLogs.length) return null;
+  return state.weightLogs[state.weightLogs.length - 1];
+}
+
+function getPrevWeight() {
+  if (state.weightLogs.length < 2) return null;
+  return state.weightLogs[state.weightLogs.length - 2];
+}
+
+function daysSinceWeight() {
+  const latest = getLatestWeight();
+  if (!latest) return null;
+  return Math.floor((new Date() - new Date(latest.date)) / (1000 * 60 * 60 * 24));
+}
+
+function showWeightModal() {
+  const latest = getLatestWeight();
+  const wGoal = state.weightGoal;
+  const hasGoal = wGoal && wGoal.start_weight && wGoal.goal_weight;
+  const modal = document.createElement("div");
+  modal.id = "weight-modal";
+  modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:flex-end;justify-content:center";
+  modal.innerHTML = `<div style="background:var(--card);border-radius:20px 20px 0 0;padding:24px 20px;width:100%;max-width:420px;direction:rtl">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <span style="font-weight:700;font-size:16px;color:var(--text-primary)">עדכון משקל</span>
+      <button onclick="document.getElementById('weight-modal').remove()" style="background:none;border:none;cursor:pointer;color:var(--text-hint);font-size:22px;line-height:1">×</button>
+    </div>
+    <div style="margin-bottom:16px">
+      <label style="font-size:12px;color:var(--text-secondary);font-weight:600;display:block;margin-bottom:6px">משקל נוכחי (ק״ג)</label>
+      <input id="w-current" type="number" step="0.1" placeholder="${latest ? latest.weight : "85.0"}" style="width:100%;text-align:center;font-size:22px;font-weight:700;font-family:inherit;background:var(--surface);border:1px solid var(--border-med);border-radius:10px;padding:12px;color:var(--text-primary);outline:none">
+    </div>
+    ${!hasGoal ? `<div style="margin-bottom:12px">
+      <label style="font-size:12px;color:var(--text-secondary);font-weight:600;display:block;margin-bottom:6px">משקל התחלתי (ק״ג)</label>
+      <input id="w-start" type="number" step="0.1" placeholder="91.0" style="width:100%;text-align:center;font-size:16px;font-family:inherit;background:var(--surface);border:1px solid var(--border-med);border-radius:10px;padding:10px;color:var(--text-primary);outline:none">
+    </div>
+    <div style="margin-bottom:16px">
+      <label style="font-size:12px;color:var(--text-secondary);font-weight:600;display:block;margin-bottom:6px">יעד משקל (ק״ג)</label>
+      <input id="w-goal" type="number" step="0.1" placeholder="78.0" style="width:100%;text-align:center;font-size:16px;font-family:inherit;background:var(--surface);border:1px solid var(--border-med);border-radius:10px;padding:10px;color:var(--text-primary);outline:none">
+    </div>` : `<div style="margin-bottom:16px">
+      <label style="font-size:12px;color:var(--text-secondary);font-weight:600;display:block;margin-bottom:6px">יעד משקל (ק״ג) <span style="font-weight:400;color:var(--text-hint)">— נוכחי: ${goal.goal_weight}</span></label>
+      <input id="w-goal" type="number" step="0.1" placeholder="${goal.goal_weight}" style="width:100%;text-align:center;font-size:16px;font-family:inherit;background:var(--surface);border:1px solid var(--border-med);border-radius:10px;padding:10px;color:var(--text-primary);outline:none">
+    </div>`}
+    <button onclick="submitWeight(${hasGoal})" style="width:100%;padding:14px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer;font-size:15px;font-weight:700;font-family:inherit">שמור</button>
+  </div>`;
+  document.body.appendChild(modal);
+  setTimeout(() => document.getElementById("w-current")?.focus(), 100);
+}
+
+async function submitWeight(hasGoal) {
+  const currentInp = document.getElementById("w-current");
+  const goalInp = document.getElementById("w-goal");
+  const startInp = document.getElementById("w-start");
+  const current = parseFloat(currentInp?.value);
+  if (!current || isNaN(current)) { showToast("הזן משקל תקין"); return; }
+  const goalVal = parseFloat(goalInp?.value);
+  const startVal = parseFloat(startInp?.value);
+  if (!hasGoal) {
+    if (!startVal || !goalVal) { showToast("הזן משקל התחלתי ויעד"); return; }
+    await saveWeightGoal(startVal, goalVal);
+  } else if (goalVal && !isNaN(goalVal)) {
+    await saveWeightGoal(state.weightGoal.start_weight || startVal, goalVal);
+  }
+  await saveWeightLog(current);
+  document.getElementById("weight-modal")?.remove();
+  haptic("medium");
+  showToast("המשקל עודכן ✓");
 }
 function haptic(type) {
   if (!navigator.vibrate) return;
@@ -512,6 +608,76 @@ function renderDashboard() {
     : "";
 
 
+  // ── Weight card ──────────────────────────────────────────────────
+  const latest = getLatestWeight();
+  const prev = getPrevWeight();
+  const wGoal = state.weightGoal;
+  const hasGoal = wGoal && wGoal.start_weight && wGoal.goal_weight;
+  const dSinceW = daysSinceWeight();
+  const needsUpdate = dSinceW === null || dSinceW >= 7;
+
+  let weightCard = "";
+  if (!latest && !hasGoal) {
+    weightCard = `<div style="background:var(--surface);border:1px dashed var(--border-med);border-radius:14px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between" onclick="showWeightModal()" style="cursor:pointer">
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--text-secondary)">מעקב משקל</div>
+        <div style="font-size:11px;color:var(--text-hint);margin-top:2px">לחץ להגדרת יעד ומשקל</div>
+      </div>
+      <button onclick="showWeightModal()" style="background:var(--accent);border:none;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px;color:#fff;font-family:inherit;font-weight:600">הגדר</button>
+    </div>`;
+  } else if (latest) {
+    const diff = prev ? (latest.weight - prev.weight) : null;
+    const diffColor = diff === null ? "var(--text-hint)" : diff < 0 ? "var(--green)" : diff > 0 ? "var(--red)" : "var(--text-hint)";
+    const diffArrow = diff === null ? "" : diff < 0
+      ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>`
+      : diff > 0
+      ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`
+      : "";
+    const diffText = diff === null ? "" : `${diff > 0 ? "+" : ""}${diff.toFixed(1)} ק״ג מהשבוע הקודם`;
+    const startW = hasGoal ? wGoal.start_weight : latest.weight;
+    const goalW = hasGoal ? wGoal.goal_weight : null;
+    const totalToLose = hasGoal ? Math.abs(startW - goalW) : 0;
+    const lost = hasGoal ? Math.abs(startW - latest.weight) : 0;
+    const pctW = hasGoal && totalToLose > 0 ? Math.min(Math.round((lost / totalToLose) * 100), 100) : 0;
+    const remaining = hasGoal ? Math.abs(latest.weight - goalW).toFixed(1) : null;
+    const cardBorder = needsUpdate ? "var(--orange)" : "var(--border)";
+    const cardBg = needsUpdate ? "var(--orange-bg)" : "var(--card)";
+
+    weightCard = `<div style="background:${cardBg};border:1px solid ${cardBorder};border-radius:14px;padding:14px 16px;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:${hasGoal?"12px":"8px"}">
+        <div>
+          <div class="stat-label">משקל נוכחי</div>
+          <div style="display:flex;align-items:baseline;gap:5px;margin-top:3px">
+            <span style="font-size:32px;font-weight:700;color:var(--text-primary);line-height:1">${latest.weight}</span>
+            <span style="font-size:14px;color:var(--text-hint)">ק״ג</span>
+          </div>
+          ${diff !== null ? `<div style="display:flex;align-items:center;gap:4px;margin-top:4px">${diffArrow}<span style="font-size:12px;color:${diffColor};font-weight:600">${diffText}</span></div>` : ""}
+        </div>
+        ${hasGoal ? `<div style="text-align:left">
+          <div class="stat-label">יעד</div>
+          <div style="font-size:18px;font-weight:700;color:var(--text-primary);margin-top:2px">${goalW}</div>
+          ${remaining !== null ? `<div style="font-size:11px;color:var(--text-hint);margin-top:2px">נותרו ${remaining} ק״ג</div>` : ""}
+        </div>` : ""}
+      </div>
+      ${hasGoal ? `<div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-hint);margin-bottom:4px">
+          <span>התחלה: ${startW} ק״ג</span>
+          <span>${pctW}% מהדרך</span>
+        </div>
+        <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+          <div style="width:${pctW}%;height:100%;background:var(--accent);border-radius:3px"></div>
+        </div>
+      </div>` : ""}
+      <div style="display:flex;justify-content:space-between;align-items:center;${hasGoal?"border-top:1px solid var(--border);padding-top:10px":""}">
+        <span style="font-size:11px;color:var(--text-hint)">${needsUpdate ? "לא שקלת השבוע" : "עודכן לפני " + dSinceW + " ימים"}</span>
+        <button onclick="showWeightModal()" style="display:flex;align-items:center;gap:5px;background:${needsUpdate?"var(--orange)":"var(--surface)"};border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;color:${needsUpdate?"#fff":"var(--text-secondary)"};font-family:inherit;font-weight:600">
+          ${needsUpdate ? "הזן משקל שבועי" : "עדכן משקל"}
+        </button>
+      </div>
+    </div>`;
+  }
+  // ─────────────────────────────────────────────────────────────────
+
   let daysSinceCard = "";
   if (daysSince) {
     const d = daysSince.days;
@@ -548,6 +714,8 @@ function renderDashboard() {
 
     ${urgencyCard}
     ${daysSinceCard}
+
+    ${weightCard}
 
     ${prEntries.length ? `<div class="card" style="padding:0;overflow:hidden;margin-bottom:16px">
       <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:7px">
@@ -1131,7 +1299,7 @@ function bindDragDrop() {
 window.addEventListener("load", async function() {
   state.screen = "dashboard";
   render();
-  await loadSessionsFromSupabase();
+  await Promise.all([loadSessionsFromSupabase(), loadWeightData()]);
   render();
 });
 </script>
