@@ -264,78 +264,104 @@ function showWeightModal() {
   const wGoal = state.weightGoal;
   const hasGoal = !!(wGoal && wGoal.start_weight && wGoal.goal_weight);
 
-  const modal = document.createElement("div");
-  modal.id = "weight-modal";
-  modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:flex-end;justify-content:center";
+  document.getElementById("weight-modal")?.remove();
 
-  const inner = document.createElement("div");
-  inner.style.cssText = "background:var(--card);border-radius:20px 20px 0 0;padding:24px 20px;width:100%;max-width:420px;direction:rtl";
+  const overlay = document.createElement("div");
+  overlay.id = "weight-modal";
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:flex-end;justify-content:center";
 
-  inner.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-      <span style="font-weight:700;font-size:16px;color:var(--text-primary)">עדכון משקל</span>
-      <button id="w-close" style="background:none;border:none;cursor:pointer;color:var(--text-hint);font-size:22px;line-height:1">×</button>
-    </div>
-    <div style="margin-bottom:16px">
-      <label style="font-size:12px;color:var(--text-secondary);font-weight:600;display:block;margin-bottom:6px">משקל נוכחי (ק״ג)</label>
-      <input id="w-current" type="number" step="0.1" placeholder="${latest ? latest.weight : '85.0'}" style="width:100%;text-align:center;font-size:22px;font-weight:700;font-family:inherit;background:var(--surface);border:1px solid var(--border-med);border-radius:10px;padding:12px;color:var(--text-primary);outline:none">
-    </div>
-    ${!hasGoal ? `
-    <div style="margin-bottom:12px">
-      <label style="font-size:12px;color:var(--text-secondary);font-weight:600;display:block;margin-bottom:6px">משקל התחלתי (ק״ג)</label>
-      <input id="w-start" type="number" step="0.1" placeholder="91.0" style="width:100%;text-align:center;font-size:16px;font-family:inherit;background:var(--surface);border:1px solid var(--border-med);border-radius:10px;padding:10px;color:var(--text-primary);outline:none">
-    </div>
-    <div style="margin-bottom:16px">
-      <label style="font-size:12px;color:var(--text-secondary);font-weight:600;display:block;margin-bottom:6px">יעד משקל (ק״ג)</label>
-      <input id="w-goal" type="number" step="0.1" placeholder="78.0" style="width:100%;text-align:center;font-size:16px;font-family:inherit;background:var(--surface);border:1px solid var(--border-med);border-radius:10px;padding:10px;color:var(--text-primary);outline:none">
-    </div>` : `
-    <div style="margin-bottom:16px">
-      <label style="font-size:12px;color:var(--text-secondary);font-weight:600;display:block;margin-bottom:6px">יעד משקל (ק״ג) <span style="font-weight:400;color:var(--text-hint)">— נוכחי: ${wGoal.goal_weight}</span></label>
-      <input id="w-goal" type="number" step="0.1" placeholder="${wGoal.goal_weight}" style="width:100%;text-align:center;font-size:16px;font-family:inherit;background:var(--surface);border:1px solid var(--border-med);border-radius:10px;padding:10px;color:var(--text-primary);outline:none">
-    </div>`}
-    <button id="w-submit" style="width:100%;padding:14px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer;font-size:15px;font-weight:700;font-family:inherit">שמור</button>
-  `;
+  const sheet = document.createElement("div");
+  sheet.style.cssText = "background:var(--card);border-radius:20px 20px 0 0;padding:24px 20px;width:100%;max-width:420px;direction:rtl";
 
-  modal.appendChild(inner);
-  document.body.appendChild(modal);
+  // Header
+  const header = document.createElement("div");
+  header.style.cssText = "display:flex;justify-content:space-between;align-items:center;margin-bottom:20px";
+  header.innerHTML = '<span style="font-weight:700;font-size:16px;color:var(--text-primary)">עדכון משקל</span>';
+  const closeBtn = document.createElement("button");
+  closeBtn.textContent = "×";
+  closeBtn.style.cssText = "background:none;border:none;cursor:pointer;color:var(--text-hint);font-size:22px;line-height:1";
+  closeBtn.addEventListener("click", () => overlay.remove());
+  header.appendChild(closeBtn);
+  sheet.appendChild(header);
 
-  document.getElementById("w-close").addEventListener("click", () => modal.remove());
-  document.getElementById("w-submit").addEventListener("click", () => submitWeight(hasGoal));
-  setTimeout(() => document.getElementById("w-current")?.focus(), 100);
-}
+  // Current weight input
+  const currentWrap = document.createElement("div");
+  currentWrap.style.marginBottom = "16px";
+  currentWrap.innerHTML = '<label style="font-size:12px;color:var(--text-secondary);font-weight:600;display:block;margin-bottom:6px">משקל נוכחי (ק״ג)</label>';
+  const currentInp = document.createElement("input");
+  currentInp.id = "w-current";
+  currentInp.type = "number";
+  currentInp.step = "0.1";
+  currentInp.placeholder = latest ? String(latest.weight) : "85.0";
+  currentInp.style.cssText = "width:100%;text-align:center;font-size:22px;font-weight:700;font-family:inherit;background:var(--surface);border:1px solid var(--border-med);border-radius:10px;padding:12px;color:var(--text-primary);outline:none;box-sizing:border-box";
+  currentWrap.appendChild(currentInp);
+  sheet.appendChild(currentWrap);
 
-async function submitWeight(hasGoal) {
-  console.log("submitWeight called, hasGoal:", hasGoal);
-  const currentInp = document.getElementById("w-current");
-  const goalInp = document.getElementById("w-goal");
-  const startInp = document.getElementById("w-start");
-  const current = parseFloat(currentInp?.value);
-  console.log("current weight value:", current);
-  if (!current || isNaN(current)) { showToast("הזן משקל תקין"); return; }
-  const goalVal = parseFloat(goalInp?.value);
-  const startVal = parseFloat(startInp?.value);
-  console.log("goalVal:", goalVal, "startVal:", startVal);
-  try {
-    if (!hasGoal) {
-      if (!startVal || !goalVal) { showToast("הזן משקל התחלתי ויעד"); return; }
-      console.log("saving goal...");
-      await saveWeightGoal(startVal, goalVal);
-      console.log("goal saved");
-    } else if (goalVal && !isNaN(goalVal)) {
-      await saveWeightGoal(state.weightGoal.start_weight || startVal, goalVal);
-    }
-    console.log("saving weight log...");
-    await saveWeightLog(current);
-    console.log("weight saved, removing modal");
-    document.getElementById("weight-modal")?.remove();
-    haptic("medium");
-    render();
-    showToast("המשקל עודכן ✓");
-  } catch(e) {
-    console.error("submitWeight error:", e);
-    showToast("שגיאה בשמירה: " + e.message);
+  // Start weight (only if no goal yet)
+  let startInp = null;
+  if (!hasGoal) {
+    const startWrap = document.createElement("div");
+    startWrap.style.marginBottom = "12px";
+    startWrap.innerHTML = '<label style="font-size:12px;color:var(--text-secondary);font-weight:600;display:block;margin-bottom:6px">משקל התחלתי (ק״ג)</label>';
+    startInp = document.createElement("input");
+    startInp.type = "number";
+    startInp.step = "0.1";
+    startInp.placeholder = "91.0";
+    startInp.style.cssText = "width:100%;text-align:center;font-size:16px;font-family:inherit;background:var(--surface);border:1px solid var(--border-med);border-radius:10px;padding:10px;color:var(--text-primary);outline:none;box-sizing:border-box";
+    startWrap.appendChild(startInp);
+    sheet.appendChild(startWrap);
   }
+
+  // Goal weight input
+  const goalWrap = document.createElement("div");
+  goalWrap.style.marginBottom = "16px";
+  const goalLabel = hasGoal
+    ? `יעד משקל (ק״ג) <span style="font-weight:400;color:var(--text-hint)">— נוכחי: ${wGoal.goal_weight}</span>`
+    : "יעד משקל (ק״ג)";
+  goalWrap.innerHTML = `<label style="font-size:12px;color:var(--text-secondary);font-weight:600;display:block;margin-bottom:6px">${goalLabel}</label>`;
+  const goalInp = document.createElement("input");
+  goalInp.type = "number";
+  goalInp.step = "0.1";
+  goalInp.placeholder = hasGoal ? String(wGoal.goal_weight) : "78.0";
+  goalInp.style.cssText = "width:100%;text-align:center;font-size:16px;font-family:inherit;background:var(--surface);border:1px solid var(--border-med);border-radius:10px;padding:10px;color:var(--text-primary);outline:none;box-sizing:border-box";
+  goalWrap.appendChild(goalInp);
+  sheet.appendChild(goalWrap);
+
+  // Submit button
+  const submitBtn = document.createElement("button");
+  submitBtn.textContent = "שמור";
+  submitBtn.style.cssText = "width:100%;padding:14px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer;font-size:15px;font-weight:700;font-family:inherit";
+  submitBtn.addEventListener("click", async () => {
+    const current = parseFloat(currentInp.value);
+    console.log("submit clicked, current:", current);
+    if (!current || isNaN(current)) { showToast("הזן משקל תקין"); return; }
+    const goalVal = parseFloat(goalInp.value);
+    const startVal = startInp ? parseFloat(startInp.value) : null;
+    try {
+      if (!hasGoal) {
+        if (!startVal || !goalVal || isNaN(startVal) || isNaN(goalVal)) { showToast("הזן משקל התחלתי ויעד"); return; }
+        await saveWeightGoal(startVal, goalVal);
+      } else if (goalVal && !isNaN(goalVal)) {
+        await saveWeightGoal(wGoal.start_weight, goalVal);
+      }
+      await saveWeightLog(current);
+      overlay.remove();
+      haptic("medium");
+      render();
+      showToast("המשקל עודכן ✓");
+    } catch(e) {
+      console.error("save error:", e);
+      showToast("שגיאה: " + e.message);
+    }
+  });
+  sheet.appendChild(submitBtn);
+
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
+  setTimeout(() => currentInp.focus(), 100);
 }
+
+
 function haptic(type) {
   if (!navigator.vibrate) return;
   if (type === "light") navigator.vibrate(10);
