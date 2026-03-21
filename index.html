@@ -270,7 +270,7 @@ async function loadSessionsFromSupabase() {
         exercises[s.exercise_name].push({ num: s.set_number, weight: s.weight, reps: s.reps, failed: s.failed });
       });
       Object.values(exercises).forEach(arr => arr.sort((a,b) => a.num - b.num));
-      return { id: row.local_id || row.id, workoutId: row.workout_id, date: row.date, exercises };
+      return { id: row.local_id || row.id, workoutId: row.workout_id, workoutName: row.workout_name || "", date: row.date, exercises };
     });
     localStorage.setItem(STORAGE_SESSIONS, JSON.stringify(state.sessions));
   } catch(e) {
@@ -594,8 +594,13 @@ async function loadWorkoutsFromSupabase() {
   try {
     const rows = await sbGet("workout_plans?select=*&order=sort_order.asc");
     if (rows && rows.length) {
+      // תמיד החלף את כל ה-state — אל תצרף
       state.workouts = rows.map(r => ({ id: r.plan_id, name: r.name, exercises: r.exercises }));
       localStorage.setItem(STORAGE_WORKOUTS, JSON.stringify(state.workouts));
+    } else {
+      // Supabase ריק — נקה גם localStorage כדי למנוע ברירות מחדל ישנות
+      state.workouts = [];
+      localStorage.removeItem(STORAGE_WORKOUTS);
     }
   } catch(e) { console.error("Workout plan load failed:", e); }
 }
@@ -1391,7 +1396,7 @@ function finishWorkout() {
       return d.toISOString();
     })() : now.toISOString();
     overlay.remove();
-    const session = { id:"s_"+Date.now(), workoutId:state.workoutId, date:sessionDate, exercises:JSON.parse(JSON.stringify(state.exercises)), note: state.workoutNote||"" };
+    const session = { id:"s_"+Date.now(), workoutId:state.workoutId, workoutName: getWorkout(state.workoutId)?.name || "", date:sessionDate, exercises:JSON.parse(JSON.stringify(state.exercises)), note: state.workoutNote||"" };
     state.sessions.push(session);
     state.sessions.sort((a,b) => new Date(a.date) - new Date(b.date));
     sessionStorage.removeItem("gym_in_progress");
@@ -1513,7 +1518,7 @@ function renderHistory() {
   return `<div style="padding:14px">${tabs}${exportBtn}${reversed.map((session, ri) => {
     const originalIdx = state.sessions.length - 1 - ri;
     const w = getWorkout(session.workoutId);
-    const wName = w ? w.name : session.workoutId;
+    const wName = w ? w.name : (session.workoutName || session.workoutId);
     const prevSameType = state.sessions.slice(0, originalIdx).reverse().find(s => s.workoutId === session.workoutId);
     const isExpanded = state.expandedSessions.has(session.id);
 
@@ -1980,7 +1985,7 @@ function exportCSV() {
   const rows = [["תאריך","אימון","תרגיל","סט","משקל","חזרות","כשל"]];
   state.sessions.forEach(session => {
     const w = getWorkout(session.workoutId);
-    const wName = w ? w.name : session.workoutId;
+    const wName = w ? w.name : (session.workoutName || session.workoutId);
     Object.entries(session.exercises||{}).forEach(([exName, sets]) => {
       sets.forEach(s => {
         if (s.weight > 0 || s.reps > 0) {
