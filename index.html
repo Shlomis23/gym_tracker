@@ -697,12 +697,16 @@ function getPRs() {
     Object.entries(session.exercises||{}).forEach(([name, sets]) => {
       sets.forEach(s => {
         if (s.weight > (prs[name]?.weight || 0)) {
-          // מצא קטגוריה מתוך תוכניות האימון
+          // חפש קטגוריה — קודם בתוכניות הפעילות, אחר כך במאגר
           let category = null;
           state.workouts.forEach(w => {
             const ex = w.exercises.find(e => (typeof e==="string"?e:e.name) === name);
             if (ex?.category) category = ex.category;
           });
+          if (!category) {
+            const libEntry = state.exerciseLibrary.find(e => e.name === name);
+            if (libEntry?.category) category = libEntry.category;
+          }
           prs[name] = { weight: s.weight, date: session.date, category };
         }
       });
@@ -757,11 +761,11 @@ function navigate(screen) {
   if (screen === "home") {
     loadInProgress();
   }
-  ["dashboard","home","history","manage"].forEach(s => {
+  ["dashboard","home","history","manage","library"].forEach(s => {
     const el = document.getElementById("nav-"+s);
     if (el) el.classList.toggle("active", s === screen);
   });
-  const titles = { dashboard:"דשבורד", home:"אימון חדש", history:"היסטוריה", manage:"ניהול תוכנית" };
+  const titles = { dashboard:"דשבורד", home:"אימון חדש", history:"היסטוריה", manage:"ניהול תוכנית", library:"מאגר תרגילים" };
   document.getElementById("screen-title").textContent = titles[screen] || "";
   render();
 }
@@ -822,6 +826,7 @@ function render() {
   if (state.screen === "dashboard") el.innerHTML = renderDashboard();
   else if (state.screen === "home") el.innerHTML = state.workoutId ? renderWorkout() : renderChoose();
   else if (state.screen === "history") el.innerHTML = renderHistory();
+  else if (state.screen === "library") el.innerHTML = renderLibraryScreen();
   else el.innerHTML = renderManage();
   if (window.lucide) lucide.createIcons();
   bindDelButtons();
@@ -1842,11 +1847,7 @@ function renderManage() {
       <span style="font-weight:700;font-size:14px;color:var(--text-primary)">אימונים ותרגילים</span>
     </div>
     ${workoutSections}
-    <div style="display:flex;align-items:center;gap:7px;margin:16px 0 10px;padding:0 2px">
-      <i data-lucide="library" style="width:15px;height:15px;color:var(--text-secondary)"></i>
-      <span style="font-weight:700;font-size:14px;color:var(--text-primary)">מאגר תרגילים</span>
-    </div>
-    ${renderLibraryManager()}
+
     <div style="padding:14px 16px;background:var(--card);border:1px solid var(--border);border-radius:14px">
       <p style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:10px;display:flex;align-items:center;gap:5px">
         <i data-lucide="plus-circle" style="width:14px;height:14px"></i> הוסף אימון חדש
@@ -1858,6 +1859,14 @@ function renderManage() {
         </button>
       </div>
     </div>
+    <button onclick="navigate('library')" style="width:100%;margin-top:12px;padding:13px 16px;background:var(--card);border:1px solid var(--border);border-radius:14px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:10px;text-align:right">
+      <i data-lucide="library" style="width:18px;height:18px;color:var(--text-secondary);flex-shrink:0"></i>
+      <div style="flex:1">
+        <div style="font-size:14px;font-weight:600;color:var(--text-primary)">ניהול מאגר תרגילים</div>
+        <div style="font-size:11px;color:var(--text-hint);margin-top:2px">${state.exerciseLibrary.length} תרגילים במאגר</div>
+      </div>
+      <i data-lucide="chevron-left" style="width:16px;height:16px;color:var(--text-hint)"></i>
+    </button>
   </div>`;
 }
 
@@ -2146,6 +2155,16 @@ function showExerciseGraph(exName) {
   overlay.addEventListener("click", e => { if(e.target===overlay) overlay.remove(); });
 }
 
+
+
+function renderLibraryScreen() {
+  return `<div style="padding:14px">
+    <button onclick="navigate('manage')" style="display:flex;align-items:center;gap:6px;background:none;border:none;cursor:pointer;color:var(--text-secondary);font-family:inherit;font-size:13px;padding:0;margin-bottom:16px">
+      <i data-lucide="chevron-right" style="width:16px;height:16px"></i> חזרה לניהול תוכנית
+    </button>
+    ${renderLibraryManager()}
+  </div>`;
+}
 
 function openExercisePicker(workoutId) {
   document.getElementById("ex-picker-modal")?.remove();
