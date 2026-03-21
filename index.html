@@ -1405,10 +1405,10 @@ function finishWorkout() {
   document.getElementById("finish-sheet")?.remove();
   const overlay = document.createElement("div");
   overlay.id = "finish-sheet";
-  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:2000;display:flex;align-items:flex-end;justify-content:center;padding:0";
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:2000;display:flex;align-items:flex-end;justify-content:center";
 
   const sheet = document.createElement("div");
-  sheet.style.cssText = "background:var(--card);border-radius:20px 20px 0 0;padding:24px 20px 32px;width:100%;max-width:420px;direction:rtl;animation:slideUp 0.3s cubic-bezier(0.22,1,0.36,1) both;margin:0 auto;";
+  sheet.style.cssText = "background:var(--card);border-radius:20px 20px 0 0;padding:24px 20px 32px;width:100%;direction:rtl;animation:slideUp 0.3s cubic-bezier(0.22,1,0.36,1) both;box-sizing:border-box;";
   sheet.innerHTML = `
     <div style="font-size:16px;font-weight:700;color:var(--text-primary);margin-bottom:18px">סיום אימון</div>
     <div style="margin-bottom:16px">
@@ -2211,11 +2211,52 @@ function showExerciseGraph(exName) {
 
 function renderLibraryScreen() {
   return `<div style="padding:14px">
-    <button onclick="navigate('manage')" style="display:flex;align-items:center;gap:6px;background:none;border:none;cursor:pointer;color:var(--text-secondary);font-family:inherit;font-size:13px;padding:0;margin-bottom:16px">
-      <i data-lucide="chevron-right" style="width:16px;height:16px"></i> חזרה לניהול תוכנית
-    </button>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <button onclick="navigate('manage')" style="display:flex;align-items:center;gap:6px;background:none;border:none;cursor:pointer;color:var(--text-secondary);font-family:inherit;font-size:13px;padding:0">
+        <i data-lucide="chevron-right" style="width:16px;height:16px"></i> חזרה לניהול תוכנית
+      </button>
+      <button onclick="openLibraryAddExercise()" style="display:flex;align-items:center;gap:5px;background:var(--accent);border:none;border-radius:8px;padding:7px 12px;cursor:pointer;color:#fff;font-family:inherit;font-size:13px;font-weight:600">
+        <i data-lucide="plus" style="width:15px;height:15px"></i> הוסף
+      </button>
+    </div>
     ${renderLibraryManager()}
   </div>`;
+}
+
+function openLibraryAddExercise() {
+  document.getElementById("ex-picker-modal")?.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "ex-picker-modal";
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2000;display:flex;align-items:flex-end;justify-content:center";
+  const sheet = document.createElement("div");
+  sheet.style.cssText = "background:var(--card);border-radius:20px 20px 0 0;padding:24px 20px 32px;width:100%;direction:rtl;animation:slideUp 0.3s cubic-bezier(0.22,1,0.36,1) both;box-sizing:border-box";
+  sheet.innerHTML = `
+    <div style="font-size:15px;font-weight:700;color:var(--text-primary);margin-bottom:16px">הוסף תרגיל למאגר</div>
+    <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px">שם תרגיל</label>
+    <input id="lib-new-name" placeholder="שם..." autocomplete="off"
+      style="width:100%;font-family:inherit;font-size:14px;background:var(--surface);border:1px solid var(--border-med);border-radius:8px;padding:10px 12px;color:var(--text-primary);outline:none;box-sizing:border-box;direction:rtl;margin-bottom:14px">
+    <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px">קטגוריה</label>
+    <select id="lib-new-cat" style="width:100%;font-family:inherit;font-size:14px;background:var(--surface);border:1px solid var(--border-med);border-radius:8px;padding:10px 12px;color:var(--text-primary);outline:none;box-sizing:border-box;margin-bottom:20px">
+      <option value="">ללא קטגוריה</option>
+      ${CATEGORIES.map(c=>`<option value="${c.id}">${c.label}</option>`).join("")}
+    </select>
+    <button id="lib-new-confirm" style="width:100%;padding:13px;background:var(--accent);color:#fff;border:none;border-radius:12px;cursor:pointer;font-size:15px;font-weight:700;font-family:inherit">הוסף למאגר</button>
+  `;
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
+  overlay.addEventListener("click", e => { if(e.target===overlay) overlay.remove(); });
+  setTimeout(() => sheet.querySelector("#lib-new-name")?.focus(), 100);
+  sheet.querySelector("#lib-new-confirm").addEventListener("click", async () => {
+    const name = sheet.querySelector("#lib-new-name").value.trim();
+    const category = sheet.querySelector("#lib-new-cat").value || null;
+    if (!name) { sheet.querySelector("#lib-new-name").style.borderColor = "var(--red)"; return; }
+    const exists = state.exerciseLibrary.find(e => e.name === name);
+    if (exists) { showToast("תרגיל זה כבר קיים במאגר"); return; }
+    overlay.remove();
+    await addToLibrary(name, category);
+    showToast("נוסף למאגר ✓");
+    render();
+  });
 }
 
 
