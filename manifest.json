@@ -2,7 +2,7 @@
   "name": "GymBuddy",
   "short_name": "GymBuddy",
   "id": "/gym_tracker/",
-  "start_url": "./",
+  "start_url": "/gym_tracker/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#000000",
