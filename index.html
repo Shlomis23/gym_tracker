@@ -726,7 +726,8 @@ function saveInProgress() {
     sessionStorage.setItem("gym_in_progress", JSON.stringify({
       workoutId: state.workoutId,
       exercises: state.exercises,
-      openExercise: state.openExercise
+      openExercise: state.openExercise,
+      workoutExtras: state.workoutExtras || []
     }));
   } else {
     sessionStorage.removeItem("gym_in_progress");
@@ -742,6 +743,7 @@ function loadInProgress() {
       state.workoutId = data.workoutId;
       state.exercises = data.exercises;
       state.openExercise = data.openExercise;
+      state.workoutExtras = data.workoutExtras || [];
     }
   } catch {}
 }
@@ -1405,10 +1407,10 @@ function finishWorkout() {
   document.getElementById("finish-sheet")?.remove();
   const overlay = document.createElement("div");
   overlay.id = "finish-sheet";
-  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:2000;display:flex;align-items:flex-end;justify-content:center";
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:2000;";
 
   const sheet = document.createElement("div");
-  sheet.style.cssText = "background:var(--card);border-radius:20px 20px 0 0;padding:24px 20px 32px;width:100%;direction:rtl;animation:slideUp 0.3s cubic-bezier(0.22,1,0.36,1) both;box-sizing:border-box;";
+  sheet.style.cssText = "background:var(--card);border-radius:20px 20px 0 0;padding:24px 20px 32px;width:100%;direction:rtl;animation:slideUp 0.3s cubic-bezier(0.22,1,0.36,1) both;box-sizing:border-box;position:absolute;bottom:0;left:0;right:0;";
   sheet.innerHTML = `
     <div style="font-size:16px;font-weight:700;color:var(--text-primary);margin-bottom:18px">סיום אימון</div>
     <div style="margin-bottom:16px">
@@ -1579,7 +1581,7 @@ function renderHistory() {
     `;
 
     const exRows = isExpanded ? exNames.map(name => {
-      const sets = (session.exercises[name]||[]).filter(s => s.weight>0||s.reps>0);
+      const sets = (session.exercises[name]||[]).filter(s => s.weight>0||s.reps>0||s.minutes>0);
       if (!sets.length) return "";
       const prevSets = prevSameType?.exercises?.[name]||[];
       const exImproved = prevSets.length>0 && sets.some((s,i) => prevSets[i] && s.weight>prevSets[i].weight);
@@ -1587,6 +1589,12 @@ function renderHistory() {
       const setsTable = sets.map((s,i) => {
         const p=prevSets[i]; const imp=p&&s.weight>p.weight; const reg=p&&s.weight>0&&s.weight<p.weight;
         const failed = !!s.failed;
+        if (s.minutes > 0) {
+          return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0">
+            <span style="min-width:14px;font-size:11px;color:var(--text-hint);font-weight:600">${s.num}</span>
+            <span style="font-size:13px;color:var(--text-primary);font-weight:500">${s.minutes} דקות</span>
+          </div>`;
+        }
         return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0">
           <span style="min-width:14px;font-size:11px;color:${failed?"var(--red)":"var(--text-hint)"};font-weight:600">${s.num}</span>
           <span style="font-size:13px;color:${failed?"var(--red)":"var(--text-primary)"};font-weight:500;min-width:56px">${s.weight} ק״ג</span>
