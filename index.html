@@ -477,7 +477,32 @@ function saveWorkouts() {
   localStorage.setItem(STORAGE_WORKOUTS, JSON.stringify(state.workouts));
   saveWorkoutsToSupabase();
 }
-function saveSettings() { localStorage.setItem(STORAGE_SETTINGS, JSON.stringify(state.settings)); }
+function saveSettings() {
+  localStorage.setItem(STORAGE_SETTINGS, JSON.stringify(state.settings));
+  saveSettingsToSupabase();
+}
+
+async function saveSettingsToSupabase() {
+  try {
+    await sbDelete("user_settings?id=neq.00000000-0000-0000-0000-000000000000");
+    await sbPost("user_settings", {
+      weekly_goal: state.settings.weeklyGoal,
+      goal_history: state.settings.goalHistory || []
+    });
+  } catch(e) { console.error("Settings save failed:", e); }
+}
+
+async function loadSettingsFromSupabase() {
+  try {
+    const rows = await sbGet("user_settings?select=*&order=updated_at.desc&limit=1");
+    if (rows && rows.length) {
+      const r = rows[0];
+      state.settings.weeklyGoal = r.weekly_goal || 4;
+      state.settings.goalHistory = r.goal_history || [];
+      localStorage.setItem(STORAGE_SETTINGS, JSON.stringify(state.settings));
+    }
+  } catch(e) { console.error("Settings load failed:", e); }
+}
 
 async function saveWorkoutsToSupabase() {
   try {
@@ -1998,7 +2023,7 @@ function showExerciseGraph(exName) {
 window.addEventListener("load", async function() {
   state.screen = "dashboard";
   const loader = document.getElementById("app-loader");
-  await Promise.all([loadSessionsFromSupabase(), loadWeightData(), loadWorkoutsFromSupabase()]);
+  await Promise.all([loadSessionsFromSupabase(), loadWeightData(), loadWorkoutsFromSupabase(), loadSettingsFromSupabase()]);
   if (loader) {
     loader.style.opacity = "0";
     setTimeout(() => loader.remove(), 350);
