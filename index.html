@@ -230,7 +230,8 @@ let state = {
   sessions: [], workouts: loadWorkouts(), settings: loadSettings(),
   manageOpenId: null, editingNameId: null, selectedWorkoutId: null, expandedSessions: new Set(),
   weightLogs: [], weightGoal: { start_weight: null, goal_weight: null }, historyTab: "workouts",
-  workoutNote: "", monthViewYear: null, monthViewMonth: null, pendingGoal: null
+  workoutNote: "", monthViewYear: null, monthViewMonth: null, pendingGoal: null,
+  editingExKey: null
 };
 try { state.sessions = JSON.parse(localStorage.getItem(STORAGE_SESSIONS) || "[]"); } catch {}
 
@@ -515,6 +516,29 @@ function getLastSession(id) { return [...state.sessions].reverse().find(s => s.w
 function formatRest(sec) { return sec >= 60 ? Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0")+" דק׳" : sec+" שנ׳"; }
 function getExNames(w) { return w.exercises.map(e => typeof e === "string" ? e : e.name); }
 function getExRest(w, name) { const e = w.exercises.find(ex => (typeof ex==="string"?ex:ex.name)===name); return e?.rest||60; }
+
+
+const CATEGORIES = [
+  { id: "chest",     label: "חזה",      icon: "move-up" },
+  { id: "back",      label: "גב",       icon: "align-justify" },
+  { id: "shoulders", label: "כתפיים",   icon: "chevrons-up" },
+  { id: "arms",      label: "ידיים",    icon: "zap" },
+  { id: "legs",      label: "רגליים",   icon: "arrow-down-to-line" },
+  { id: "core",      label: "בטן/ליבה", icon: "crosshair" },
+  { id: "cardio",    label: "קרדיו",    icon: "activity" },
+  { id: "other",     label: "אחר",      icon: "more-horizontal" }
+];
+
+function getCategoryIcon(catId) {
+  return (CATEGORIES.find(c => c.id === catId) || CATEGORIES[CATEGORIES.length-1]).icon;
+}
+function getCategoryLabel(catId) {
+  return (CATEGORIES.find(c => c.id === catId) || { label: "" }).label;
+}
+function getExCategory(w, name) {
+  const ex = w.exercises.find(e => (typeof e==="string"?e:e.name) === name);
+  return ex?.category || null;
+}
 
 function getNextWorkout() {
   if (!state.sessions.length) return state.workouts[0] || null;
@@ -1089,9 +1113,12 @@ function renderWorkout() {
       ? `<span style="width:8px;height:8px;border-radius:50%;background:${improved?"var(--green)":"#6b7280"};flex-shrink:0"></span>`
       : `<span style="width:8px;height:8px;border-radius:50%;border:1.5px solid var(--border-med);flex-shrink:0"></span>`;
 
+    const exCat = getExCategory(w, name);
+    const catIconName = exCat ? getCategoryIcon(exCat) : null;
     const header = `<div class="ex-header" onclick="toggleExercise('${name}')">
       <div style="display:flex;align-items:center;gap:9px;min-width:0">
         ${statusDot}
+        ${catIconName ? `<i data-lucide="${catIconName}" style="width:13px;height:13px;color:var(--text-hint);flex-shrink:0"></i>` : ""}
         <div style="min-width:0">
           <div style="font-weight:600;font-size:14px;color:var(--text-primary)">${name}</div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap">
@@ -1573,35 +1600,65 @@ function renderManage() {
     const exRows = isOpen ? `<div id="drag-list-${w.id}">${w.exercises.map((ex,i) => {
       const name = typeof ex === "string" ? ex : ex.name;
       const rest = typeof ex === "string" ? 60 : (ex.rest||60);
+      const cat = ex.category || "";
+      const catIcon = cat ? getCategoryIcon(cat) : "grip-vertical";
+      const isEditingEx = state.editingExKey === w.id+":"+i;
+      if (isEditingEx) {
+        return `<div class="ex-row-drag" data-wid="${w.id}" data-idx="${i}"
+          style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;gap:6px;align-items:center">
+            <span class="drag-handle"><i data-lucide="grip-vertical" style="width:14px;height:14px"></i></span>
+            <input class="inp inp-text" value="${name}" style="flex:1;font-size:13px;padding:6px 8px"
+              onblur="updateExField('${w.id}',${i},'name',this.value)"
+              onkeydown="if(event.key==='Enter')this.blur()">
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;padding-right:22px">
+            <select onchange="updateExField('${w.id}',${i},'category',this.value)"
+              style="flex:1;font-size:12px;font-family:inherit;background:var(--surface);border:1px solid var(--border-med);border-radius:6px;padding:5px 6px;color:var(--text-primary);outline:none">
+              <option value="">ללא קטגוריה</option>
+              ${CATEGORIES.map(c=>`<option value="${c.id}" ${cat===c.id?"selected":""}>${c.label}</option>`).join("")}
+            </select>
+            <i data-lucide="timer" style="width:13px;height:13px;color:var(--orange);flex-shrink:0"></i>
+            <input type="number" value="${rest}" min="15" max="600" step="15"
+              onchange="updateExField('${w.id}',${i},'rest',this.value)"
+              style="width:52px;text-align:center;font-size:12px;font-family:inherit;background:var(--surface);border:1px solid var(--border-med);border-radius:6px;padding:5px 4px;color:var(--text-primary);outline:none">
+            <span style="font-size:11px;color:var(--text-hint)">שנ׳</span>
+            <button onclick="state.editingExKey=null;render()" style="background:var(--green-bg);border:1px solid #86efac;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:11px;font-weight:600;color:var(--green);font-family:inherit;white-space:nowrap">סיום</button>
+          </div>
+        </div>`;
+      }
       return `<div class="ex-row-drag" draggable="true" data-wid="${w.id}" data-idx="${i}"
         style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--border)">
         <span class="drag-handle"><i data-lucide="grip-vertical" style="width:14px;height:14px"></i></span>
+        <i data-lucide="${catIcon}" style="width:13px;height:13px;color:var(--text-hint);flex-shrink:0"></i>
         <span style="flex:1;font-size:14px;color:var(--text-primary)">${name}</span>
-        <div style="display:flex;align-items:center;gap:5px">
-          <i data-lucide="timer" style="width:13px;height:13px;color:var(--orange)"></i>
-          <input type="number" value="${rest}" min="15" max="600" step="15"
-            onchange="updateExRest('${w.id}',${i},this.value)"
-            style="width:54px;text-align:center;font-size:13px;font-family:inherit;background:var(--surface);border:1px solid var(--border-med);border-radius:6px;padding:4px;color:var(--text-primary);outline:none">
-          <span style="font-size:11px;color:var(--text-hint)">שנ׳</span>
-        </div>
+        <span style="font-size:10px;color:var(--text-hint);background:var(--surface);padding:2px 6px;border-radius:4px;white-space:nowrap">${rest}שנ׳</span>
+        <button onclick="event.stopPropagation();state.editingExKey='${w.id}:${i}';render()" class="icon-btn">
+          <i data-lucide="pencil" style="width:13px;height:13px"></i>
+        </button>
         <button onclick="removeExercise('${w.id}',${i})" class="icon-btn" style="color:var(--red)">
           <i data-lucide="x" style="width:16px;height:16px"></i>
         </button>
       </div>`;
     }).join("")}</div>` : "";
     const addRow = isOpen ? `
-      <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
-        <input class="inp inp-text" id="new-ex-${w.id}" placeholder="שם תרגיל..." style="flex:1"
+      <div style="margin-top:12px;display:flex;flex-direction:column;gap:7px">
+        <input class="inp inp-text" id="new-ex-${w.id}" placeholder="שם תרגיל..."
           onkeydown="if(event.key==='Enter')addExercise('${w.id}')">
-        <div style="display:flex;align-items:center;gap:4px">
-          <i data-lucide="timer" style="width:13px;height:13px;color:var(--orange)"></i>
+        <div style="display:flex;gap:6px;align-items:center">
+          <select id="new-cat-${w.id}"
+            style="flex:1;font-size:12px;font-family:inherit;background:var(--surface);border:1px solid var(--border-med);border-radius:6px;padding:6px 8px;color:var(--text-primary);outline:none">
+            <option value="">קטגוריה (אופציונלי)</option>
+            ${CATEGORIES.map(c=>`<option value="${c.id}">${c.label}</option>`).join("")}
+          </select>
+          <i data-lucide="timer" style="width:13px;height:13px;color:var(--orange);flex-shrink:0"></i>
           <input type="number" id="new-rest-${w.id}" value="60" min="15" max="600" step="15"
-            style="width:54px;text-align:center;font-size:13px;font-family:inherit;background:var(--surface);border:1px solid var(--border-med);border-radius:6px;padding:6px 4px;color:var(--text-primary);outline:none">
+            style="width:52px;text-align:center;font-size:12px;font-family:inherit;background:var(--surface);border:1px solid var(--border-med);border-radius:6px;padding:6px 4px;color:var(--text-primary);outline:none">
           <span style="font-size:11px;color:var(--text-hint)">שנ׳</span>
+          <button onclick="addExercise('${w.id}')" style="padding:0 12px;height:34px;background:var(--accent);border:none;border-radius:8px;cursor:pointer;color:#fff;display:flex;align-items:center;flex-shrink:0">
+            <i data-lucide="plus" style="width:16px;height:16px"></i>
+          </button>
         </div>
-        <button onclick="addExercise('${w.id}')" style="padding:0 12px;height:38px;background:var(--accent);border:none;border-radius:8px;cursor:pointer;color:#fff;display:flex;align-items:center;">
-          <i data-lucide="plus" style="width:16px;height:16px"></i>
-        </button>
       </div>` : "";
     return `<div class="card" style="padding:0;overflow:hidden;margin-bottom:10px">
       <div class="workout-header" onclick="toggleManageOpen('${w.id}')">
@@ -1699,7 +1756,7 @@ function applyGoal(newGoal, fromIso) {
   render();
 }
 
-function toggleManageOpen(id) { state.manageOpenId = state.manageOpenId===id ? null : id; state.editingNameId=null; render(); }
+function toggleManageOpen(id) { state.manageOpenId = state.manageOpenId===id ? null : id; state.editingNameId=null; state.editingExKey=null; render(); }
 function startEditName(id) {
   state.editingNameId=id; if(state.manageOpenId!==id) state.manageOpenId=id;
   render(); setTimeout(()=>{ const inp=document.getElementById("name-inp-"+id); if(inp){inp.focus();inp.select();} },30);
@@ -1726,8 +1783,10 @@ function addExercise(workoutId) {
   const inp=document.getElementById("new-ex-"+workoutId); const val=inp?inp.value.trim():"";
   const restInp=document.getElementById("new-rest-"+workoutId);
   const rest=restInp?parseInt(restInp.value)||60:60;
+  const catEl=document.getElementById("new-cat-"+workoutId);
+  const category=catEl?catEl.value||null:null;
   if(!val) return; const w=getWorkout(workoutId);
-  if(w){ w.exercises.push({name:val, rest}); saveWorkouts(); render(); }
+  if(w){ w.exercises.push({name:val, rest, category}); saveWorkouts(); render(); }
 }
 function removeExercise(workoutId,i) {
   const w=getWorkout(workoutId);
@@ -1745,6 +1804,14 @@ function removeExercise(workoutId,i) {
 function updateExRest(workoutId,i,val) {
   const w=getWorkout(workoutId);
   if(w && w.exercises[i]){ w.exercises[i].rest=parseInt(val)||60; saveWorkouts(); }
+}
+function updateExField(workoutId,i,field,val) {
+  const w=getWorkout(workoutId);
+  if(!w || !w.exercises[i]) return;
+  if(field==="rest") w.exercises[i].rest=parseInt(val)||60;
+  else if(field==="name") { if(val.trim()) w.exercises[i].name=val.trim(); }
+  else if(field==="category") w.exercises[i].category=val||null;
+  saveWorkouts();
 }
 
 function exportCSV() {
