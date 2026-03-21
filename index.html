@@ -1252,6 +1252,7 @@ function renderWorkout() {
 
     const exCat = getExCategory(w, name) || getExCatByName(name);
     const catIconName = exCat ? getCategoryIcon(exCat) : null;
+    const isCardio = exCat === "cardio";
     const header = `<div class="ex-header" onclick="toggleExercise('${name}')">
       <div style="display:flex;align-items:center;gap:9px;min-width:0">
         ${statusDot}
@@ -1270,9 +1271,6 @@ function renderWorkout() {
     </div>`;
 
     if (!isOpen) return `<div class="card ${improved&&hasData?"improved":""}">${header}</div>`;
-
-
-    const isCardio = exCat === "cardio";
 
     const setsHtml = sets.map((s,i) => {
       const p = prevSets?.[i];
