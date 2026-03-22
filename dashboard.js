@@ -152,6 +152,7 @@ function renderDashboard() {
     prByCategory[cat].push([name, pr]);
   });
   const daysSince = getDaysSinceLastWorkout();
+  const barClass = state.dashboardAnimatedOnce ? "" : "anim-bar";
 
   const now = new Date();
 const dayOfWeek = now.getDay();
@@ -355,7 +356,7 @@ if (inProgress) {
           <span>${pctW}% מהדרך</span>
         </div>
         <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
-          <div class="anim-bar" style="width:${pctW}%;height:100%;background:var(--accent);border-radius:3px;animation-delay:0.7s"></div>
+          <div class="${barClass}" style="width:${pctW}%;height:100%;background:var(--accent);border-radius:3px;animation-delay:0.7s"></div>
         </div>
       </div>` : ""}
       <div style="display:flex;justify-content:space-between;align-items:center;${hasGoal?"border-top:1px solid var(--border);padding-top:10px":""}">
@@ -392,7 +393,7 @@ if (inProgress) {
         </div>
       </div>
       <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
-        <div class="anim-bar" style="width:${barW}%;height:100%;background:${color};border-radius:3px;animation-delay:0.75s"></div>
+        <div class="${barClass}" style="width:${barW}%;height:100%;background:${color};border-radius:3px;animation-delay:0.75s"></div>
       </div>
     </div>`;
   }
