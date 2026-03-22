@@ -101,7 +101,7 @@ function openLibraryAddExercise() {
       style="width:100%;font-family:inherit;font-size:14px;background:var(--surface);border:1px solid var(--border-med);border-radius:8px;padding:10px 12px;color:var(--text-primary);outline:none;box-sizing:border-box;direction:rtl;margin-bottom:14px">
     <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px">קטגוריה</label>
     <select id="lib-new-cat" style="width:100%;font-family:inherit;font-size:14px;background:var(--surface);border:1px solid var(--border-med);border-radius:8px;padding:10px 12px;color:var(--text-primary);outline:none;box-sizing:border-box;margin-bottom:20px">
-      <option value="">ללא קטגוריה</option>
+      <option value="" disabled selected>בחר קטגוריה</option>
       ${CATEGORIES.map(c=>`<option value="${c.id}">${c.label}</option>`).join("")}
     </select>
     <button id="lib-new-confirm" style="width:100%;padding:13px;background:var(--accent);color:#fff;border:none;border-radius:12px;cursor:pointer;font-size:15px;font-weight:700;font-family:inherit">הוסף למאגר</button>
@@ -114,6 +114,7 @@ function openLibraryAddExercise() {
     const name = sheet.querySelector("#lib-new-name").value.trim();
     const category = sheet.querySelector("#lib-new-cat").value || null;
     if (!name) { sheet.querySelector("#lib-new-name").style.borderColor = "var(--red)"; return; }
+    if (!category) { sheet.querySelector("#lib-new-cat").style.borderColor = "var(--red)"; showToast("יש לבחור קטגוריה"); return; }
     const exists = state.exerciseLibrary.find(e => e.name === name);
     if (exists) { showToast("תרגיל זה כבר קיים במאגר"); return; }
     overlay.remove();
