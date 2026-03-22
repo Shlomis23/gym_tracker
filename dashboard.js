@@ -293,49 +293,61 @@ if (inProgress) {
 
   // ── Weight card ──────────────────────────────────────────────────
   const latest = getLatestWeight();
-  const prev = getPrevWeight();
-  const wGoal = state.weightGoal || {};
-  const hasGoal = !!(wGoal.start_weight && wGoal.goal_weight);
+  const weightLogsAsc = getWeightLogsAsc();
   const dSinceW = daysSinceWeight();
   const needsUpdate = dSinceW === null || dSinceW >= 7;
+  const currentTime = new Date();
+  const todayIso = isoDateFromLocal(currentTime);
+  const latestLocalIso = latest ? isoDateFromLocal(new Date(latest.measured_at)) : null;
+  const hasTodayWeight = !!(latestLocalIso && latestLocalIso === todayIso);
+  const shouldPromptDaily = !hasTodayWeight;
 
   let weightCard = "";
-  if (!latest && !hasGoal) {
+  if (!latest) {
+    const emptyBtnBg = shouldPromptDaily ? "var(--orange)" : "var(--accent)";
+    const emptyBtnColor = "#fff";
+    const emptyBtnLabel = shouldPromptDaily ? "הזן משקל" : "הזן משקל ראשון";
     weightCard = `<div style="background:var(--surface);border:1px dashed var(--border-med);border-radius:14px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="showWeightModal()">
       <div>
-        <div style="font-size:13px;font-weight:600;color:var(--text-secondary)">מעקב משקל</div>
-        <div style="font-size:11px;color:var(--text-hint);margin-top:2px">לחץ להגדרת יעד ומשקל</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text-secondary)">My Weight</div>
+        <div style="font-size:11px;color:var(--text-hint);margin-top:2px">אין עדיין מדידות משקל שמורות</div>
       </div>
-      <button onclick="event.stopPropagation();showWeightModal()" style="background:var(--accent);border:none;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px;color:#fff;font-family:inherit;font-weight:600">הגדר</button>
-    </div>`;
-  } else if (!latest && hasGoal) {
-    weightCard = `<div style="background:var(--orange-bg);border:1px solid var(--orange);border-radius:14px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="showWeightModal()">
-      <div>
-        <div style="font-size:13px;font-weight:600;color:var(--orange)">יעד: ${wGoal.goal_weight} ק״ג</div>
-        <div style="font-size:11px;color:var(--orange);margin-top:2px">טרם הוזן משקל — לחץ לעדכון</div>
-      </div>
-      <button onclick="event.stopPropagation();showWeightModal()" style="background:var(--orange);border:none;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px;color:#fff;font-family:inherit;font-weight:600">הזן משקל</button>
+      <button onclick="event.stopPropagation();showWeightModal()" style="background:${emptyBtnBg};border:none;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px;color:${emptyBtnColor};font-family:inherit;font-weight:600">${emptyBtnLabel}</button>
     </div>`;
   } else if (latest) {
-    const diff = prev ? (latest.weight - prev.weight) : null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startOfCurrentWeek = new Date(today);
+    startOfCurrentWeek.setDate(today.getDate() - today.getDay()); // Sunday
+    const startOfPrevWeek = new Date(startOfCurrentWeek);
+    startOfPrevWeek.setDate(startOfCurrentWeek.getDate() - 7);
+    const endOfPrevWeek = new Date(startOfCurrentWeek);
+    endOfPrevWeek.setMilliseconds(-1); // Saturday 23:59:59.999
+
+    const prevWeekLogs = weightLogsAsc.filter(log => {
+      const dt = new Date(log.measured_at);
+      return dt >= startOfPrevWeek && dt <= endOfPrevWeek;
+    });
+    const prevWeekAvg = prevWeekLogs.length
+      ? prevWeekLogs.reduce((sum, log) => sum + Number(log.weight), 0) / prevWeekLogs.length
+      : null;
+
+    const diff = prevWeekAvg !== null ? (latest.weight - prevWeekAvg) : null;
     const diffColor = diff === null ? "var(--text-hint)" : diff < 0 ? "var(--green)" : diff > 0 ? "var(--red)" : "var(--text-hint)";
     const diffArrow = diff === null ? "" : diff < 0
       ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>`
       : diff > 0
       ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`
       : "";
-    const diffText = diff === null ? "" : `${diff > 0 ? "+" : ""}${diff.toFixed(1)} ק״ג מהשבוע הקודם`;
-    const startW = hasGoal ? wGoal.start_weight : latest.weight;
-    const goalW = hasGoal ? wGoal.goal_weight : null;
-    const totalToLose = hasGoal ? Math.abs(startW - goalW) : 0;
-    const lost = hasGoal ? Math.abs(startW - latest.weight) : 0;
-    const pctW = hasGoal && totalToLose > 0 ? Math.min(Math.round((lost / totalToLose) * 100), 100) : 0;
-    const remaining = hasGoal ? Math.abs(latest.weight - goalW).toFixed(1) : null;
+    const diffText = diff === null ? "" : `${diff > 0 ? "+" : ""}${diff.toFixed(1)} ק״ג מול ממוצע שבוע שעבר`;
     const cardBorder = needsUpdate ? "var(--orange)" : "var(--border)";
     const cardBg = needsUpdate ? "var(--orange-bg)" : "var(--card)";
+    const dailyBtn = hasTodayWeight
+      ? `<button onclick="event.preventDefault();event.stopPropagation();return false;" style="display:flex;align-items:center;gap:5px;background:var(--green);border:none;border-radius:8px;padding:6px 12px;cursor:default;font-size:12px;color:#fff;font-family:inherit;font-weight:600;opacity:0.95;pointer-events:none" disabled>שקילה יומית נרשמה</button>`
+      : `<button onclick="showWeightModal()" style="display:flex;align-items:center;gap:5px;background:${shouldPromptDaily ? "var(--orange)" : "var(--surface)"};border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;color:${shouldPromptDaily ? "#fff" : "var(--text-secondary)"};font-family:inherit;font-weight:600">הזן משקל</button>`;
 
     weightCard = `<div class="anim-card" style="background:${cardBg};border:1px solid ${cardBorder};border-radius:14px;padding:14px 16px;margin-bottom:16px;animation-delay:1.0s">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:${hasGoal?"12px":"8px"}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
         <div>
           <div class="stat-label">משקל נוכחי</div>
           <div style="display:flex;align-items:baseline;gap:5px;margin-top:3px">
@@ -344,26 +356,10 @@ if (inProgress) {
           </div>
           ${diff !== null ? `<div style="display:flex;align-items:center;gap:4px;margin-top:4px">${diffArrow}<span style="font-size:12px;color:${diffColor};font-weight:600">${diffText}</span></div>` : ""}
         </div>
-        ${hasGoal ? `<div style="text-align:left">
-          <div class="stat-label">יעד</div>
-          <div style="font-size:18px;font-weight:700;color:var(--text-primary);margin-top:2px">${goalW}</div>
-          ${remaining !== null ? `<div style="font-size:11px;color:var(--text-hint);margin-top:2px">נותרו ${remaining} ק״ג</div>` : ""}
-        </div>` : ""}
       </div>
-      ${hasGoal ? `<div style="margin-bottom:10px">
-        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-hint);margin-bottom:4px">
-          <span>התחלה: ${startW} ק״ג</span>
-          <span>${pctW}% מהדרך</span>
-        </div>
-        <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
-          <div class="${barClass}" style="width:${pctW}%;height:100%;background:var(--accent);border-radius:3px;animation-delay:0.7s"></div>
-        </div>
-      </div>` : ""}
-      <div style="display:flex;justify-content:space-between;align-items:center;${hasGoal?"border-top:1px solid var(--border);padding-top:10px":""}">
-        <span style="font-size:11px;color:var(--text-hint)">${needsUpdate ? "לא נשקלת השבוע" : "עודכן לפני " + dSinceW + " ימים (" + formatDate(latest.date) + ")"}</span>
-        <button onclick="showWeightModal()" style="display:flex;align-items:center;gap:5px;background:${needsUpdate?"var(--orange)":"var(--surface)"};border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;color:${needsUpdate?"#fff":"var(--text-secondary)"};font-family:inherit;font-weight:600">
-          ${needsUpdate ? "הזן משקל שבועי" : "עדכן משקל"}
-        </button>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:11px;color:var(--text-hint)">${hasTodayWeight ? "השקילה היומית הוזנה להיום" : (needsUpdate ? "לא נשקלת השבוע" : "עודכן לפני " + dSinceW + " ימים (" + formatWeightDate(latest) + ")")}</span>
+        ${dailyBtn}
       </div>
     </div>`;
   }

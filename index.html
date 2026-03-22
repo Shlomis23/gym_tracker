@@ -75,6 +75,11 @@ async function sbPost(path, body) {
   if (!r.ok) throw new Error(await r.text());
   return r.json();
 }
+async function sbPatch(path, body) {
+  const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, { method:"PATCH", headers: SB_HEADERS, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
 async function sbDelete(path) {
   const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, { method:"DELETE", headers: SB_HEADERS });
   if (!r.ok) throw new Error(await r.text());
@@ -145,19 +150,119 @@ async function deleteSessionFromSupabase(localId) {
 
 async function loadWeightData() {
   try {
-    const logs = await sbGet("weight_logs?select=*&order=date.asc");
-    state.weightLogs = logs || [];
+    const logs = await sbGet("body_weight_logs?select=*&order=measured_at.asc");
+    state.weightLogs = (logs || []).map(mapWeightLog);
     const goals = await sbGet("weight_goal?select=*&order=updated_at.desc&limit=1");
     if (goals && goals.length) state.weightGoal = goals[0];
   } catch(e) { console.error("Weight load failed:", e); }
 }
 
-async function saveWeightLog(weight) {
+function mapWeightLog(log) {
+  return {
+    id: log.id,
+    weight: Number(log.weight),
+    measured_at: log.measured_at || log.date || new Date().toISOString(),
+    measured_date: log.measured_date || (log.date ? log.date.slice(0, 10) : new Date().toISOString().slice(0,10)),
+    note: log.note || ""
+  };
+}
+
+function getWeightLogsAsc() {
+  return [...state.weightLogs]
+    .map(mapWeightLog)
+    .sort((a, b) => new Date(a.measured_at) - new Date(b.measured_at));
+}
+
+function formatWeightDate(log) {
+  return formatDate(log.measured_at || log.date);
+}
+
+function isoDateFromLocal(dateLike) {
+  const dt = new Date(dateLike);
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, "0");
+  const d = String(dt.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function buildDateSelector(prefix, isoDate) {
+  const [yStr, mStr, dStr] = (isoDate || isoDateFromLocal(new Date())).split("-");
+  const year = parseInt(yStr, 10);
+  const month = parseInt(mStr, 10);
+  const day = parseInt(dStr, 10);
+  const currentYear = new Date().getFullYear();
+
+  const yearOptions = Array.from({ length: 8 }, (_, i) => currentYear - i)
+    .map(y => `<option value="${y}" ${y === year ? "selected" : ""}>${y}</option>`)
+    .join("");
+  const monthOptions = Array.from({ length: 12 }, (_, i) => i + 1)
+    .map(m => `<option value="${m}" ${m === month ? "selected" : ""}>${m}</option>`)
+    .join("");
+  const maxDays = new Date(year, month, 0).getDate();
+  const dayOptions = Array.from({ length: maxDays }, (_, i) => i + 1)
+    .map(d => `<option value="${d}" ${d === day ? "selected" : ""}>${d}</option>`)
+    .join("");
+
+  return `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+      <select id="${prefix}-day" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit">${dayOptions}</select>
+      <select id="${prefix}-month" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit">${monthOptions}</select>
+      <select id="${prefix}-year" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit">${yearOptions}</select>
+    </div>
+  `;
+}
+
+function readIsoDateFromSelector(container, prefix) {
+  const day = parseInt(container.querySelector(`#${prefix}-day`)?.value || "", 10);
+  const month = parseInt(container.querySelector(`#${prefix}-month`)?.value || "", 10);
+  const year = parseInt(container.querySelector(`#${prefix}-year`)?.value || "", 10);
+  if (!day || !month || !year) return null;
+  const maxDays = new Date(year, month, 0).getDate();
+  const normalizedDay = Math.min(day, maxDays);
+  return `${year}-${String(month).padStart(2, "0")}-${String(normalizedDay).padStart(2, "0")}`;
+}
+
+async function saveWeightLog(weight, measuredAtIso, note) {
   try {
-    const row = await sbPost("weight_logs", { weight, date: new Date().toISOString() });
-    state.weightLogs.push(row[0]);
+    const path = "body_weight_logs?on_conflict=measured_date";
+    const headers = { ...SB_HEADERS, Prefer: "return=representation,resolution=merge-duplicates" };
+    const payload = [{ weight, measured_at: measuredAtIso || new Date().toISOString(), note: note || "" }];
+    const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload)
+    });
+    if (!r.ok) throw new Error(await r.text());
+    const rows = await r.json();
+    const saved = mapWeightLog(rows[0]);
+    const idx = state.weightLogs.findIndex(l => l.id === saved.id);
+    if (idx >= 0) state.weightLogs[idx] = saved;
+    else state.weightLogs.push(saved);
+    state.weightLogs = getWeightLogsAsc();
     showToast("המשקל נשמר ✓");
+    return saved;
   } catch(e) { console.error("Weight save failed:", e); showToast("שגיאה בשמירת משקל ⚠️"); throw e; }
+}
+
+async function updateWeightLog(id, weight, measuredAtIso, note) {
+  try {
+    const rows = await sbPatch("body_weight_logs?id=eq." + encodeURIComponent(id), {
+      weight,
+      measured_at: measuredAtIso,
+      note: note || ""
+    });
+    if (!rows || !rows.length) throw new Error("No row returned after update");
+    const updated = mapWeightLog(rows[0]);
+    const idx = state.weightLogs.findIndex(l => l.id === id);
+    if (idx >= 0) state.weightLogs[idx] = updated;
+    state.weightLogs = getWeightLogsAsc();
+    showToast("השקילה עודכנה ✓");
+    return updated;
+  } catch(e) {
+    console.error("Weight update failed:", e);
+    showToast("שגיאה בעדכון שקילה ⚠️");
+    throw e;
+  }
 }
 
 async function saveWeightGoal(startWeight, goalWeight) {
@@ -170,27 +275,32 @@ async function saveWeightGoal(startWeight, goalWeight) {
 
 async function deleteWeightLog(id) {
   try {
-    await sbDelete("weight_logs?id=eq." + id);
+    await sbDelete("body_weight_logs?id=eq." + id);
     state.weightLogs = state.weightLogs.filter(l => l.id !== id);
+    if (!state.weightLogs.length) {
+      state.weightGoal = { start_weight: null, goal_weight: null };
+    }
     render();
   } catch(e) { console.error("Weight delete failed:", e); showToast("שגיאה במחיקה"); }
 }
 
 function getLatestWeight() {
-  if (!state.weightLogs.length) return null;
-  return state.weightLogs[state.weightLogs.length - 1];
+  const logs = getWeightLogsAsc();
+  if (!logs.length) return null;
+  return logs[logs.length - 1];
 }
 
 function getPrevWeight() {
-  if (state.weightLogs.length < 2) return null;
-  return state.weightLogs[state.weightLogs.length - 2];
+  const logs = getWeightLogsAsc();
+  if (logs.length < 2) return null;
+  return logs[logs.length - 2];
 }
 
 function daysSinceWeight() {
   const latest = getLatestWeight();
   if (!latest) return null;
   const today = new Date(); today.setHours(0,0,0,0);
-  const latestDay = new Date(latest.date); latestDay.setHours(0,0,0,0);
+  const latestDay = new Date(latest.measured_at); latestDay.setHours(0,0,0,0);
   return Math.round((today - latestDay) / (1000 * 60 * 60 * 24));
 }
 
@@ -209,112 +319,114 @@ function buildWrap(mb) {
   const d = document.createElement("div"); d.style.marginBottom = mb || "16px"; return d;
 }
 
-function showWeightModal(changeGoal) {
+function showGoalModal() {
+  const wGoal = state.weightGoal || {};
+  document.getElementById("goal-modal")?.remove();
+
+  const overlay = document.createElement("div");
+  overlay.id = "goal-modal";
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2100;display:flex;align-items:flex-end;justify-content:center";
+  const sheet = document.createElement("div");
+  sheet.style.cssText = "background:var(--card);border-radius:22px 22px 0 0;padding:20px 16px 16px;width:100%;max-width:430px;box-sizing:border-box;direction:rtl;max-height:86vh;overflow:auto";
+
+  sheet.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+      <div>
+        <div style="font-size:17px;font-weight:800;color:var(--text-primary)">עריכת יעד</div>
+        <div style="font-size:12px;color:var(--text-hint);margin-top:3px">הגדר משקל התחלתי ויעד</div>
+      </div>
+      <button id="goal-close" style="width:30px;height:30px;border:none;background:var(--surface);border-radius:999px;cursor:pointer;color:var(--text-hint);font-size:18px">×</button>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:12px;margin-bottom:10px">
+      <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">משקל התחלתי (ק״ג)</label>
+      <input id="goal-start-inp" type="number" inputmode="decimal" step="0.1" placeholder="לדוגמה 91.0" value="${wGoal.start_weight ?? ""}" style="width:100%;box-sizing:border-box;display:block;padding:11px 12px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;font-size:16px">
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:12px;margin-bottom:14px">
+      <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">יעד משקל (ק״ג)</label>
+      <input id="goal-target-inp" type="number" inputmode="decimal" step="0.1" placeholder="לדוגמה 78.0" value="${wGoal.goal_weight ?? ""}" style="width:100%;box-sizing:border-box;display:block;padding:11px 12px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;font-size:16px">
+    </div>
+    <button id="goal-save-btn" class="btn-primary" style="margin-bottom:8px">שמור יעד</button>
+    <button id="goal-cancel-btn" style="width:100%;padding:12px;background:var(--surface);border:1px solid var(--border-med);color:var(--text-secondary);border-radius:10px;font-family:inherit;cursor:pointer">ביטול</button>
+  `;
+
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+  sheet.querySelector("#goal-close").addEventListener("click", () => overlay.remove());
+  sheet.querySelector("#goal-cancel-btn").addEventListener("click", () => overlay.remove());
+  sheet.querySelector("#goal-save-btn").addEventListener("click", async () => {
+    const startVal = parseFloat(sheet.querySelector("#goal-start-inp").value);
+    const goalVal = parseFloat(sheet.querySelector("#goal-target-inp").value);
+    if (!Number.isFinite(startVal) || !Number.isFinite(goalVal) || startVal <= 0 || goalVal <= 0) {
+      showToast("הזן משקל התחלתי ויעד תקינים");
+      return;
+    }
+    try {
+      await saveWeightGoal(startVal, goalVal);
+      overlay.remove();
+      render();
+      showToast("היעד נשמר ✓");
+    } catch (_) {}
+  });
+}
+
+function showWeightModal() {
   const latest = getLatestWeight();
-  const wGoal = state.weightGoal;
-  const hasGoal = !!(wGoal && wGoal.start_weight && wGoal.goal_weight);
-  const isChangingGoal = !!changeGoal;
+  const todayIso = isoDateFromLocal(new Date());
 
   document.getElementById("weight-modal")?.remove();
 
   const overlay = document.createElement("div");
   overlay.id = "weight-modal";
-  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:flex-end;justify-content:center";
-
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2000;display:flex;align-items:flex-end;justify-content:center";
   const sheet = document.createElement("div");
-  sheet.style.cssText = "background:var(--card);border-radius:20px 20px 0 0;padding:24px 20px;width:100%;max-width:420px;direction:rtl";
+  sheet.style.cssText = "background:var(--card);border-radius:22px 22px 0 0;padding:20px 16px 16px;width:100%;max-width:430px;box-sizing:border-box;direction:rtl;max-height:86vh;overflow:auto";
 
-  // Header
-  const header = document.createElement("div");
-  header.style.cssText = "display:flex;justify-content:space-between;align-items:center;margin-bottom:20px";
-  const titleEl = document.createElement("span");
-  titleEl.style.cssText = "font-weight:700;font-size:16px;color:var(--text-primary)";
-  titleEl.textContent = isChangingGoal ? "שינוי יעד" : "עדכון משקל";
-  header.appendChild(titleEl);
-  const closeBtn = document.createElement("button");
-  closeBtn.textContent = "×";
-  closeBtn.style.cssText = "background:none;border:none;cursor:pointer;color:var(--text-hint);font-size:22px;line-height:1";
-  closeBtn.addEventListener("click", () => overlay.remove());
-  header.appendChild(closeBtn);
-  sheet.appendChild(header);
-
-  let currentInp = null;
-  let startInp = null;
-  let goalInp = null;
-
-  if (!isChangingGoal) {
-    // Current weight
-    const cWrap = buildWrap("16px");
-    cWrap.appendChild(buildLabel("משקל נוכחי (ק״ג)"));
-    currentInp = buildInp("number", "0.1", latest ? String(latest.weight) : "85.0", "22px");
-    currentInp.style.fontWeight = "700";
-    cWrap.appendChild(currentInp);
-    sheet.appendChild(cWrap);
-  }
-
-  if (!hasGoal || isChangingGoal) {
-    // Start weight
-    const sWrap = buildWrap("12px");
-    sWrap.appendChild(buildLabel("משקל התחלתי (ק״ג)"));
-    startInp = buildInp("number", "0.1", hasGoal ? String(wGoal.start_weight) : "91.0", "16px");
-    if (hasGoal) startInp.value = wGoal.start_weight;
-    sWrap.appendChild(startInp);
-    sheet.appendChild(sWrap);
-  }
-
-  // Goal weight
-  const gWrap = buildWrap("16px");
-  const gLabelText = hasGoal && !isChangingGoal
-    ? `יעד משקל (ק״ג) <span style="font-weight:400;color:var(--text-hint)">— נוכחי: ${wGoal.goal_weight}</span>`
-    : "יעד משקל (ק״ג)";
-  gWrap.appendChild(buildLabel(gLabelText));
-  goalInp = buildInp("number", "0.1", hasGoal ? String(wGoal.goal_weight) : "78.0", "16px");
-  if (hasGoal && isChangingGoal) goalInp.value = wGoal.goal_weight;
-  gWrap.appendChild(goalInp);
-  sheet.appendChild(gWrap);
-
-  // Submit
-  const submitBtn = document.createElement("button");
-  submitBtn.textContent = "שמור";
-  submitBtn.style.cssText = "width:100%;padding:14px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer;font-size:15px;font-weight:700;font-family:inherit;margin-bottom:" + (hasGoal && !isChangingGoal ? "0" : "0");
-  submitBtn.addEventListener("click", async () => {
-    try {
-      if (isChangingGoal) {
-        const newStart = parseFloat(startInp.value);
-        const newGoal = parseFloat(goalInp.value);
-        if (!newStart || !newGoal || isNaN(newStart) || isNaN(newGoal)) { showToast("הזן ערכים תקינים"); return; }
-        await saveWeightGoal(newStart, newGoal);
-        overlay.remove(); haptic("medium"); render(); showToast("היעד עודכן ✓");
-        return;
-      }
-      const current = parseFloat(currentInp.value);
-      if (!current || isNaN(current)) { showToast("הזן משקל תקין"); return; }
-      const goalVal = parseFloat(goalInp.value);
-      const startVal = startInp ? parseFloat(startInp.value) : null;
-      if (!hasGoal) {
-        if (!startVal || !goalVal || isNaN(startVal) || isNaN(goalVal)) { showToast("הזן משקל התחלתי ויעד"); return; }
-        await saveWeightGoal(startVal, goalVal);
-      } else if (goalVal && !isNaN(goalVal)) {
-        await saveWeightGoal(wGoal.start_weight, goalVal);
-      }
-      await saveWeightLog(current);
-      overlay.remove(); haptic("medium"); render(); showToast("המשקל עודכן ✓");
-    } catch(e) { console.error("save error:", e); showToast("שגיאה: " + e.message); }
-  });
-  sheet.appendChild(submitBtn);
-
-  // Change goal button (only when has goal and not already changing)
-  if (hasGoal && !isChangingGoal) {
-    const changeBtn = document.createElement("button");
-    changeBtn.textContent = "שנה יעד / משקל התחלתי";
-    changeBtn.style.cssText = "width:100%;padding:11px;background:transparent;color:var(--text-hint);border:none;cursor:pointer;font-size:13px;font-family:inherit;margin-top:8px;text-decoration:underline";
-    changeBtn.addEventListener("click", () => { overlay.remove(); showWeightModal(true); });
-    sheet.appendChild(changeBtn);
-  }
+  sheet.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+      <div>
+        <div style="font-size:17px;font-weight:800;color:var(--text-primary)">עדכון משקל יומי</div>
+        <div style="font-size:12px;color:var(--text-hint);margin-top:3px">שקילה אחת ביום נשמרת אוטומטית</div>
+      </div>
+      <button id="weight-close" style="width:30px;height:30px;border:none;background:var(--surface);border-radius:999px;cursor:pointer;color:var(--text-hint);font-size:18px">×</button>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:12px;margin-bottom:10px">
+      <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">תאריך מדידה</label>
+      ${buildDateSelector("daily-date", todayIso)}
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:12px;margin-bottom:10px">
+      <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">משקל נוכחי (ק״ג)</label>
+      <input id="daily-weight-inp" type="number" inputmode="decimal" step="0.1" placeholder="הכנס משקל בק״ג" value="${latest ? latest.weight : ""}" style="width:100%;box-sizing:border-box;display:block;padding:12px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;font-size:20px;font-weight:700">
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:12px;margin-bottom:14px">
+      <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">הערה (אופציונלי)</label>
+      <textarea id="daily-note-inp" rows="2" style="width:100%;box-sizing:border-box;display:block;padding:10px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;resize:vertical"></textarea>
+    </div>
+    <button id="daily-save-btn" class="btn-primary" style="margin-bottom:8px">שמור שקילה</button>
+    <button id="daily-cancel-btn" style="width:100%;padding:12px;background:transparent;border:none;color:var(--text-hint);font-family:inherit;cursor:pointer">סגור</button>
+  `;
 
   overlay.appendChild(sheet);
   document.body.appendChild(overlay);
-  setTimeout(() => (currentInp || startInp)?.focus(), 100);
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+  sheet.querySelector("#weight-close").addEventListener("click", () => overlay.remove());
+  sheet.querySelector("#daily-cancel-btn").addEventListener("click", () => overlay.remove());
+  sheet.querySelector("#daily-save-btn").addEventListener("click", async () => {
+    const dateVal = readIsoDateFromSelector(sheet, "daily-date");
+    const weightVal = parseFloat(sheet.querySelector("#daily-weight-inp").value);
+    const noteVal = sheet.querySelector("#daily-note-inp").value.trim();
+    if (!dateVal || !Number.isFinite(weightVal) || weightVal <= 0) {
+      showToast("הזן תאריך ומשקל תקינים");
+      return;
+    }
+    const measuredAt = new Date(`${dateVal}T09:00:00`).toISOString();
+    try {
+      await saveWeightLog(weightVal, measuredAt, noteVal);
+      overlay.remove();
+      haptic("medium");
+      render();
+    } catch (_) {}
+  });
 }
 
 
@@ -642,11 +754,11 @@ function renderWorkout() {
       return `<div style="margin-bottom:${isLast?"8px":"14px"}">
         <div style="display:flex;align-items:center;gap:8px">
           <span style="min-width:16px;font-size:12px;color:${isFailed?"var(--red)":"var(--text-hint)"};font-weight:600">${s.num}</span>
-          <div style="flex:1;display:flex;gap:8px">
-            <div style="flex:1">
+          <div style="flex:1;display:flex;gap:6px;align-items:center;min-width:0;justify-content:center">
+            <div style="flex:0 1 92px;min-width:0">
               <input class="inp" type="number" inputmode="decimal" placeholder="${p?p.weight:"ק״ג"}" value="${s.weight||""}" style="${isFailed?"border-color:var(--red);color:var(--red)":s.weight>0?"":"color:var(--text-hint)"}" oninput="updateSet(decodeURIComponent('${safeNameArg}'),${i},'weight',this.value)">
             </div>
-            <div style="flex:1">
+            <div style="flex:0 1 92px;min-width:0">
               <input class="inp" type="number" inputmode="numeric" placeholder="${p?p.reps+" חז׳":"חז׳"}" value="${s.reps||""}" style="${isFailed?"border-color:var(--red);color:var(--red)":""}" oninput="updateSet(decodeURIComponent('${safeNameArg}'),${i},'reps',this.value)">
             </div>
             <div style="width:28px;display:flex;align-items:center;justify-content:center">${icon}</div>
@@ -664,9 +776,9 @@ function renderWorkout() {
         </div>`
       : `<div style="display:flex;margin-bottom:12px">
           <span style="flex:0 0 24px"></span>
-          <div style="flex:1;display:flex;gap:8px">
-            <span style="flex:1;text-align:center;font-size:11px;color:var(--text-hint);font-weight:600">משקל ק״ג</span>
-            <span style="flex:1;text-align:center;font-size:11px;color:var(--text-hint);font-weight:600">חזרות</span>
+          <div style="flex:1;display:flex;gap:6px;align-items:center;justify-content:center">
+            <span style="flex:0 1 92px;text-align:center;font-size:11px;color:var(--text-hint);font-weight:600">משקל ק״ג</span>
+            <span style="flex:0 1 92px;text-align:center;font-size:11px;color:var(--text-hint);font-weight:600">חזרות</span>
             <span style="width:28px"></span>
           </div>
         </div>`;
@@ -841,6 +953,133 @@ function showConfirmSheet(title, subtitle, confirmLabel, cancelLabel, onConfirm,
   if (cancelBtn) cancelBtn.addEventListener("click", () => { overlay.remove(); onCancel && onCancel(); });
 }
 
+function getWeightRangeDays() {
+  return Number(state.weightRangeDays || 90);
+}
+
+function getWeightRangeLogs(days) {
+  const logs = getWeightLogsAsc();
+  if (!logs.length) return [];
+  if (days === 0) return logs;
+  const lastDate = new Date(logs[logs.length - 1].measured_at);
+  const threshold = new Date(lastDate);
+  threshold.setDate(threshold.getDate() - (days - 1));
+  return logs.filter(l => new Date(l.measured_at) >= threshold);
+}
+
+function getWeightMovingAverage(logs, windowSize) {
+  return logs.map((log, idx) => {
+    const from = Math.max(0, idx - windowSize + 1);
+    const subset = logs.slice(from, idx + 1);
+    const avg = subset.reduce((sum, item) => sum + Number(item.weight), 0) / subset.length;
+    return { ...log, movingAvg: Number(avg.toFixed(2)) };
+  });
+}
+
+function renderWeightChart(series) {
+  if (series.length < 2) {
+    return `<div style="height:190px;display:flex;align-items:center;justify-content:center;color:var(--text-hint);font-size:13px">צריך לפחות 2 שקילות להצגת גרף</div>`;
+  }
+  const width = 1000;
+  const height = 220;
+  const pad = 28;
+  const minY = Math.min(...series.map(p => Math.min(p.weight, p.movingAvg)));
+  const maxY = Math.max(...series.map(p => Math.max(p.weight, p.movingAvg)));
+  const spanY = Math.max(maxY - minY, 0.1);
+  const stepX = (width - pad * 2) / Math.max(series.length - 1, 1);
+  const points = series.map((p, i) => {
+    const x = pad + i * stepX;
+    const yW = height - pad - ((p.weight - minY) / spanY) * (height - pad * 2);
+    const yAvg = height - pad - ((p.movingAvg - minY) / spanY) * (height - pad * 2);
+    return { ...p, x, yW, yAvg };
+  });
+  const lineWeight = points.map(p => `${p.x},${p.yW}`).join(" ");
+  const lineAvg = points.map(p => `${p.x},${p.yAvg}`).join(" ");
+  const first = points[0];
+  const last = points[points.length - 1];
+  return `
+    <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" style="display:block;width:100%;height:190px;background:var(--surface);border:1px solid var(--border-soft);border-radius:12px;overflow:hidden">
+      <polyline points="${lineWeight}" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round"></polyline>
+      <polyline points="${lineAvg}" fill="none" stroke="var(--green)" stroke-width="2.4" stroke-dasharray="6 4" stroke-linecap="round"></polyline>
+      ${points.map(p => `<circle cx="${p.x}" cy="${p.yW}" r="3.6" fill="var(--accent)"></circle>`).join("")}
+      ${points.map(p => `<text x="${p.x}" y="${Math.max(14, p.yW - 9)}" font-size="11" font-weight="700" fill="var(--text-primary)" text-anchor="middle">${Number(p.weight).toFixed(1)}</text>`).join("")}
+      <text x="${first.x}" y="${height - 8}" font-size="11" fill="var(--text-hint)" text-anchor="middle">${formatDate(first.measured_at)}</text>
+      <text x="${last.x}" y="${height - 8}" font-size="11" fill="var(--text-hint)" text-anchor="middle">${formatDate(last.measured_at)}</text>
+    </svg>
+  `;
+}
+
+async function openWeightEntryModal(logId) {
+  const logs = getWeightLogsAsc();
+  const editing = logId ? logs.find(l => l.id === logId) : null;
+  const todayIso = isoDateFromLocal(new Date());
+  const defaultDate = editing ? isoDateFromLocal(editing.measured_at) : todayIso;
+  const defaultWeight = editing ? editing.weight : (getLatestWeight()?.weight || "");
+  const defaultNote = editing?.note || "";
+
+  document.getElementById("weight-entry-modal")?.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "weight-entry-modal";
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:2100;display:flex;align-items:flex-end;justify-content:center";
+  overlay.innerHTML = `
+    <div style="background:var(--card);border-radius:22px 22px 0 0;padding:20px 16px 16px;width:100%;max-width:430px;box-sizing:border-box;direction:rtl;animation:slideUp 0.28s ease both;max-height:86vh;overflow:auto">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+        <div>
+          <div style="font-size:17px;font-weight:800;color:var(--text-primary)">${editing ? "עריכת שקילה" : "הוספת שקילה"}</div>
+          <div style="font-size:12px;color:var(--text-hint);margin-top:3px">ניהול שקילה לפי תאריך</div>
+        </div>
+        <button id="weight-close" style="width:30px;height:30px;border:none;background:var(--surface);border-radius:999px;cursor:pointer;color:var(--text-hint);font-size:18px">×</button>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:12px;margin-bottom:10px">
+        <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">תאריך מדידה</label>
+        ${buildDateSelector("entry-date", defaultDate)}
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:12px;margin-bottom:10px">
+        <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">משקל (ק״ג)</label>
+        <input id="weight-value-inp" type="number" inputmode="decimal" step="0.1" min="1" value="${defaultWeight}" style="width:100%;box-sizing:border-box;display:block;padding:12px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;font-size:20px;font-weight:700">
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:12px;margin-bottom:14px">
+        <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">הערה (אופציונלי)</label>
+        <textarea id="weight-note-inp" rows="2" style="width:100%;box-sizing:border-box;display:block;padding:10px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;resize:vertical">${escapeHtml(defaultNote)}</textarea>
+      </div>
+      <button id="weight-save-btn" class="btn-primary" style="margin-bottom:8px">${editing ? "שמור שינויים" : "שמור שקילה"}</button>
+      <button id="weight-cancel-btn" style="width:100%;padding:12px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;font-family:inherit;cursor:pointer">ביטול</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+  overlay.querySelector("#weight-close").addEventListener("click", () => overlay.remove());
+  overlay.querySelector("#weight-cancel-btn").addEventListener("click", () => overlay.remove());
+  overlay.querySelector("#weight-save-btn").addEventListener("click", async () => {
+    const dateVal = readIsoDateFromSelector(overlay, "entry-date");
+    const weightVal = parseFloat(overlay.querySelector("#weight-value-inp").value);
+    const noteVal = overlay.querySelector("#weight-note-inp").value.trim();
+    if (!dateVal || !Number.isFinite(weightVal) || weightVal <= 0) {
+      showToast("נא למלא תאריך ומשקל תקין");
+      return;
+    }
+    const measuredAt = new Date(`${dateVal}T09:00:00`).toISOString();
+    const matchedDay = logs.find(l => l.measured_date === dateVal);
+    try {
+      if (editing) {
+        if (matchedDay && matchedDay.id !== editing.id) {
+          showToast("כבר קיימת שקילה בתאריך הזה");
+          return;
+        }
+        await updateWeightLog(editing.id, weightVal, measuredAt, noteVal);
+      } else if (matchedDay) {
+        await updateWeightLog(matchedDay.id, weightVal, measuredAt, noteVal);
+        showToast("עודכן במקום רשומה קיימת לאותו יום ✓");
+      } else {
+        await saveWeightLog(weightVal, measuredAt, noteVal);
+      }
+      overlay.remove();
+      render();
+    } catch (_) {}
+  });
+}
+
 function renderHistory() {
   const tab = state.historyTab || "workouts";
   const tabs = `<div style="display:flex;gap:0;margin:0 14px 14px;background:var(--surface);border-radius:10px;padding:3px">
@@ -854,33 +1093,65 @@ function renderHistory() {
   }
 
   if (tab === "weight") {
-    const logs = [...state.weightLogs].reverse();
-    if (!logs.length) return `<div style="padding:0 14px">${tabs}<div style="padding:40px;text-align:center;color:var(--text-hint);font-size:14px">אין נתוני משקל עדיין</div></div>`;
-    const rows = logs.map((log, ri) => {
-      const prev = logs[ri + 1];
+    const allLogs = getWeightLogsAsc();
+    if (!allLogs.length) {
+      return `<div style="padding:0 14px">${tabs}
+        <div class="card" style="padding:26px 18px;text-align:center">
+          <div style="font-size:15px;color:var(--text-secondary);margin-bottom:12px">אין נתוני משקל עדיין</div>
+          <button onclick="openWeightEntryModal()" class="btn-primary" style="max-width:220px;margin:0 auto">הוסף שקילה ראשונה</button>
+        </div>
+      </div>`;
+    }
+    const range = getWeightRangeDays();
+    const filtered = getWeightRangeLogs(range);
+    const withAvg = getWeightMovingAverage(filtered, 7);
+    const latest = filtered[filtered.length - 1];
+    const first = filtered[0];
+    const delta = latest.weight - first.weight;
+    const avg7 = withAvg[withAvg.length - 1]?.movingAvg ?? latest.weight;
+    const summaryCards = `
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:10px">
+        <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">אחרון</div><div style="font-size:19px;font-weight:700">${latest.weight.toFixed(1)}</div></div>
+        <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">ממוצע 7 ימים</div><div style="font-size:19px;font-weight:700;color:var(--green)">${avg7.toFixed(1)}</div></div>
+        <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">שינוי בטווח</div><div style="font-size:19px;font-weight:700;color:${delta < 0 ? "var(--green)" : delta > 0 ? "var(--red)" : "var(--text-primary)"}">${delta > 0 ? "+" : ""}${delta.toFixed(1)}</div></div>
+      </div>
+    `;
+    const rangeButtons = [
+      { days: 7, label: "7 ימים" },
+      { days: 30, label: "30 ימים" },
+      { days: 90, label: "90 ימים" },
+      { days: 180, label: "6 חודשים" },
+      { days: 365, label: "שנה" },
+      { days: 0, label: "הכול" }
+    ].map(r => `<button onclick="state.weightRangeDays=${r.days};render()" style="padding:7px 10px;border-radius:999px;border:1px solid ${range===r.days?"var(--accent)":"var(--border-med)"};background:${range===r.days?"var(--accent)":"var(--surface)"};color:${range===r.days?"#fff":"var(--text-secondary)"};font-family:inherit;font-size:11px;cursor:pointer">${r.label}</button>`).join("");
+    const rows = [...withAvg].reverse().map((log, ri, arr) => {
+      const prev = arr[ri + 1];
       const diff = prev ? (log.weight - prev.weight) : null;
       const diffColor = diff === null ? "" : diff < 0 ? "var(--green)" : diff > 0 ? "var(--red)" : "var(--text-hint)";
       const diffText = diff === null ? "" : `${diff > 0 ? "+" : ""}${diff.toFixed(1)} ק״ג`;
-      const diffIcon = diff === null ? "" : diff < 0
-        ? `<i data-lucide="trending-down" style="width:13px;height:13px;color:var(--green)"></i>`
-        : diff > 0 ? `<i data-lucide="trending-up" style="width:13px;height:13px;color:var(--red)"></i>`
-        : `<i data-lucide="minus" style="width:13px;height:13px;color:var(--text-hint)"></i>`;
-      return `<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px">
+      return `<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px">
         <div>
-          <div style="font-size:22px;font-weight:700;color:var(--text-primary);line-height:1">${log.weight} <span style="font-size:13px;font-weight:400;color:var(--text-hint)">ק״ג</span></div>
-          <div style="font-size:11px;color:var(--text-hint);margin-top:3px;display:flex;align-items:center;gap:3px">
-            <i data-lucide="clock" style="width:10px;height:10px"></i> ${formatDate(log.date)}
-          </div>
+          <div style="font-size:18px;font-weight:700">${log.weight.toFixed(1)} <span style="font-size:12px;font-weight:500;color:var(--text-hint)">ק״ג</span></div>
+          <div style="font-size:11px;color:var(--text-hint);margin-top:2px">${formatWeightDate(log)} · ממוצע 7י: ${log.movingAvg.toFixed(1)}</div>
+          ${log.note ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:3px">${escapeHtml(log.note)}</div>` : ""}
         </div>
-        <div style="display:flex;align-items:center;gap:10px">
-          ${diff !== null ? `<div style="display:flex;align-items:center;gap:3px">${diffIcon}<span style="font-size:12px;font-weight:600;color:${diffColor}">${diffText}</span></div>` : ""}
-          <button data-del-weight="${log.id}" class="del-btn">
-            <i data-lucide="trash-2" style="width:15px;height:15px"></i>
-          </button>
+        <div style="display:flex;align-items:center;gap:8px">
+          ${diff !== null ? `<span style="font-size:11px;font-weight:700;color:${diffColor}">${diffText}</span>` : ""}
+          <button onclick="openWeightEntryModal('${log.id}')" class="icon-btn"><i data-lucide="pencil" style="width:14px;height:14px"></i></button>
+          <button data-del-weight="${log.id}" class="del-btn"><i data-lucide="trash-2" style="width:14px;height:14px"></i></button>
         </div>
       </div>`;
     }).join("");
-    return `<div style="padding:14px 14px 0">${tabs}${rows}</div>`;
+    return `<div style="padding:14px 14px 0">${tabs}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-size:13px;color:var(--text-secondary)">My Weight</div>
+        <button onclick="openWeightEntryModal()" class="btn-primary" style="width:auto;padding:8px 12px;font-size:12px">הוסף</button>
+      </div>
+      <div style="display:flex;gap:6px;overflow:auto;margin-bottom:10px;padding-bottom:4px">${rangeButtons}</div>
+      ${summaryCards}
+      ${renderWeightChart(withAvg)}
+      <div style="margin-top:10px;display:grid;gap:8px;padding-bottom:12px">${rows}</div>
+    </div>`;
   }
 
   const exportBtn = `<div style="padding:0 0 10px;display:flex;justify-content:flex-start">
@@ -1235,6 +1506,9 @@ function renderManage() {
       <button onclick="promptSaveGoal()" style="width:100%;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer;font-size:14px;font-weight:600;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">
         <i data-lucide="check" style="width:15px;height:15px"></i> שמור יעד (${state.pendingGoal} אימונים)
       </button>` : ""}
+      <button onclick="showGoalModal()" style="width:100%;padding:10px;margin-top:10px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-size:13px;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">
+        <i data-lucide="weight" style="width:15px;height:15px"></i> עדכון יעד ומשקל התחלתי
+      </button>
     </div>
 
     <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px;padding:0 2px">
