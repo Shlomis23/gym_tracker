@@ -109,10 +109,17 @@ function bindScrollAnimations() {
   cards.forEach(card => {
     const delay = parseFloat(card.style.animationDelay) || 0;
     setTimeout(() => {
-      card.classList.add("visible");
+      card.style.transition = "opacity 0.75s cubic-bezier(0.22, 1, 0.36, 1), transform 0.75s cubic-bezier(0.22, 1, 0.36, 1)";
+      card.style.opacity = "1";
+      card.style.transform = "translateY(0)";
       card.querySelectorAll("[data-countup]").forEach(startCountUp);
       card.querySelectorAll(".day-cell-anim").forEach(cell => {
-        cell.style.animationPlayState = "running";
+        const cellDelay = parseFloat(cell.style.animationDelay) || 0;
+        setTimeout(() => {
+          cell.style.transition = "opacity 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)";
+          cell.style.opacity = "1";
+          cell.style.transform = "translateY(0) scale(1)";
+        }, cellDelay * 1000);
       });
     }, delay * 1000);
   });
