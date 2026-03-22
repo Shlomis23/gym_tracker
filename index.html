@@ -568,11 +568,12 @@ async function addToLibrary(name, category) {
 
 async function updateLibraryEntry(id, name, category) {
   try {
-    await fetch(SUPABASE_URL + "/rest/v1/exercise_library?id=eq." + id, {
-      method: "PATCH",
-      headers: { ...SB_HEADERS, Prefer: "return=representation" },
-      body: JSON.stringify({ name, category: category || null })
-    });
+   const res = await fetch(SUPABASE_URL + "/rest/v1/exercise_library?id=eq." + id, {
+  method: "PATCH",
+  headers: { ...SB_HEADERS, Prefer: "return=representation" },
+  body: JSON.stringify({ name, category: category || null })
+});
+if (!res.ok) throw new Error(await res.text());
     const entry = state.exerciseLibrary.find(e => e.id === id);
     const oldName = entry?.name; // שמור לפני העדכון
     if (entry) { entry.name = name; entry.category = category || null; }
@@ -586,7 +587,10 @@ async function updateLibraryEntry(id, name, category) {
     });
     saveWorkouts();
     render(); // רענן תצוגה
-  } catch(e) { console.error("Update library failed:", e); }
+ } catch(e) {
+  console.error("Update library failed:", e);
+  showToast("שגיאה בעדכון תרגיל ⚠️");
+}
 }
 
 async function deleteFromLibrary(id) {
@@ -1038,7 +1042,10 @@ const goalReached = thisWeek >= goal;
   </div>`;
 
   const inProgress = sessionStorage.getItem("gym_in_progress");
-  const inProgressId = inProgress ? JSON.parse(inProgress).workoutId : null;
+let inProgressId = null;
+if (inProgress) {
+  try { inProgressId = JSON.parse(inProgress).workoutId || null; } catch {}
+}
   const inProgressW = inProgressId ? getWorkout(inProgressId) : null;
   const nextBtn = inProgressW
     ? `<button class="next-btn anim-card" style="background:var(--orange);border-radius:14px;animation-delay:0.1s" onclick="navigate('home')">
@@ -2613,7 +2620,7 @@ function renderLibraryManager() {
         ${byCategory[cat].map((ex,i,arr) => `
           <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:${i<arr.length-1?"1px solid var(--border)":"none"}">
             <span style="flex:1;font-size:13px;color:var(--text-primary)">${ex.name}</span>
-            <button onclick="openLibraryEdit('${ex.id}','${ex.name.replace(/'/g,"\'")}','${ex.category||""}')"
+           <button onclick='openLibraryEdit(${JSON.stringify(ex.id)},${JSON.stringify(ex.name)},${JSON.stringify(ex.category||"")})'
               class="icon-btn"><i data-lucide="pencil" style="width:13px;height:13px"></i></button>
             <button onclick="if(confirm('למחוק מהמאגר?'))deleteFromLibrary('${ex.id}')"
               class="icon-btn" style="color:var(--red)"><i data-lucide="trash-2" style="width:13px;height:13px"></i></button>
