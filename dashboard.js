@@ -360,7 +360,7 @@ if (inProgress) {
         </div>
       </div>` : ""}
       <div style="display:flex;justify-content:space-between;align-items:center;${hasGoal?"border-top:1px solid var(--border);padding-top:10px":""}">
-        <span style="font-size:11px;color:var(--text-hint)">${needsUpdate ? "לא שקלת השבוע" : "עודכן לפני " + dSinceW + " ימים (" + formatDate(latest.date) + ")"}</span>
+        <span style="font-size:11px;color:var(--text-hint)">${needsUpdate ? "לא נשקלת השבוע" : "עודכן לפני " + dSinceW + " ימים (" + formatDate(latest.date) + ")"}</span>
         <button onclick="showWeightModal()" style="display:flex;align-items:center;gap:5px;background:${needsUpdate?"var(--orange)":"var(--surface)"};border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;color:${needsUpdate?"#fff":"var(--text-secondary)"};font-family:inherit;font-weight:600">
           ${needsUpdate ? "הזן משקל שבועי" : "עדכן משקל"}
         </button>
