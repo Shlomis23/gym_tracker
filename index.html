@@ -185,6 +185,43 @@ function isoDateFromLocal(dateLike) {
   return `${y}-${m}-${d}`;
 }
 
+function buildDateSelector(prefix, isoDate) {
+  const [yStr, mStr, dStr] = (isoDate || isoDateFromLocal(new Date())).split("-");
+  const year = parseInt(yStr, 10);
+  const month = parseInt(mStr, 10);
+  const day = parseInt(dStr, 10);
+  const currentYear = new Date().getFullYear();
+
+  const yearOptions = Array.from({ length: 8 }, (_, i) => currentYear - i)
+    .map(y => `<option value="${y}" ${y === year ? "selected" : ""}>${y}</option>`)
+    .join("");
+  const monthOptions = Array.from({ length: 12 }, (_, i) => i + 1)
+    .map(m => `<option value="${m}" ${m === month ? "selected" : ""}>${m}</option>`)
+    .join("");
+  const maxDays = new Date(year, month, 0).getDate();
+  const dayOptions = Array.from({ length: maxDays }, (_, i) => i + 1)
+    .map(d => `<option value="${d}" ${d === day ? "selected" : ""}>${d}</option>`)
+    .join("");
+
+  return `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+      <select id="${prefix}-day" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit">${dayOptions}</select>
+      <select id="${prefix}-month" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit">${monthOptions}</select>
+      <select id="${prefix}-year" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit">${yearOptions}</select>
+    </div>
+  `;
+}
+
+function readIsoDateFromSelector(container, prefix) {
+  const day = parseInt(container.querySelector(`#${prefix}-day`)?.value || "", 10);
+  const month = parseInt(container.querySelector(`#${prefix}-month`)?.value || "", 10);
+  const year = parseInt(container.querySelector(`#${prefix}-year`)?.value || "", 10);
+  if (!day || !month || !year) return null;
+  const maxDays = new Date(year, month, 0).getDate();
+  const normalizedDay = Math.min(day, maxDays);
+  return `${year}-${String(month).padStart(2, "0")}-${String(normalizedDay).padStart(2, "0")}`;
+}
+
 async function saveWeightLog(weight, measuredAtIso, note) {
   try {
     const path = "body_weight_logs?on_conflict=measured_date";
@@ -356,7 +393,7 @@ function showWeightModal() {
     </div>
     <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:12px;margin-bottom:10px">
       <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">תאריך מדידה</label>
-      <input id="daily-date-inp" type="date" value="${todayIso}" style="width:100%;box-sizing:border-box;display:block;padding:11px 12px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit">
+      ${buildDateSelector("daily-date", todayIso)}
     </div>
     <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:12px;margin-bottom:10px">
       <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">משקל נוכחי (ק״ג)</label>
@@ -381,7 +418,7 @@ function showWeightModal() {
     showGoalModal();
   });
   sheet.querySelector("#daily-save-btn").addEventListener("click", async () => {
-    const dateVal = sheet.querySelector("#daily-date-inp").value;
+    const dateVal = readIsoDateFromSelector(sheet, "daily-date");
     const weightVal = parseFloat(sheet.querySelector("#daily-weight-inp").value);
     const noteVal = sheet.querySelector("#daily-note-inp").value.trim();
     if (!dateVal || !Number.isFinite(weightVal) || weightVal <= 0) {
@@ -994,7 +1031,7 @@ async function openWeightEntryModal(logId) {
     <div style="background:var(--card);border-radius:20px 20px 0 0;padding:22px 18px 30px;width:100%;max-width:420px;box-sizing:border-box;direction:rtl;animation:slideUp 0.28s ease both">
       <div style="font-size:16px;font-weight:700;color:var(--text-primary);margin-bottom:14px">${editing ? "עריכת שקילה" : "הוספת שקילה"}</div>
       <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">תאריך</label>
-      <input id="weight-date-inp" type="date" value="${defaultDate}" style="width:100%;box-sizing:border-box;display:block;margin-bottom:10px;padding:10px;border:1px solid var(--border-med);border-radius:10px;background:var(--surface);font-family:inherit">
+      <div style="margin-bottom:10px">${buildDateSelector("entry-date", defaultDate)}</div>
       <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">משקל (ק״ג)</label>
       <input id="weight-value-inp" type="number" inputmode="decimal" step="0.1" min="1" value="${defaultWeight}" style="width:100%;box-sizing:border-box;display:block;margin-bottom:10px;padding:10px;border:1px solid var(--border-med);border-radius:10px;background:var(--surface);font-family:inherit">
       <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">הערה (אופציונלי)</label>
@@ -1008,7 +1045,7 @@ async function openWeightEntryModal(logId) {
   overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
   overlay.querySelector("#weight-cancel-btn").addEventListener("click", () => overlay.remove());
   overlay.querySelector("#weight-save-btn").addEventListener("click", async () => {
-    const dateVal = overlay.querySelector("#weight-date-inp").value;
+    const dateVal = readIsoDateFromSelector(overlay, "entry-date");
     const weightVal = parseFloat(overlay.querySelector("#weight-value-inp").value);
     const noteVal = overlay.querySelector("#weight-note-inp").value.trim();
     if (!dateVal || !Number.isFinite(weightVal) || weightVal <= 0) {
