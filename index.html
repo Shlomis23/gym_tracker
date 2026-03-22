@@ -58,6 +58,7 @@
   </div>
 </div>
 
+<script src="./utils.js"></script>
 <script>
 // ── Supabase ─────────────────────────────────────────────────────
 const SUPABASE_URL = "https://jezibgdemidhebbcpdch.supabase.co";
@@ -125,14 +126,6 @@ function loadSettings() {
     s.weeklyGoal = currentEntry ? currentEntry.goal : (s.weeklyGoal || 4);
     return s;
   } catch { return { ...DEFAULT_SETTINGS, weeklyGoal: 4, goalHistory: [{ goal: 4, from: "2020-01-05" }] }; }
-}
-
-function getWeekStart(date) {
-  const d = new Date(date);
-  const day = d.getDay(); // 0 = Sunday
-  d.setDate(d.getDate() - day);
-  d.setHours(0,0,0,0);
-  return d;
 }
 
 function getGoalForWeek(weekStartIso) {
@@ -377,19 +370,6 @@ function showWeightModal(changeGoal) {
 }
 
 
-function haptic(type) {
-  if (!navigator.vibrate) return;
-  if (type === "light") navigator.vibrate(10);
-  else if (type === "medium") navigator.vibrate(30);
-  else if (type === "success") navigator.vibrate([40, 30, 60]);
-}
-function showToast(msg, icon) {
-  const el = document.getElementById("toast");
-  if (!el) return;
-  el.innerHTML = icon ? `<span>${icon}</span>${msg}` : msg;
-  el.classList.add("show");
-  setTimeout(() => el.classList.remove("show"), 2800);
-}
 function saveWorkouts() {
   localStorage.setItem(STORAGE_WORKOUTS, JSON.stringify(state.workouts));
   saveWorkoutsToSupabase();
@@ -525,20 +505,8 @@ async function loadWorkoutsFromSupabase() {
     }
   } catch(e) { console.error("Workout plan load failed:", e); }
 }
-function formatDate(iso) { return new Date(iso).toLocaleDateString("he-IL", { day:"numeric", month:"numeric", year:"2-digit", weekday:"short" }); }
-function formatDateShort(iso) { return new Date(iso).toLocaleDateString("he-IL", { day:"numeric", month:"numeric" }); }
-function calcVolume(sets) { return sets.reduce((s,r) => s + (r.weight||0)*(r.reps||0), 0); }
-function calcSessionVolume(exercises) {
-  return Object.values(exercises||{}).reduce((total, sets) => total + calcVolume(sets), 0);
-}
-function formatVolume(v) {
-  return v >= 1000 ? (v/1000).toFixed(1) + " טון" : v + " ק״ג";
-}
 function getWorkout(id) { return state.workouts.find(w => w.id === id); }
 function getLastSession(id) { return [...state.sessions].reverse().find(s => s.workoutId === id) || null; }
-function formatRest(sec) { return sec >= 60 ? Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0")+" דק׳" : sec+" שנ׳"; }
-function getExNames(w) { return w.exercises.map(e => typeof e === "string" ? e : e.name); }
-function getExRest(w, name) { const e = w.exercises.find(ex => (typeof ex==="string"?ex:ex.name)===name); return e?.rest||60; }
 
 
 const CATEGORIES = [
