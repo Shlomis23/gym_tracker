@@ -19,7 +19,7 @@ const DEFAULT_WORKOUTS = [
   ]},
   { id: "B", name: "אימון B", exercises: [
     { name: "גב רחב", rest: 90 }, { name: "בייספס", rest: 60 },
-    { name: "כתפיים אחורי", rest: 60 }, { name: "כרעיים", rest: 90 }
+    { name: "כתפיים אחורי", rest: 60 }, { name: "ישבן", rest: 90 }
   ]}
 ];
 
