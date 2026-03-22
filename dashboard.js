@@ -342,6 +342,9 @@ if (inProgress) {
     const diffText = diff === null ? "" : `${diff > 0 ? "+" : ""}${diff.toFixed(1)} ק״ג מול ממוצע שבוע שעבר`;
     const cardBorder = needsUpdate ? "var(--orange)" : "var(--border)";
     const cardBg = needsUpdate ? "var(--orange-bg)" : "var(--card)";
+    const dailyBtn = hasTodayWeight
+      ? `<button style="display:flex;align-items:center;gap:5px;background:var(--green);border:none;border-radius:8px;padding:6px 12px;cursor:default;font-size:12px;color:#fff;font-family:inherit;font-weight:600;opacity:0.95" disabled>שקילה יומית נרשמה</button>`
+      : `<button onclick="showWeightModal()" style="display:flex;align-items:center;gap:5px;background:${shouldPromptDaily ? "var(--orange)" : "var(--surface)"};border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;color:${shouldPromptDaily ? "#fff" : "var(--text-secondary)"};font-family:inherit;font-weight:600">הזן משקל</button>`;
 
     weightCard = `<div class="anim-card" style="background:${cardBg};border:1px solid ${cardBorder};border-radius:14px;padding:14px 16px;margin-bottom:16px;animation-delay:1.0s">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
@@ -356,9 +359,7 @@ if (inProgress) {
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center">
         <span style="font-size:11px;color:var(--text-hint)">${hasTodayWeight ? "השקילה היומית הוזנה להיום" : (needsUpdate ? "לא נשקלת השבוע" : "עודכן לפני " + dSinceW + " ימים (" + formatWeightDate(latest) + ")")}</span>
-        <button onclick="showWeightModal()" style="display:flex;align-items:center;gap:5px;background:${hasTodayWeight ? "var(--green)" : shouldPromptDaily ? "var(--orange)" : "var(--surface)"};border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;color:${hasTodayWeight || shouldPromptDaily ? "#fff" : "var(--text-secondary)"};font-family:inherit;font-weight:600">
-          ${hasTodayWeight ? "שקילה יומית נרשמה" : "הזן משקל"}
-        </button>
+        ${dailyBtn}
       </div>
     </div>`;
   }
