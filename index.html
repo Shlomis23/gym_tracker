@@ -1109,16 +1109,6 @@ function renderHistory() {
     const first = filtered[0];
     const delta = latest.weight - first.weight;
     const avg7 = withAvg[withAvg.length - 1]?.movingAvg ?? latest.weight;
-    const spanLabel = range === 0 ? "כל התקופה" : `${range} ימים`;
-    const trendWindow = withAvg.slice(-7);
-    const trendDelta = trendWindow.length >= 2 ? trendWindow[trendWindow.length - 1].movingAvg - trendWindow[0].movingAvg : 0;
-    const trendText = Math.abs(trendDelta) < 0.15
-      ? "יציב"
-      : trendDelta < 0
-      ? "במגמת ירידה"
-      : "במגמת עלייה";
-    const insightText = `טווח ${spanLabel}: ${delta > 0 ? '+' : ''}${delta.toFixed(1)} ק״ג · ממוצע 7 ימים ${trendText}`;
-
     const summaryCards = `
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:10px">
         <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">אחרון</div><div style="font-size:19px;font-weight:700">${latest.weight.toFixed(1)}</div></div>
@@ -1185,10 +1175,6 @@ function renderHistory() {
       </div>`;
     }).join("");
     return `<div style="padding:14px 14px 0">${tabs}
-      <div class="card" style="padding:11px 12px;margin-bottom:10px;background:var(--surface)">
-        <div style="font-size:12px;color:var(--text-secondary);font-weight:600">תובנה</div>
-        <div style="font-size:12px;color:var(--text-primary);margin-top:3px;line-height:1.45">${insightText}</div>
-      </div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <div style="font-size:13px;color:var(--text-secondary)">My Weight</div>
         <button onclick="openWeightEntryModal()" class="btn-primary" style="width:auto;padding:8px 12px;font-size:12px">הוסף</button>
@@ -1208,30 +1194,6 @@ function renderHistory() {
   </div>`;
 
   if (!state.sessions.length) return `<div style="padding:14px">${tabs}${exportBtn}<div style="padding:30px;text-align:center;color:var(--text-hint);font-size:14px">אין אימונים עדיין</div></div>`;
-
-  const thisWeekIso = getWeekStart(new Date()).toISOString().slice(0,10);
-  const thisWeekCount = getThisWeekCount();
-  const weekGoal = getGoalForWeek(thisWeekIso);
-  const workoutsLeft = Math.max(0, weekGoal - thisWeekCount);
-  const weekStart = getWeekStart(new Date());
-  const prevWeekStart = new Date(weekStart); prevWeekStart.setDate(prevWeekStart.getDate() - 7);
-  const prevWeekEnd = new Date(weekStart); prevWeekEnd.setMilliseconds(-1);
-  const thisWeekVol = state.sessions
-    .filter(s => new Date(s.date) >= weekStart)
-    .reduce((sum, s) => sum + calcSessionVolume(s.exercises), 0);
-  const prevWeekVol = state.sessions
-    .filter(s => {
-      const d = new Date(s.date);
-      return d >= prevWeekStart && d <= prevWeekEnd;
-    })
-    .reduce((sum, s) => sum + calcSessionVolume(s.exercises), 0);
-  const volPct = prevWeekVol > 0 ? Math.round(((thisWeekVol - prevWeekVol) / prevWeekVol) * 100) : null;
-  const insightWorkout = workoutsLeft === 0
-    ? `יעד שבועי הושלם: ${thisWeekCount}/${weekGoal} אימונים`
-    : `${thisWeekCount}/${weekGoal} אימונים השבוע · נשארו עוד ${workoutsLeft}`;
-  const insightVolume = volPct === null
-    ? `נפח שבועי: ${formatVolume(thisWeekVol)}`
-    : `נפח שבועי ${volPct >= 0 ? '+' : ''}${volPct}% מול שבוע קודם`;
 
   const improvedCount = (session, prevSameType) => {
     const exNames = Object.keys(session.exercises || {});
@@ -1266,18 +1228,13 @@ function renderHistory() {
 
   if (!state.expandedSessions) state.expandedSessions = new Set();
   return `<div style="padding:14px">${tabs}
-    <div class="card" style="padding:11px 12px;margin-bottom:10px;background:var(--surface)">
-      <div style="font-size:12px;color:var(--text-secondary);font-weight:600">תובנה</div>
-      <div style="font-size:12px;color:var(--text-primary);margin-top:3px;line-height:1.45">${insightWorkout}</div>
-      <div style="font-size:11px;color:var(--text-hint);margin-top:2px">${insightVolume}</div>
-    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
       <button onclick="state.historyWorkoutFilterMode='all';render()" style="padding:8px 10px;border-radius:10px;border:1px solid ${mode==='all'?'var(--accent)':'var(--border-med)'};background:${mode==='all'?'var(--accent)':'var(--card)'};color:${mode==='all'?'#fff':'var(--text-secondary)'};font-family:inherit;font-size:12px;cursor:pointer">הכול</button>
       <button onclick="state.historyWorkoutFilterMode='improved';render()" style="padding:8px 10px;border-radius:10px;border:1px solid ${mode==='improved'?'var(--green)':'var(--border-med)'};background:${mode==='improved'?'var(--green-bg)':'var(--card)'};color:${mode==='improved'?'var(--green)':'var(--text-secondary)'};font-family:inherit;font-size:12px;cursor:pointer">רק עם שיפור</button>
     </div>
     <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-bottom:10px">
       <select onchange="state.historyWorkoutId=this.value;render()" style="padding:9px 10px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;font-size:12px;color:var(--text-primary)">${workoutOptions}</select>
-      <input type="text" value="${escapeHtml(state.historyExerciseQuery || "")}" oninput="state.historyExerciseQuery=this.value;render()" placeholder="חפש לפי תרגיל" style="padding:9px 10px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;font-size:12px;color:var(--text-primary)">
+      <input id="history-exercise-search" type="text" value="${escapeHtml(state.historyExerciseQuery || "")}" oninput="onHistoryExerciseQueryInput(this)" placeholder="חפש לפי תרגיל" style="padding:9px 10px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;font-size:12px;color:var(--text-primary)">
     </div>
     ${exportBtn}
     ${filteredSessions.length === 0 ? `<div style="padding:30px;text-align:center;color:var(--text-hint);font-size:14px">לא נמצאו אימונים לפי הסינון שבחרת</div>` : filteredSessions.map((session) => {
@@ -1363,6 +1320,18 @@ function renderHistory() {
   }).join("")}</div>`;
 }
 
+function onHistoryExerciseQueryInput(inputEl) {
+  state.historyExerciseQuery = inputEl.value;
+  const cursorPos = inputEl.selectionStart ?? inputEl.value.length;
+  render();
+  requestAnimationFrame(() => {
+    const nextInput = document.getElementById("history-exercise-search");
+    if (!nextInput) return;
+    nextInput.focus();
+    nextInput.setSelectionRange(cursorPos, cursorPos);
+  });
+}
+
 
 
 function renderMonthTab(tabs) {
@@ -1444,10 +1413,6 @@ function renderMonthTab(tabs) {
     const pct = Math.round(((curr - prev) / prev) * 100);
     return `${pct >= 0 ? "+" : ""}${pct}% מול חודש קודם`;
   };
-  const insightText = sessions.length === 0
-    ? "אין אימונים בחודש זה"
-    : `החודש בוצעו ${sessions.length} אימונים · ${newPRs} שיאים חדשים · ${topEx ? `הכי השתפרת: ${topEx[0]} (+${topEx[1]} ק״ג)` : "המשך מצוין!"}`;
-
   // calendar grid
   const firstDow = monthStart.getDay();
   const daysInMonth = monthEnd.getDate();
@@ -1492,11 +1457,6 @@ function renderMonthTab(tabs) {
       <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">
         ${calCells.join("")}
       </div>
-    </div>
-
-    <div class="card" style="padding:11px 12px;margin-bottom:10px;background:var(--surface)">
-      <div style="font-size:12px;color:var(--text-secondary);font-weight:600">תובנה</div>
-      <div style="font-size:12px;color:var(--text-primary);margin-top:3px;line-height:1.45">${insightText}</div>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
