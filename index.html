@@ -58,19 +58,11 @@
   </div>
 </div>
 
+<script src="./config.js"></script>
+<script src="./state.js"></script>
 <script src="./utils.js"></script>
 <script>
 // ── Supabase ─────────────────────────────────────────────────────
-const SUPABASE_URL = "https://jezibgdemidhebbcpdch.supabase.co";
-const SUPABASE_KEY = "sb_publishable_NDyz8DAcTO8kOs6JhAjTFw_uRTgb5nf";
-
-const SB_HEADERS = {
-  apikey: SUPABASE_KEY,
-  Authorization: "Bearer " + SUPABASE_KEY,
-  "Content-Type": "application/json",
-  Prefer: "return=representation"
-};
-
 async function sbGet(path) {
   const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, { headers: SB_HEADERS });
   if (!r.ok) throw new Error(await r.text());
@@ -87,47 +79,6 @@ async function sbDelete(path) {
 }
 // ─────────────────────────────────────────────────────────────────
 
-const STORAGE_SESSIONS = "gym_sessions_v2";
-const STORAGE_WORKOUTS = "gym_workouts_v4";
-const STORAGE_SETTINGS = "gym_settings_v1";
-const DEFAULT_WORKOUTS = [
-  { id: "A", name: "אימון A", exercises: [
-    { name: "לחיצת חזה", rest: 90 }, { name: "כתפיים קדמי", rest: 60 },
-    { name: "טרייספס", rest: 60 }, { name: "בטן", rest: 45 }
-  ]},
-  { id: "B", name: "אימון B", exercises: [
-    { name: "גב רחב", rest: 90 }, { name: "בייספס", rest: 60 },
-    { name: "כתפיים אחורי", rest: 60 }, { name: "כרעיים", rest: 90 }
-  ]}
-];
-const DEFAULT_SETTINGS = { weeklyGoal: 4, goalHistory: [] };
-
-function loadWorkouts() {
-  try {
-    const s = localStorage.getItem(STORAGE_WORKOUTS);
-    if (s) return JSON.parse(s);
-    const old = localStorage.getItem("gym_workouts_v3");
-    if (old) {
-      const parsed = JSON.parse(old);
-      return parsed.map(w => ({ ...w, exercises: w.exercises.map(e => typeof e === "string" ? { name: e, rest: 60 } : e) }));
-    }
-    return JSON.parse(JSON.stringify(DEFAULT_WORKOUTS));
-  } catch { return JSON.parse(JSON.stringify(DEFAULT_WORKOUTS)); }
-}
-function loadSettings() {
-  try {
-    const s = { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(STORAGE_SETTINGS) || "{}") };
-    if (!s.goalHistory || !s.goalHistory.length) {
-      s.goalHistory = [{ goal: s.weeklyGoal, from: "2020-01-05" }];
-    }
-    const thisWeekIso = getWeekStart(new Date()).toISOString().slice(0,10);
-    const sorted = [...s.goalHistory].sort((a,b) => a.from > b.from ? -1 : 1);
-    const currentEntry = sorted.find(e => e.from <= thisWeekIso);
-    s.weeklyGoal = currentEntry ? currentEntry.goal : (s.weeklyGoal || 4);
-    return s;
-  } catch { return { ...DEFAULT_SETTINGS, weeklyGoal: 4, goalHistory: [{ goal: 4, from: "2020-01-05" }] }; }
-}
-
 function getGoalForWeek(weekStartIso) {
   const history = state.settings.goalHistory || [];
   const sorted = [...history].sort((a,b) => a.from > b.from ? -1 : 1);
@@ -135,14 +86,6 @@ function getGoalForWeek(weekStartIso) {
   return entry ? entry.goal : (state.settings.weeklyGoal || 4);
 }
 
-let state = {
-  screen: "dashboard", workoutId: null, openExercise: null, exercises: {},
-  sessions: [], workouts: loadWorkouts(), settings: loadSettings(),
-  manageOpenId: null, editingNameId: null, selectedWorkoutId: null, expandedSessions: new Set(),
-  weightLogs: [], weightGoal: { start_weight: null, goal_weight: null }, historyTab: "workouts",
-  workoutNote: "", monthViewYear: null, monthViewMonth: null, pendingGoal: null,
-  editingExKey: null, exerciseLibrary: [], workoutExtras: []
-};
 try { state.sessions = JSON.parse(localStorage.getItem(STORAGE_SESSIONS) || "[]"); } catch {}
 
 function saveSessions() { localStorage.setItem(STORAGE_SESSIONS, JSON.stringify(state.sessions)); }
@@ -508,16 +451,6 @@ async function loadWorkoutsFromSupabase() {
 function getWorkout(id) { return state.workouts.find(w => w.id === id); }
 function getLastSession(id) { return [...state.sessions].reverse().find(s => s.workoutId === id) || null; }
 
-
-const CATEGORIES = [
-  { id: "chest",     label: "חזה",      icon: "heart" },
-  { id: "back",      label: "גב",       icon: "layers" },
-  { id: "shoulders", label: "כתפיים",   icon: "triangle" },
-  { id: "arms",      label: "ידיים",    icon: "hand" },
-  { id: "legs",      label: "רגליים",   icon: "footprints" },
-  { id: "core",      label: "בטן/ליבה", icon: "target" },
-  { id: "cardio",    label: "קרדיו",    icon: "activity" }
-];
 
 function getCategoryIcon(catId) {
   return (CATEGORIES.find(c => c.id === catId) || CATEGORIES[CATEGORIES.length-1]).icon;
