@@ -723,6 +723,92 @@ function getExCatByName(name) {
   const lib = state.exerciseLibrary.find(e => e.name === name);
   return lib?.category || null;
 }
+function openWorkoutExtraPicker() {
+  document.getElementById("workout-extra-modal")?.remove();
+
+  const overlay = document.createElement("div");
+  overlay.id = "workout-extra-modal";
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2000;display:flex;align-items:flex-end;justify-content:center";
+
+  const options = (state.exerciseLibrary || []).slice().sort((a,b)=>a.name.localeCompare(b.name,"he"));
+  const grouped = {};
+  options.forEach(ex => {
+    const cat = ex.category || "uncategorized";
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(ex);
+  });
+  const catOrder = [...CATEGORIES.map(c=>c.id), "uncategorized"].filter(c => grouped[c]);
+
+  const sheet = document.createElement("div");
+  sheet.style.cssText = "background:var(--card);border-radius:20px 20px 0 0;padding:24px 20px 32px;width:100%;direction:rtl;animation:slideUp 0.3s cubic-bezier(0.22,1,0.36,1) both;box-sizing:border-box";
+  sheet.innerHTML = `
+    <div style="font-size:15px;font-weight:700;color:var(--text-primary);margin-bottom:14px">הוספת תרגיל חד-פעמי</div>
+    <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px">בחר תרגיל מהמאגר</label>
+    <select id="workout-extra-select" style="width:100%;font-family:inherit;font-size:14px;background:var(--surface);border:1px solid var(--border-med);border-radius:10px;padding:10px 12px;color:var(--text-primary);outline:none;box-sizing:border-box;margin-bottom:10px">
+      <option value="">בחר תרגיל...</option>
+      ${catOrder.map(cat => {
+        const label = cat === "uncategorized" ? "כללי" : (CATEGORIES.find(c => c.id === cat)?.label || "כללי");
+        return `<optgroup label="${label}">${grouped[cat].map(ex => `<option value="${ex.name.replace(/"/g,"&quot;")}">${ex.name}</option>`).join("")}</optgroup>`;
+      }).join("")}
+    </select>
+    <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px">או הזן שם ידנית</label>
+    <input id="workout-extra-custom" placeholder="שם תרגיל" autocomplete="off"
+      style="width:100%;font-family:inherit;font-size:14px;background:var(--surface);border:1px solid var(--border-med);border-radius:10px;padding:10px 12px;color:var(--text-primary);outline:none;box-sizing:border-box;direction:rtl;margin-bottom:14px">
+    <button id="workout-extra-add" style="width:100%;padding:13px;background:var(--accent);color:#fff;border:none;border-radius:12px;cursor:pointer;font-size:15px;font-weight:700;font-family:inherit;margin-bottom:10px">הוסף לאימון</button>
+    <button id="workout-extra-cancel" style="width:100%;padding:13px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:12px;cursor:pointer;font-size:15px;font-family:inherit">ביטול</button>
+  `;
+
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
+
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+  sheet.querySelector("#workout-extra-cancel").addEventListener("click", () => overlay.remove());
+
+  const addBtn = sheet.querySelector("#workout-extra-add");
+  addBtn.addEventListener("click", async () => {
+    const selected = sheet.querySelector("#workout-extra-select").value.trim();
+    const custom = sheet.querySelector("#workout-extra-custom").value.trim();
+    const name = custom || selected;
+    if (!name) {
+      sheet.querySelector("#workout-extra-custom").style.borderColor = "var(--red)";
+      return;
+    }
+    const ok = await addWorkoutExtraByName(name);
+    if (!ok) return;
+    overlay.remove();
+    render();
+  });
+}
+
+async function addWorkoutExtraByName(name) {
+  const w = getWorkout(state.workoutId);
+  if (!w) return false;
+
+  const baseNames = getExNames(w);
+  const extraNames = state.workoutExtras || [];
+  if (baseNames.includes(name) || extraNames.includes(name)) {
+    showToast("התרגיל כבר קיים באימון");
+    return false;
+  }
+
+  const category = getExCatByName(name);
+  state.workoutExtras = [...extraNames, name];
+  state.openExercise = name;
+  state.exercises[name] = category === "cardio"
+    ? [{ num:1, minutes:0, failed:false }]
+    : [{ num:1, weight:0, reps:0, failed:false }, { num:2, weight:0, reps:0, failed:false }, { num:3, weight:0, reps:0, failed:false }];
+
+  saveInProgress();
+
+  const existsInLibrary = state.exerciseLibrary?.some(ex => ex.name === name);
+  if (!existsInLibrary) {
+    await addToLibrary(name, null);
+  }
+
+  showToast("התרגיל נוסף לאימון ✓");
+  return true;
+}
+
 function addSet(name) {
   const sets = state.exercises[name];
   sets.push({ num:sets.length+1, weight:0, reps:0, failed:false });
