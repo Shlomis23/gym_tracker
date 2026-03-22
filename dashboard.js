@@ -294,30 +294,17 @@ if (inProgress) {
   // ── Weight card ──────────────────────────────────────────────────
   const latest = getLatestWeight();
   const prev = getPrevWeight();
-  if (!latest && (state.weightGoal?.start_weight || state.weightGoal?.goal_weight)) {
-    state.weightGoal = { start_weight: null, goal_weight: null };
-  }
-  const wGoal = state.weightGoal || {};
-  const hasGoal = !!(wGoal.start_weight && wGoal.goal_weight);
   const dSinceW = daysSinceWeight();
   const needsUpdate = dSinceW === null || dSinceW >= 7;
 
   let weightCard = "";
-  if (!latest && !hasGoal) {
+  if (!latest) {
     weightCard = `<div style="background:var(--surface);border:1px dashed var(--border-med);border-radius:14px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="showWeightModal()">
       <div>
-        <div style="font-size:13px;font-weight:600;color:var(--text-secondary)">מעקב משקל</div>
-        <div style="font-size:11px;color:var(--text-hint);margin-top:2px">אין משקל שמור — הגדר מחדש משקל התחלתי ויעד</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text-secondary)">My Weight</div>
+        <div style="font-size:11px;color:var(--text-hint);margin-top:2px">אין עדיין מדידות משקל שמורות</div>
       </div>
-      <button onclick="event.stopPropagation();showWeightModal()" style="background:var(--accent);border:none;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px;color:#fff;font-family:inherit;font-weight:600">הגדר מהתחלה</button>
-    </div>`;
-  } else if (!latest && hasGoal) {
-    weightCard = `<div style="background:var(--orange-bg);border:1px solid var(--orange);border-radius:14px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="showWeightModal()">
-      <div>
-        <div style="font-size:13px;font-weight:600;color:var(--orange)">יעד: ${wGoal.goal_weight} ק״ג</div>
-        <div style="font-size:11px;color:var(--orange);margin-top:2px">טרם הוזן משקל — לחץ לעדכון</div>
-      </div>
-      <button onclick="event.stopPropagation();showWeightModal()" style="background:var(--orange);border:none;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px;color:#fff;font-family:inherit;font-weight:600">הזן משקל</button>
+      <button onclick="event.stopPropagation();showWeightModal()" style="background:var(--accent);border:none;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px;color:#fff;font-family:inherit;font-weight:600">הזן משקל ראשון</button>
     </div>`;
   } else if (latest) {
     const diff = prev ? (latest.weight - prev.weight) : null;
@@ -328,17 +315,11 @@ if (inProgress) {
       ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`
       : "";
     const diffText = diff === null ? "" : `${diff > 0 ? "+" : ""}${diff.toFixed(1)} ק״ג מהשבוע הקודם`;
-    const startW = hasGoal ? wGoal.start_weight : latest.weight;
-    const goalW = hasGoal ? wGoal.goal_weight : null;
-    const totalToLose = hasGoal ? Math.abs(startW - goalW) : 0;
-    const lost = hasGoal ? Math.abs(startW - latest.weight) : 0;
-    const pctW = hasGoal && totalToLose > 0 ? Math.min(Math.round((lost / totalToLose) * 100), 100) : 0;
-    const remaining = hasGoal ? Math.abs(latest.weight - goalW).toFixed(1) : null;
     const cardBorder = needsUpdate ? "var(--orange)" : "var(--border)";
     const cardBg = needsUpdate ? "var(--orange-bg)" : "var(--card)";
 
     weightCard = `<div class="anim-card" style="background:${cardBg};border:1px solid ${cardBorder};border-radius:14px;padding:14px 16px;margin-bottom:16px;animation-delay:1.0s">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:${hasGoal?"12px":"8px"}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
         <div>
           <div class="stat-label">משקל נוכחי</div>
           <div style="display:flex;align-items:baseline;gap:5px;margin-top:3px">
@@ -347,22 +328,8 @@ if (inProgress) {
           </div>
           ${diff !== null ? `<div style="display:flex;align-items:center;gap:4px;margin-top:4px">${diffArrow}<span style="font-size:12px;color:${diffColor};font-weight:600">${diffText}</span></div>` : ""}
         </div>
-        ${hasGoal ? `<div style="text-align:left">
-          <div class="stat-label">יעד</div>
-          <div style="font-size:18px;font-weight:700;color:var(--text-primary);margin-top:2px">${goalW}</div>
-          ${remaining !== null ? `<div style="font-size:11px;color:var(--text-hint);margin-top:2px">נותרו ${remaining} ק״ג</div>` : ""}
-        </div>` : ""}
       </div>
-      ${hasGoal ? `<div style="margin-bottom:10px">
-        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-hint);margin-bottom:4px">
-          <span>התחלה: ${startW} ק״ג</span>
-          <span>${pctW}% מהדרך</span>
-        </div>
-        <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
-          <div class="${barClass}" style="width:${pctW}%;height:100%;background:var(--accent);border-radius:3px;animation-delay:0.7s"></div>
-        </div>
-      </div>` : ""}
-      <div style="display:flex;justify-content:space-between;align-items:center;${hasGoal?"border-top:1px solid var(--border);padding-top:10px":""}">
+      <div style="display:flex;justify-content:space-between;align-items:center">
         <span style="font-size:11px;color:var(--text-hint)">${needsUpdate ? "לא נשקלת השבוע" : "עודכן לפני " + dSinceW + " ימים (" + formatWeightDate(latest) + ")"}</span>
         <button onclick="showWeightModal()" style="display:flex;align-items:center;gap:5px;background:${needsUpdate?"var(--orange)":"var(--surface)"};border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;color:${needsUpdate?"#fff":"var(--text-secondary)"};font-family:inherit;font-weight:600">
           ${needsUpdate ? "הזן משקל שבועי" : "עדכן משקל"}
