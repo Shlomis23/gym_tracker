@@ -1,12 +1,4 @@
 (function () {
-  function getWeekStart(date) {
-    const d = new Date(date);
-    const day = d.getDay(); // 0 = Sunday
-    d.setDate(d.getDate() - day);
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }
-
   function haptic(type) {
     if (!navigator.vibrate) return;
     if (type === "light") navigator.vibrate(10);
@@ -75,7 +67,6 @@
   }
 
   Object.assign(window, {
-    getWeekStart,
     haptic,
     showToast,
     formatDate,
