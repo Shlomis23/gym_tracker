@@ -372,7 +372,6 @@ function showGoalModal() {
 
 function showWeightModal() {
   const latest = getLatestWeight();
-  const wGoal = state.weightGoal || {};
   const todayIso = isoDateFromLocal(new Date());
 
   document.getElementById("weight-modal")?.remove();
@@ -404,7 +403,6 @@ function showWeightModal() {
       <textarea id="daily-note-inp" rows="2" style="width:100%;box-sizing:border-box;display:block;padding:10px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;resize:vertical"></textarea>
     </div>
     <button id="daily-save-btn" class="btn-primary" style="margin-bottom:8px">שמור שקילה</button>
-    <button id="daily-goal-btn" style="width:100%;padding:12px;background:var(--surface);border:1px solid var(--border-med);color:var(--text-secondary);border-radius:10px;font-family:inherit;cursor:pointer;margin-bottom:8px">${wGoal.start_weight && wGoal.goal_weight ? "ערוך יעד" : "הגדר יעד"}</button>
     <button id="daily-cancel-btn" style="width:100%;padding:12px;background:transparent;border:none;color:var(--text-hint);font-family:inherit;cursor:pointer">סגור</button>
   `;
 
@@ -413,10 +411,6 @@ function showWeightModal() {
   overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
   sheet.querySelector("#weight-close").addEventListener("click", () => overlay.remove());
   sheet.querySelector("#daily-cancel-btn").addEventListener("click", () => overlay.remove());
-  sheet.querySelector("#daily-goal-btn").addEventListener("click", () => {
-    overlay.remove();
-    showGoalModal();
-  });
   sheet.querySelector("#daily-save-btn").addEventListener("click", async () => {
     const dateVal = readIsoDateFromSelector(sheet, "daily-date");
     const weightVal = parseFloat(sheet.querySelector("#daily-weight-inp").value);
@@ -1512,6 +1506,9 @@ function renderManage() {
       <button onclick="promptSaveGoal()" style="width:100%;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer;font-size:14px;font-weight:600;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">
         <i data-lucide="check" style="width:15px;height:15px"></i> שמור יעד (${state.pendingGoal} אימונים)
       </button>` : ""}
+      <button onclick="showGoalModal()" style="width:100%;padding:10px;margin-top:10px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-size:13px;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">
+        <i data-lucide="weight" style="width:15px;height:15px"></i> עדכון יעד ומשקל התחלתי
+      </button>
     </div>
 
     <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px;padding:0 2px">

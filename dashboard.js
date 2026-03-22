@@ -296,15 +296,23 @@ if (inProgress) {
   const weightLogsAsc = getWeightLogsAsc();
   const dSinceW = daysSinceWeight();
   const needsUpdate = dSinceW === null || dSinceW >= 7;
+  const currentTime = new Date();
+  const nowHour = currentTime.getHours();
+  const todayIso = isoDateFromLocal(currentTime);
+  const hasTodayWeight = !!(latest && latest.measured_date === todayIso);
+  const shouldPromptDaily = nowHour >= 7 && !hasTodayWeight;
 
   let weightCard = "";
   if (!latest) {
+    const emptyBtnBg = shouldPromptDaily ? "var(--orange)" : "var(--accent)";
+    const emptyBtnColor = "#fff";
+    const emptyBtnLabel = shouldPromptDaily ? "הזן משקל" : "הזן משקל ראשון";
     weightCard = `<div style="background:var(--surface);border:1px dashed var(--border-med);border-radius:14px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="showWeightModal()">
       <div>
         <div style="font-size:13px;font-weight:600;color:var(--text-secondary)">My Weight</div>
         <div style="font-size:11px;color:var(--text-hint);margin-top:2px">אין עדיין מדידות משקל שמורות</div>
       </div>
-      <button onclick="event.stopPropagation();showWeightModal()" style="background:var(--accent);border:none;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px;color:#fff;font-family:inherit;font-weight:600">הזן משקל ראשון</button>
+      <button onclick="event.stopPropagation();showWeightModal()" style="background:${emptyBtnBg};border:none;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px;color:${emptyBtnColor};font-family:inherit;font-weight:600">${emptyBtnLabel}</button>
     </div>`;
   } else if (latest) {
     const today = new Date();
@@ -347,9 +355,9 @@ if (inProgress) {
         </div>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:11px;color:var(--text-hint)">${needsUpdate ? "לא נשקלת השבוע" : "עודכן לפני " + dSinceW + " ימים (" + formatWeightDate(latest) + ")"}</span>
-        <button onclick="showWeightModal()" style="display:flex;align-items:center;gap:5px;background:${needsUpdate?"var(--orange)":"var(--surface)"};border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;color:${needsUpdate?"#fff":"var(--text-secondary)"};font-family:inherit;font-weight:600">
-          ${needsUpdate ? "הזן משקל שבועי" : "עדכן משקל"}
+        <span style="font-size:11px;color:var(--text-hint)">${hasTodayWeight ? "השקילה היומית הוזנה להיום" : (needsUpdate ? "לא נשקלת השבוע" : "עודכן לפני " + dSinceW + " ימים (" + formatWeightDate(latest) + ")")}</span>
+        <button onclick="showWeightModal()" style="display:flex;align-items:center;gap:5px;background:${hasTodayWeight ? "var(--green)" : shouldPromptDaily ? "var(--orange)" : "var(--surface)"};border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;color:${hasTodayWeight || shouldPromptDaily ? "#fff" : "var(--text-secondary)"};font-family:inherit;font-weight:600">
+          ${hasTodayWeight ? "שקילה יומית נרשמה" : "הזן משקל"}
         </button>
       </div>
     </div>`;
