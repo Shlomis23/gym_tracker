@@ -2718,7 +2718,22 @@ function bindWorkoutDragDrop() {
 window.addEventListener("load", async function() {
   state.screen = "dashboard";
   const loader = document.getElementById("app-loader");
-  await Promise.all([loadSessionsFromSupabase(), loadWeightData(), loadWorkoutsFromSupabase(), loadSettingsFromSupabase(), loadExerciseLibrary()]);
+  const results = await Promise.allSettled([
+  loadSessionsFromSupabase(),
+  loadWeightData(),
+  loadWorkoutsFromSupabase(),
+  loadSettingsFromSupabase(),
+  loadExerciseLibrary()
+]);
+
+const failed = results
+  .map((r, i) => ({ r, i }))
+  .filter(x => x.r.status === "rejected");
+
+if (failed.length) {
+  console.error("Some data failed to load:", failed);
+  showToast("חלק מהנתונים לא נטענו ⚠️");
+}
   if (loader) {
     loader.style.opacity = "0";
     setTimeout(() => loader.remove(), 350);
