@@ -1028,21 +1028,34 @@ async function openWeightEntryModal(logId) {
   overlay.id = "weight-entry-modal";
   overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:2100;display:flex;align-items:flex-end;justify-content:center";
   overlay.innerHTML = `
-    <div style="background:var(--card);border-radius:20px 20px 0 0;padding:22px 18px 30px;width:100%;max-width:420px;box-sizing:border-box;direction:rtl;animation:slideUp 0.28s ease both">
-      <div style="font-size:16px;font-weight:700;color:var(--text-primary);margin-bottom:14px">${editing ? "עריכת שקילה" : "הוספת שקילה"}</div>
-      <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">תאריך</label>
-      <div style="margin-bottom:10px">${buildDateSelector("entry-date", defaultDate)}</div>
-      <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">משקל (ק״ג)</label>
-      <input id="weight-value-inp" type="number" inputmode="decimal" step="0.1" min="1" value="${defaultWeight}" style="width:100%;box-sizing:border-box;display:block;margin-bottom:10px;padding:10px;border:1px solid var(--border-med);border-radius:10px;background:var(--surface);font-family:inherit">
-      <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">הערה (אופציונלי)</label>
-      <textarea id="weight-note-inp" rows="2" style="width:100%;box-sizing:border-box;display:block;margin-bottom:14px;padding:10px;border:1px solid var(--border-med);border-radius:10px;background:var(--surface);font-family:inherit;resize:vertical">${escapeHtml(defaultNote)}</textarea>
-      <button id="weight-save-btn" style="width:100%;padding:13px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-family:inherit;font-weight:700;margin-bottom:8px;cursor:pointer">${editing ? "שמור שינויים" : "שמור שקילה"}</button>
-      <button id="weight-cancel-btn" style="width:100%;padding:13px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;font-family:inherit;cursor:pointer">ביטול</button>
+    <div style="background:var(--card);border-radius:22px 22px 0 0;padding:20px 16px 16px;width:100%;max-width:430px;box-sizing:border-box;direction:rtl;animation:slideUp 0.28s ease both;max-height:86vh;overflow:auto">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+        <div>
+          <div style="font-size:17px;font-weight:800;color:var(--text-primary)">${editing ? "עריכת שקילה" : "הוספת שקילה"}</div>
+          <div style="font-size:12px;color:var(--text-hint);margin-top:3px">ניהול שקילה לפי תאריך</div>
+        </div>
+        <button id="weight-close" style="width:30px;height:30px;border:none;background:var(--surface);border-radius:999px;cursor:pointer;color:var(--text-hint);font-size:18px">×</button>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:12px;margin-bottom:10px">
+        <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">תאריך מדידה</label>
+        ${buildDateSelector("entry-date", defaultDate)}
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:12px;margin-bottom:10px">
+        <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">משקל (ק״ג)</label>
+        <input id="weight-value-inp" type="number" inputmode="decimal" step="0.1" min="1" value="${defaultWeight}" style="width:100%;box-sizing:border-box;display:block;padding:12px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;font-size:20px;font-weight:700">
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:12px;margin-bottom:14px">
+        <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">הערה (אופציונלי)</label>
+        <textarea id="weight-note-inp" rows="2" style="width:100%;box-sizing:border-box;display:block;padding:10px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;resize:vertical">${escapeHtml(defaultNote)}</textarea>
+      </div>
+      <button id="weight-save-btn" class="btn-primary" style="margin-bottom:8px">${editing ? "שמור שינויים" : "שמור שקילה"}</button>
+      <button id="weight-cancel-btn" style="width:100%;padding:12px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;font-family:inherit;cursor:pointer">ביטול</button>
     </div>
   `;
   document.body.appendChild(overlay);
 
   overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+  overlay.querySelector("#weight-close").addEventListener("click", () => overlay.remove());
   overlay.querySelector("#weight-cancel-btn").addEventListener("click", () => overlay.remove());
   overlay.querySelector("#weight-save-btn").addEventListener("click", async () => {
     const dateVal = readIsoDateFromSelector(overlay, "entry-date");
