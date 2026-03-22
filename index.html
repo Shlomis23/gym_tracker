@@ -915,10 +915,25 @@ function renderDashboard() {
   const daysSince = getDaysSinceLastWorkout();
 
   const now = new Date();
-  const dayOfWeek = now.getDay();
-  const daysLeftInWeek = 6 - dayOfWeek;
-  const workoutsLeft = Math.max(0, goal - thisWeek);
-  const goalReached = thisWeek >= goal;
+const dayOfWeek = now.getDay();
+
+const todayStart = new Date();
+todayStart.setHours(0, 0, 0, 0);
+
+const didWorkoutToday = state.sessions.some(s => {
+  const d = new Date(s.date);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime() === todayStart.getTime();
+});
+
+// אם עדיין לא היה אימון היום — היום נחשב.
+// אם כבר היה אימון היום — סופרים רק את הימים שנותרו אחריו.
+const daysLeftInWeek = didWorkoutToday
+  ? 6 - dayOfWeek
+  : 7 - dayOfWeek;
+
+const workoutsLeft = Math.max(0, goal - thisWeek);
+const goalReached = thisWeek >= goal;
 
   let urgencyCard = "";
   if (!goalReached) {
