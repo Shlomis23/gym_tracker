@@ -188,7 +188,9 @@ function getPrevWeight() {
 function daysSinceWeight() {
   const latest = getLatestWeight();
   if (!latest) return null;
-  return Math.floor((new Date() - new Date(latest.date)) / (1000 * 60 * 60 * 24));
+  const today = new Date(); today.setHours(0,0,0,0);
+  const latestDay = new Date(latest.date); latestDay.setHours(0,0,0,0);
+  return Math.round((today - latestDay) / (1000 * 60 * 60 * 24));
 }
 
 function buildInp(type, step, placeholder, fontSize) {
