@@ -98,7 +98,8 @@ async function saveSessionToSupabase(session) {
       local_id: session.id,
       workout_id: session.workoutId,
       workout_name: getWorkout(session.workoutId)?.name || session.workoutId,
-      date: session.date
+      date: session.date,
+      note: session.note || ""
     });
     const sessionRow = rows[0];
     const sets = [];
@@ -125,7 +126,7 @@ async function loadSessionsFromSupabase() {
         exercises[s.exercise_name].push({ num: s.set_number, weight: s.weight, reps: s.reps, failed: s.failed });
       });
       Object.values(exercises).forEach(arr => arr.sort((a,b) => a.num - b.num));
-      return { id: row.local_id || row.id, workoutId: row.workout_id, workoutName: row.workout_name || "", date: row.date, exercises };
+      return { id: row.local_id || row.id, workoutId: row.workout_id, workoutName: row.workout_name || "", date: row.date, exercises, note: row.note || "" };
     });
     localStorage.setItem(STORAGE_SESSIONS, JSON.stringify(state.sessions));
   } catch(e) {
@@ -570,6 +571,8 @@ function renderWorkout() {
 
   const allExtraNames = state.workoutExtras || [];
   const cards = [...names, ...allExtraNames].map(name => {
+    const safeNameArg = encodeURIComponent(name);
+    const safeNameText = escapeHtml(name);
     const sets = state.exercises[name] || [];
     const prevSets = last?.exercises?.[name] || null;
     const isOpen = state.openExercise === name;
@@ -587,12 +590,12 @@ function renderWorkout() {
     const exCat = getExCategory(w, name) || getExCatByName(name);
     const catIconName = exCat ? getCategoryIcon(exCat) : null;
     const isCardio = exCat === "cardio";
-    const header = `<div class="ex-header" onclick="toggleExercise('${name}')">
+    const header = `<div class="ex-header" onclick="toggleExercise(decodeURIComponent('${safeNameArg}'))">
       <div style="display:flex;align-items:center;gap:9px;min-width:0">
         ${statusDot}
         ${catIconName ? `<i data-lucide="${catIconName}" style="width:13px;height:13px;color:var(--text-hint);flex-shrink:0"></i>` : ""}
         <div style="min-width:0">
-          <div style="font-weight:600;font-size:14px;color:var(--text-primary)">${name}</div>
+          <div style="font-weight:600;font-size:14px;color:var(--text-primary)">${safeNameText}</div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap">
             ${(!isCardio && rest > 0) ? `<span class="rest-chip"><i data-lucide="timer" style="width:10px;height:10px"></i> ${formatRest(rest)}</span>` : ""}
             ${hasData ? `<span style="font-size:11px;color:var(--text-hint)">${sets.filter(s=>s.weight>0||s.reps>0).length} סטים</span>` : ""}
@@ -618,10 +621,10 @@ function renderWorkout() {
             <span style="min-width:16px;font-size:12px;color:var(--text-hint);font-weight:600">${s.num}</span>
             <div style="flex:1">
               <input class="inp" type="number" inputmode="numeric" placeholder="${prevMin ? prevMin+" דק׳" : "דקות"}" value="${s.minutes||""}"
-                oninput="updateSet('${name}',${i},'minutes',this.value)"
+                oninput="updateSet(decodeURIComponent('${safeNameArg}'),${i},'minutes',this.value)"
                 style="width:100%;text-align:center;font-size:15px">
             </div>
-            <button onclick="removeSet('${name}',${i})" class="icon-btn"><i data-lucide="x" style="width:16px;height:16px"></i></button>
+            <button onclick="removeSet(decodeURIComponent('${safeNameArg}'),${i})" class="icon-btn"><i data-lucide="x" style="width:16px;height:16px"></i></button>
           </div>
         </div>`;
       }
@@ -631,9 +634,9 @@ function renderWorkout() {
         ? `<span style="display:flex;align-items:center;color:${imp?"var(--green)":reg?"var(--red)":"var(--text-hint)"}">
              <i data-lucide="${imp?"trending-up":reg?"trending-down":"minus"}" style="width:14px;height:14px"></i>
            </span>`
-        : `<button onclick="removeSet('${name}',${i})" class="icon-btn"><i data-lucide="x" style="width:16px;height:16px"></i></button>`;
+        : `<button onclick="removeSet(decodeURIComponent('${safeNameArg}'),${i})" class="icon-btn"><i data-lucide="x" style="width:16px;height:16px"></i></button>`;
       const failedChk = isLast ? `<label style="display:flex;align-items:center;gap:4px;margin-top:6px;cursor:pointer;font-size:11px;color:${isFailed?"var(--red)":"var(--text-hint)"}">
-        <input type="checkbox" ${isFailed?"checked":""} onchange="toggleFailed('${name}',${i})" style="accent-color:var(--red);width:13px;height:13px">
+        <input type="checkbox" ${isFailed?"checked":""} onchange="toggleFailed(decodeURIComponent('${safeNameArg}'),${i})" style="accent-color:var(--red);width:13px;height:13px">
         כשל
       </label>` : "";
       return `<div style="margin-bottom:${isLast?"8px":"14px"}">
@@ -641,10 +644,10 @@ function renderWorkout() {
           <span style="min-width:16px;font-size:12px;color:${isFailed?"var(--red)":"var(--text-hint)"};font-weight:600">${s.num}</span>
           <div style="flex:1;display:flex;gap:8px">
             <div style="flex:1">
-              <input class="inp" type="number" inputmode="decimal" placeholder="${p?p.weight:"ק״ג"}" value="${s.weight||""}" style="${isFailed?"border-color:var(--red);color:var(--red)":s.weight>0?"":"color:var(--text-hint)"}" oninput="updateSet('${name}',${i},'weight',this.value)">
+              <input class="inp" type="number" inputmode="decimal" placeholder="${p?p.weight:"ק״ג"}" value="${s.weight||""}" style="${isFailed?"border-color:var(--red);color:var(--red)":s.weight>0?"":"color:var(--text-hint)"}" oninput="updateSet(decodeURIComponent('${safeNameArg}'),${i},'weight',this.value)">
             </div>
             <div style="flex:1">
-              <input class="inp" type="number" inputmode="numeric" placeholder="${p?p.reps+" חז׳":"חז׳"}" value="${s.reps||""}" style="${isFailed?"border-color:var(--red);color:var(--red)":""}" oninput="updateSet('${name}',${i},'reps',this.value)">
+              <input class="inp" type="number" inputmode="numeric" placeholder="${p?p.reps+" חז׳":"חז׳"}" value="${s.reps||""}" style="${isFailed?"border-color:var(--red);color:var(--red)":""}" oninput="updateSet(decodeURIComponent('${safeNameArg}'),${i},'reps',this.value)">
             </div>
             <div style="width:28px;display:flex;align-items:center;justify-content:center">${icon}</div>
           </div>
@@ -676,7 +679,7 @@ function renderWorkout() {
         </p>` : ""}
         ${colHeaders}
         ${setsHtml}
-        <button onclick="addSet('${name}')" style="width:100%;background:var(--surface);border:1px dashed var(--border-med);border-radius:8px;padding:8px;cursor:pointer;font-size:13px;color:var(--text-secondary);font-family:inherit;display:flex;align-items:center;justify-content:center;gap:5px">
+        <button onclick="addSet(decodeURIComponent('${safeNameArg}'))" style="width:100%;background:var(--surface);border:1px dashed var(--border-med);border-radius:8px;padding:8px;cursor:pointer;font-size:13px;color:var(--text-secondary);font-family:inherit;display:flex;align-items:center;justify-content:center;gap:5px">
           <i data-lucide="plus" style="width:14px;height:14px"></i> ${isCardio ? "הוסף פעילות" : "הוסף סט"}
         </button>
       </div>
@@ -691,7 +694,7 @@ function renderWorkout() {
       <button onclick="showCancelMenu()" style="background:none;border:none;cursor:pointer;padding:6px;color:var(--text-hint);display:flex;align-items:center;border-radius:8px">
         <i data-lucide="more-horizontal" style="width:20px;height:20px"></i>
       </button>
-      <span style="font-weight:600;font-size:15px;color:var(--text-primary)">${w.name}</span>
+      <span style="font-weight:600;font-size:15px;color:var(--text-primary)">${escapeHtml(w.name)}</span>
       <span style="font-size:12px;color:var(--text-hint);background:var(--surface);padding:4px 10px;border-radius:20px">${done}/${allNames.length}</span>
     </div>
     ${cards}
@@ -705,7 +708,7 @@ function renderWorkout() {
     <textarea id="workout-note-inp"
       placeholder="הערה לאימון (אופציונלי)..."
       oninput="state.workoutNote=this.value"
-      style="width:100%;resize:none;height:64px;font-family:inherit;font-size:13px;color:var(--text-primary);background:var(--surface);border:1px solid var(--border-med);border-radius:10px;padding:10px 12px;outline:none;box-sizing:border-box;margin-bottom:8px;direction:rtl">${state.workoutNote||""}</textarea>
+      style="width:100%;resize:none;height:64px;font-family:inherit;font-size:13px;color:var(--text-primary);background:var(--surface);border:1px solid var(--border-med);border-radius:10px;padding:10px 12px;outline:none;box-sizing:border-box;margin-bottom:8px;direction:rtl">${escapeHtml(state.workoutNote||"")}</textarea>
     <button class="btn-success" onclick="finishWorkout()" style="margin-top:0">
       <i data-lucide="check-circle" style="width:16px;height:16px"></i> סיום אימון
     </button>
@@ -770,7 +773,7 @@ function finishWorkout() {
       return d.toISOString();
     })() : now.toISOString();
     overlay.remove();
-    const session = { id:"s_"+Date.now(), workoutId:state.workoutId, workoutName: getWorkout(state.workoutId)?.name || "", date:sessionDate, exercises:JSON.parse(JSON.stringify(state.exercises)), note: state.workoutNote||"" };
+    const session = { id:"s_"+Date.now(), workoutId:state.workoutId, workoutName: getWorkout(state.workoutId)?.name || "", date:sessionDate, exercises:JSON.parse(JSON.stringify(state.exercises)), note: sanitizeText(state.workoutNote||"", 500) };
     state.sessions.push(session);
     state.sessions.sort((a,b) => new Date(a.date) - new Date(b.date));
     sessionStorage.removeItem("gym_in_progress");
@@ -937,7 +940,7 @@ function renderHistory() {
       return `<div style="margin-bottom:12px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
           <div style="display:flex;align-items:center;gap:7px">
-            <span style="font-size:13px;font-weight:600;color:var(--text-primary)">${name}</span>
+            <span style="font-size:13px;font-weight:600;color:var(--text-primary)">${escapeHtml(name)}</span>
             ${rest ? `<span class="rest-chip"><i data-lucide="timer" style="width:10px;height:10px"></i> ${formatRest(rest)}</span>` : ""}
           </div>
           ${exImproved ? `<span style="font-size:11px;color:var(--green);font-weight:600;display:flex;align-items:center;gap:3px"><i data-lucide="trending-up" style="width:12px;height:12px"></i> שיפרת</span>` : prevSets.length>0 ? `<span style="font-size:11px;color:var(--text-hint)">ללא שינוי</span>` : ""}
@@ -951,7 +954,7 @@ function renderHistory() {
         <div style="display:flex;align-items:center;gap:7px">
           <i data-lucide="dumbbell" style="width:16px;height:16px;color:var(--text-secondary)"></i>
           <div>
-            <span style="font-weight:700;font-size:15px;color:var(--text-primary)">${wName}</span>
+            <span style="font-weight:700;font-size:15px;color:var(--text-primary)">${escapeHtml(wName)}</span>
             <div style="display:flex;align-items:center;gap:8px;margin-top:3px">${summaryChips}</div>
           </div>
         </div>
@@ -968,7 +971,7 @@ function renderHistory() {
       ${isExpanded ? `<div style="padding:4px 16px 14px;border-top:1px solid var(--border)">
         ${session.note ? `<div style="display:flex;align-items:flex-start;gap:6px;padding:8px 0 10px;border-bottom:1px solid var(--border);margin-bottom:8px">
           <i data-lucide="message-square" style="width:13px;height:13px;color:var(--text-hint);margin-top:1px;flex-shrink:0"></i>
-          <span style="font-size:12px;color:var(--text-secondary);line-height:1.5">${session.note}</span>
+          <span style="font-size:12px;color:var(--text-secondary);line-height:1.5">${escapeHtml(session.note).replace(/\n/g, "<br>")}</span>
         </div>` : ""}
         ${exRows}
       </div>` : ""}
@@ -1319,12 +1322,12 @@ function startEditName(id) {
   render(); setTimeout(()=>{ const inp=document.getElementById("name-inp-"+id); if(inp){inp.focus();inp.select();} },30);
 }
 function saveWorkoutName(id) {
-  const inp=document.getElementById("name-inp-"+id); const val=inp?inp.value.trim():"";
+  const inp=document.getElementById("name-inp-"+id); const val=sanitizeText(inp?inp.value:"", 80);
   if(val){ const w=getWorkout(id); if(w) w.name=val; saveWorkouts(); }
   state.editingNameId=null; render();
 }
 function addWorkout() {
-  const inp=document.getElementById("new-workout-name"); const name=inp?inp.value.trim():"";
+  const inp=document.getElementById("new-workout-name"); const name=sanitizeText(inp?inp.value:"", 80);
   if(!name) return;
   state.workouts.push({id:"w_"+Date.now(), name, exercises:[]});
   state.manageOpenId=state.workouts[state.workouts.length-1].id;
@@ -1337,7 +1340,7 @@ function deleteWorkout(id) {
   saveWorkouts(); render();
 }
 function addExercise(workoutId) {
-  const inp=document.getElementById("new-ex-"+workoutId); const val=inp?inp.value.trim():"";
+  const inp=document.getElementById("new-ex-"+workoutId); const val=sanitizeText(inp?inp.value:"", 80);
   const restInp=document.getElementById("new-rest-"+workoutId);
   const rest=restInp?parseInt(restInp.value)||60:60;
   const catEl=document.getElementById("new-cat-"+workoutId);
@@ -1370,7 +1373,10 @@ function updateExField(workoutId,i,field,val) {
   const w=getWorkout(workoutId);
   if(!w || !w.exercises[i]) return;
   if(field==="rest") w.exercises[i].rest=parseInt(val)||60;
-  else if(field==="name") { if(val.trim()) w.exercises[i].name=val.trim(); }
+  else if(field==="name") {
+    const clean = sanitizeText(val, 80);
+    if(clean) w.exercises[i].name=clean;
+  }
   else if(field==="category") w.exercises[i].category=val||null;
   saveWorkouts();
 }

@@ -66,6 +66,23 @@
     return Number.isFinite(parsed) ? parsed : fallback;
   }
 
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function sanitizeText(value, maxLen = 120) {
+    const clean = String(value ?? "")
+      .replace(/[\u0000-\u001F\u007F]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return clean.slice(0, maxLen);
+  }
+
   Object.assign(window, {
     haptic,
     showToast,
@@ -78,6 +95,8 @@
     getExNames,
     getExRest,
     isValidNumber,
-    toNumber
+    toNumber,
+    escapeHtml,
+    sanitizeText
   });
 })();

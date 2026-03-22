@@ -28,10 +28,12 @@ async function seedLibraryFromWorkouts() {
 }
 
 async function addToLibrary(name, category) {
-  const exists = state.exerciseLibrary.find(e => e.name === name);
+  const cleanName = sanitizeText(name, 80);
+  if (!cleanName) return null;
+  const exists = state.exerciseLibrary.find(e => e.name === cleanName);
   if (exists) return exists;
   try {
-    const rows = await sbPost("exercise_library", { name, category: category || null });
+    const rows = await sbPost("exercise_library", { name: cleanName, category: category || null });
     const entry = rows[0];
     state.exerciseLibrary.push(entry);
     return entry;
@@ -40,20 +42,27 @@ async function addToLibrary(name, category) {
 
 async function updateLibraryEntry(id, name, category) {
   try {
+   const cleanName = sanitizeText(name, 80);
+   if (!cleanName) throw new Error("Invalid exercise name");
    const res = await fetch(SUPABASE_URL + "/rest/v1/exercise_library?id=eq." + id, {
   method: "PATCH",
   headers: { ...SB_HEADERS, Prefer: "return=representation" },
-  body: JSON.stringify({ name, category: category || null })
+  body: JSON.stringify({ name: cleanName, category: category || null })
 });
 if (!res.ok) throw new Error(await res.text());
     const entry = state.exerciseLibrary.find(e => e.id === id);
     const oldName = entry?.name; // שמור לפני העדכון
-    if (entry) { entry.name = name; entry.category = category || null; }
+    if (entry) { entry.name = cleanName; entry.category = category || null; }
     // עדכן גם ב-workouts לפי השם הישן
     state.workouts.forEach(w => {
-      w.exercises.forEach(ex => {
+      w.exercises.forEach((ex, idx) => {
         if ((typeof ex==="string"?ex:ex.name) === oldName) {
-          if (typeof ex !== "string") { ex.name = name; ex.category = category || null; }
+          if (typeof ex === "string") {
+            w.exercises[idx] = { name: cleanName, rest: 60, category: category || null };
+          } else {
+            ex.name = cleanName;
+            ex.category = category || null;
+          }
         }
       });
     });
@@ -111,7 +120,7 @@ function openLibraryAddExercise() {
   overlay.addEventListener("click", e => { if(e.target===overlay) overlay.remove(); });
   setTimeout(() => sheet.querySelector("#lib-new-name")?.focus(), 100);
   sheet.querySelector("#lib-new-confirm").addEventListener("click", async () => {
-    const name = sheet.querySelector("#lib-new-name").value.trim();
+    const name = sanitizeText(sheet.querySelector("#lib-new-name").value, 80);
     const category = sheet.querySelector("#lib-new-cat").value || null;
     if (!name) { sheet.querySelector("#lib-new-name").style.borderColor = "var(--red)"; return; }
     if (!category) { sheet.querySelector("#lib-new-cat").style.borderColor = "var(--red)"; showToast("יש לבחור קטגוריה"); return; }
@@ -183,7 +192,7 @@ function openLibraryEdit(id, name, category) {
   overlay.addEventListener("click", e => { if(e.target===overlay) overlay.remove(); });
   setTimeout(() => sheet.querySelector("#lib-edit-name")?.focus(), 100);
   sheet.querySelector("#lib-save-btn").addEventListener("click", async () => {
-    const newName = sheet.querySelector("#lib-edit-name").value.trim();
+    const newName = sanitizeText(sheet.querySelector("#lib-edit-name").value, 80);
     const newCat = sheet.querySelector("#lib-edit-cat").value || null;
     if (!newName) return;
     overlay.remove();
