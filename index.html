@@ -223,8 +223,12 @@ function loadSettings() {
     if (!s.goalHistory || !s.goalHistory.length) {
       s.goalHistory = [{ goal: s.weeklyGoal, from: "2020-01-05" }];
     }
+    const thisWeekIso = getWeekStart(new Date()).toISOString().slice(0,10);
+    const sorted = [...s.goalHistory].sort((a,b) => a.from > b.from ? -1 : 1);
+    const currentEntry = sorted.find(e => e.from <= thisWeekIso);
+    s.weeklyGoal = currentEntry ? currentEntry.goal : (s.weeklyGoal || 4);
     return s;
-  } catch { return { ...DEFAULT_SETTINGS, goalHistory: [{ goal: 4, from: "2020-01-05" }] }; }
+  } catch { return { ...DEFAULT_SETTINGS, weeklyGoal: 4, goalHistory: [{ goal: 4, from: "2020-01-05" }] }; }
 }
 
 function getWeekStart(date) {
@@ -670,26 +674,32 @@ function getWeekStreak() {
   if (!state.sessions.length) return 0;
   const getWeekKey = (iso) => getWeekStart(iso).toISOString().slice(0,10);
   const weekCounts = {};
+
   state.sessions.forEach(s => {
     const k = getWeekKey(s.date);
     weekCounts[k] = (weekCounts[k] || 0) + 1;
   });
-  // אל תחשב שבוע נוכחי שעדיין לא הסתיים כשבור streak
+
   const todayWeekKey = getWeekKey(new Date().toISOString());
-  const weeks = Object.keys(weekCounts).sort().reverse().filter(w => w !== todayWeekKey);
-  // הוסף שבוע נוכחי אם יש כבר אימונים בו
-  if (weekCounts[todayWeekKey]) weeks.unshift(todayWeekKey);
+
+  // בדוק רק שבועות שהסתיימו, כדי שהשבוע הנוכחי לא ישבור את הרצף באמצע
+  const weeks = Object.keys(weekCounts)
+    .sort()
+    .reverse()
+    .filter(w => w !== todayWeekKey);
 
   let streak = 0;
   let prevWeekKey = null;
+
   for (const w of weeks) {
     const goalForWeek = getGoalForWeek(w);
+
     if (weekCounts[w] >= goalForWeek) {
-      // וודא שאין חור — שבוע שעבר בדיוק צריך להיות הקודם
+      // וודא שאין חור בין שבועות שהושלמו
       if (prevWeekKey !== null) {
         const prevDate = new Date(prevWeekKey);
         const thisDate = new Date(w);
-        const diffWeeks = Math.round((prevDate - thisDate) / (7 * 86400000));
+        const diffWeeks = Math.round((prevDate - thisDate) / (7 * 24 * 60 * 60 * 1000));
         if (diffWeeks > 1) break;
       }
       streak++;
@@ -698,6 +708,7 @@ function getWeekStreak() {
       break;
     }
   }
+
   return streak;
 }
 
@@ -905,7 +916,7 @@ function renderDashboard() {
 
   const now = new Date();
   const dayOfWeek = now.getDay();
-  const daysLeftInWeek = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
+  const daysLeftInWeek = 6 - dayOfWeek;
   const workoutsLeft = Math.max(0, goal - thisWeek);
   const goalReached = thisWeek >= goal;
 
@@ -918,7 +929,9 @@ function renderDashboard() {
     const msg = isUrgent
       ? "⚠ לא יהיה מספיק זמן — התאמן היום!"
       : daysLeftInWeek === 0
-      ? "היום הוא יום ראשון — שבוע חדש מתחיל"
+      ? "היום היום האחרון של השבוע — זה הזמן לסגור את היעד"
+      : dayOfWeek === 0
+      ? "שבוע חדש התחיל — יש לך זמן טוב לעמוד ביעד"
       : workoutsLeft === 1
       ? "עוד אימון אחד ותשלים את היעד השבועי"
       : `עוד ${workoutsLeft} אימונים להשלמת השבוע`;
@@ -1900,11 +1913,11 @@ function renderManage() {
         <span style="font-size:13px;color:var(--text-secondary)">אימונים בשבוע:</span>
         <div style="display:flex;align-items:center;gap:8px">
           <button onclick="changeGoalTemp(-1)" style="width:32px;height:32px;background:var(--surface);border:1px solid var(--border-med);border-radius:8px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;color:var(--text-primary)">−</button>
-          <span style="font-size:20px;font-weight:700;color:var(--text-primary);min-width:24px;text-align:center" id="goal-display">${state.pendingGoal ?? state.settings.weeklyGoal}</span>
+          <span style="font-size:20px;font-weight:700;color:var(--text-primary);min-width:24px;text-align:center" id="goal-display">${state.pendingGoal ?? getGoalForWeek(getWeekStart(new Date()).toISOString().slice(0,10))}</span>
           <button onclick="changeGoalTemp(1)" style="width:32px;height:32px;background:var(--surface);border:1px solid var(--border-med);border-radius:8px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;color:var(--text-primary)">+</button>
         </div>
       </div>
-      ${(state.pendingGoal != null && state.pendingGoal !== state.settings.weeklyGoal) ? `
+      ${(state.pendingGoal != null && state.pendingGoal !== getGoalForWeek(getWeekStart(new Date()).toISOString().slice(0,10))) ? `
       <button onclick="promptSaveGoal()" style="width:100%;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer;font-size:14px;font-weight:600;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">
         <i data-lucide="check" style="width:15px;height:15px"></i> שמור יעד (${state.pendingGoal} אימונים)
       </button>` : ""}
@@ -1939,7 +1952,9 @@ function renderManage() {
 }
 
 function changeGoalTemp(delta) {
-  const base = state.pendingGoal ?? state.settings.weeklyGoal;
+  const thisWeekIso = getWeekStart(new Date()).toISOString().slice(0,10);
+  const currentWeekGoal = getGoalForWeek(thisWeekIso);
+  const base = state.pendingGoal ?? currentWeekGoal;
   const next = Math.max(1, Math.min(7, base + delta));
   state.pendingGoal = next;
   const el = document.getElementById("goal-display");
@@ -1949,14 +1964,16 @@ function changeGoalTemp(delta) {
 
 function promptSaveGoal() {
   const newGoal = state.pendingGoal;
-  if (newGoal == null || newGoal === state.settings.weeklyGoal) return;
+  const thisWeekIso = getWeekStart(new Date()).toISOString().slice(0,10);
+  const currentWeekGoal = getGoalForWeek(thisWeekIso);
+  if (newGoal == null || newGoal === currentWeekGoal) return;
 
   const thisWeekStart = getWeekStart(new Date());
   const thisWeekIso = thisWeekStart.toISOString().slice(0,10);
   const nextWeekStart = new Date(thisWeekStart.getTime() + 7 * 86400000);
   const nextWeekIso = nextWeekStart.toISOString().slice(0,10);
 
-  const curGoal = state.settings.weeklyGoal;
+  const curGoal = currentWeekGoal;
 
   showConfirmSheet(
     `עדכון יעד ל-${newGoal} אימונים`,
@@ -1969,14 +1986,19 @@ function promptSaveGoal() {
 }
 
 function applyGoal(newGoal, fromIso) {
-  state.settings.weeklyGoal = newGoal;
+  const thisWeekIso = getWeekStart(new Date()).toISOString().slice(0,10);
+  const currentWeekGoalBefore = getGoalForWeek(thisWeekIso);
+
   state.pendingGoal = null;
   if (!state.settings.goalHistory) state.settings.goalHistory = [];
   state.settings.goalHistory = state.settings.goalHistory.filter(e => e.from !== fromIso);
   state.settings.goalHistory.push({ goal: newGoal, from: fromIso });
+
+  state.settings.weeklyGoal = fromIso <= thisWeekIso ? newGoal : currentWeekGoalBefore;
+
   saveSettings();
   haptic("medium");
-  showToast("היעד עודכן ✓");
+  showToast(fromIso <= thisWeekIso ? "היעד השבועי עודכן ✓" : "היעד נשמר לשבוע הבא ✓");
   render();
 }
 
