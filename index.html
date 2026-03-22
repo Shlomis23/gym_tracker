@@ -1964,16 +1964,16 @@ function changeGoalTemp(delta) {
 
 function promptSaveGoal() {
   const newGoal = state.pendingGoal;
-  const thisWeekIso = getWeekStart(new Date()).toISOString().slice(0,10);
-  const currentWeekGoal = getGoalForWeek(thisWeekIso);
-  if (newGoal == null || newGoal === currentWeekGoal) return;
 
   const thisWeekStart = getWeekStart(new Date());
   const thisWeekIso = thisWeekStart.toISOString().slice(0,10);
+
+  const currentWeekGoal = getGoalForWeek(thisWeekIso);
+
+  if (newGoal == null || newGoal === currentWeekGoal) return;
+
   const nextWeekStart = new Date(thisWeekStart.getTime() + 7 * 86400000);
   const nextWeekIso = nextWeekStart.toISOString().slice(0,10);
-
-  const curGoal = currentWeekGoal;
 
   showConfirmSheet(
     `עדכון יעד ל-${newGoal} אימונים`,
