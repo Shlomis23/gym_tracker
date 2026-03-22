@@ -760,11 +760,11 @@ function renderWorkout() {
       return `<div style="margin-bottom:${isLast?"8px":"14px"}">
         <div style="display:flex;align-items:center;gap:8px">
           <span style="min-width:16px;font-size:12px;color:${isFailed?"var(--red)":"var(--text-hint)"};font-weight:600">${s.num}</span>
-          <div style="flex:1;display:flex;gap:8px">
-            <div style="flex:1">
+          <div style="flex:1;display:flex;gap:6px;align-items:center;min-width:0;justify-content:center">
+            <div style="flex:0 1 92px;min-width:0">
               <input class="inp" type="number" inputmode="decimal" placeholder="${p?p.weight:"ק״ג"}" value="${s.weight||""}" style="${isFailed?"border-color:var(--red);color:var(--red)":s.weight>0?"":"color:var(--text-hint)"}" oninput="updateSet(decodeURIComponent('${safeNameArg}'),${i},'weight',this.value)">
             </div>
-            <div style="flex:1">
+            <div style="flex:0 1 92px;min-width:0">
               <input class="inp" type="number" inputmode="numeric" placeholder="${p?p.reps+" חז׳":"חז׳"}" value="${s.reps||""}" style="${isFailed?"border-color:var(--red);color:var(--red)":""}" oninput="updateSet(decodeURIComponent('${safeNameArg}'),${i},'reps',this.value)">
             </div>
             <div style="width:28px;display:flex;align-items:center;justify-content:center">${icon}</div>
@@ -782,9 +782,9 @@ function renderWorkout() {
         </div>`
       : `<div style="display:flex;margin-bottom:12px">
           <span style="flex:0 0 24px"></span>
-          <div style="flex:1;display:flex;gap:8px">
-            <span style="flex:1;text-align:center;font-size:11px;color:var(--text-hint);font-weight:600">משקל ק״ג</span>
-            <span style="flex:1;text-align:center;font-size:11px;color:var(--text-hint);font-weight:600">חזרות</span>
+          <div style="flex:1;display:flex;gap:6px;align-items:center;justify-content:center">
+            <span style="flex:0 1 92px;text-align:center;font-size:11px;color:var(--text-hint);font-weight:600">משקל ק״ג</span>
+            <span style="flex:0 1 92px;text-align:center;font-size:11px;color:var(--text-hint);font-weight:600">חזרות</span>
             <span style="width:28px"></span>
           </div>
         </div>`;
