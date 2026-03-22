@@ -999,8 +999,8 @@ function renderWeightChart(series) {
   const last = points[points.length - 1];
   return `
     <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" style="display:block;width:100%;height:190px;background:var(--surface);border:1px solid var(--border-soft);border-radius:12px;overflow:hidden">
-      <polyline points="${lineWeight}" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round"></polyline>
-      <polyline points="${lineAvg}" fill="none" stroke="var(--green)" stroke-width="2.4" stroke-dasharray="6 4" stroke-linecap="round"></polyline>
+      <polyline points="${lineWeight}" fill="none" stroke="var(--text-hint)" stroke-opacity="0.55" stroke-width="1.8" stroke-linecap="round"></polyline>
+      <polyline points="${lineAvg}" fill="none" stroke="var(--green)" stroke-width="3.2" stroke-linecap="round"></polyline>
       ${points.map(p => `<circle cx="${p.x}" cy="${p.yW}" r="3.6" fill="var(--accent)"></circle>`).join("")}
       ${points.map(p => `<text x="${p.x}" y="${Math.max(14, p.yW - 9)}" font-size="11" font-weight="700" fill="var(--text-primary)" text-anchor="middle">${Number(p.weight).toFixed(1)}</text>`).join("")}
       <text x="${first.x}" y="${height - 8}" font-size="11" fill="var(--text-hint)" text-anchor="middle">${formatDate(first.measured_at)}</text>
@@ -1109,6 +1109,16 @@ function renderHistory() {
     const first = filtered[0];
     const delta = latest.weight - first.weight;
     const avg7 = withAvg[withAvg.length - 1]?.movingAvg ?? latest.weight;
+    const spanLabel = range === 0 ? "כל התקופה" : `${range} ימים`;
+    const trendWindow = withAvg.slice(-7);
+    const trendDelta = trendWindow.length >= 2 ? trendWindow[trendWindow.length - 1].movingAvg - trendWindow[0].movingAvg : 0;
+    const trendText = Math.abs(trendDelta) < 0.15
+      ? "יציב"
+      : trendDelta < 0
+      ? "במגמת ירידה"
+      : "במגמת עלייה";
+    const insightText = `טווח ${spanLabel}: ${delta > 0 ? '+' : ''}${delta.toFixed(1)} ק״ג · ממוצע 7 ימים ${trendText}`;
+
     const summaryCards = `
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:10px">
         <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">אחרון</div><div style="font-size:19px;font-weight:700">${latest.weight.toFixed(1)}</div></div>
@@ -1116,6 +1126,38 @@ function renderHistory() {
         <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">שינוי בטווח</div><div style="font-size:19px;font-weight:700;color:${delta < 0 ? "var(--green)" : delta > 0 ? "var(--red)" : "var(--text-primary)"}">${delta > 0 ? "+" : ""}${delta.toFixed(1)}</div></div>
       </div>
     `;
+
+    const wGoal = state.weightGoal || {};
+    const startGoal = Number(wGoal.start_weight);
+    const targetGoal = Number(wGoal.goal_weight);
+    const hasGoal = Number.isFinite(startGoal) && Number.isFinite(targetGoal) && startGoal > 0 && targetGoal > 0 && startGoal !== targetGoal;
+    const dist = hasGoal ? Math.abs(startGoal - targetGoal) : 0;
+    const progressRaw = hasGoal ? Math.abs(startGoal - latest.weight) / dist : 0;
+    const progressPct = hasGoal ? Math.max(0, Math.min(100, Math.round(progressRaw * 100))) : 0;
+    const goalDirectionDown = hasGoal && targetGoal < startGoal;
+    const remaining = hasGoal ? (goalDirectionDown ? latest.weight - targetGoal : targetGoal - latest.weight) : null;
+    const goalStatus = !hasGoal
+      ? "הגדר יעד כדי לעקוב אחרי התקדמות"
+      : remaining <= 0
+      ? "היעד הושג — כל הכבוד!"
+      : `נשארו עוד ${remaining.toFixed(1)} ק״ג ליעד`;
+    const goalCard = `<div class="card" style="padding:12px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div>
+          <div style="font-size:12px;color:var(--text-secondary);font-weight:600">יעד משקל</div>
+          <div style="font-size:11px;color:var(--text-hint);margin-top:2px">${hasGoal ? `${startGoal.toFixed(1)} → ${targetGoal.toFixed(1)} ק״ג` : "ללא יעד מוגדר"}</div>
+        </div>
+        <button onclick="showGoalModal()" style="border:none;background:var(--surface);padding:7px 11px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--text-secondary);font-family:inherit">${hasGoal ? "ערוך יעד" : "הוסף יעד"}</button>
+      </div>
+      <div style="height:9px;background:var(--surface);border-radius:999px;overflow:hidden;margin-bottom:7px">
+        <div style="width:${progressPct}%;height:100%;background:${remaining !== null && remaining <= 0 ? "var(--green)" : "var(--accent)"};transition:width .25s ease"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:11px;color:var(--text-secondary)">${goalStatus}</span>
+        <span style="font-size:11px;color:var(--text-hint)">${hasGoal ? progressPct + "%" : "--"}</span>
+      </div>
+    </div>`;
+
     const rangeButtons = [
       { days: 7, label: "7 ימים" },
       { days: 30, label: "30 ימים" },
@@ -1143,12 +1185,17 @@ function renderHistory() {
       </div>`;
     }).join("");
     return `<div style="padding:14px 14px 0">${tabs}
+      <div class="card" style="padding:11px 12px;margin-bottom:10px;background:var(--surface)">
+        <div style="font-size:12px;color:var(--text-secondary);font-weight:600">תובנה</div>
+        <div style="font-size:12px;color:var(--text-primary);margin-top:3px;line-height:1.45">${insightText}</div>
+      </div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <div style="font-size:13px;color:var(--text-secondary)">My Weight</div>
         <button onclick="openWeightEntryModal()" class="btn-primary" style="width:auto;padding:8px 12px;font-size:12px">הוסף</button>
       </div>
       <div style="display:flex;gap:6px;overflow:auto;margin-bottom:10px;padding-bottom:4px">${rangeButtons}</div>
       ${summaryCards}
+      ${goalCard}
       ${renderWeightChart(withAvg)}
       <div style="margin-top:10px;display:grid;gap:8px;padding-bottom:12px">${rows}</div>
     </div>`;
@@ -1161,10 +1208,80 @@ function renderHistory() {
   </div>`;
 
   if (!state.sessions.length) return `<div style="padding:14px">${tabs}${exportBtn}<div style="padding:30px;text-align:center;color:var(--text-hint);font-size:14px">אין אימונים עדיין</div></div>`;
-  const reversed = [...state.sessions].reverse();
+
+  const thisWeekIso = getWeekStart(new Date()).toISOString().slice(0,10);
+  const thisWeekCount = getThisWeekCount();
+  const weekGoal = getGoalForWeek(thisWeekIso);
+  const workoutsLeft = Math.max(0, weekGoal - thisWeekCount);
+  const weekStart = getWeekStart(new Date());
+  const prevWeekStart = new Date(weekStart); prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+  const prevWeekEnd = new Date(weekStart); prevWeekEnd.setMilliseconds(-1);
+  const thisWeekVol = state.sessions
+    .filter(s => new Date(s.date) >= weekStart)
+    .reduce((sum, s) => sum + calcSessionVolume(s.exercises), 0);
+  const prevWeekVol = state.sessions
+    .filter(s => {
+      const d = new Date(s.date);
+      return d >= prevWeekStart && d <= prevWeekEnd;
+    })
+    .reduce((sum, s) => sum + calcSessionVolume(s.exercises), 0);
+  const volPct = prevWeekVol > 0 ? Math.round(((thisWeekVol - prevWeekVol) / prevWeekVol) * 100) : null;
+  const insightWorkout = workoutsLeft === 0
+    ? `יעד שבועי הושלם: ${thisWeekCount}/${weekGoal} אימונים`
+    : `${thisWeekCount}/${weekGoal} אימונים השבוע · נשארו עוד ${workoutsLeft}`;
+  const insightVolume = volPct === null
+    ? `נפח שבועי: ${formatVolume(thisWeekVol)}`
+    : `נפח שבועי ${volPct >= 0 ? '+' : ''}${volPct}% מול שבוע קודם`;
+
+  const improvedCount = (session, prevSameType) => {
+    const exNames = Object.keys(session.exercises || {});
+    return exNames.filter(name => {
+      const sets = (session.exercises[name]||[]).filter(s=>s.weight>0||s.reps>0);
+      const prevSets = prevSameType?.exercises?.[name]||[];
+      return prevSets.length>0 && sets.some((s,i)=>prevSets[i]&&s.weight>prevSets[i].weight);
+    }).length;
+  };
+
+  const mode = state.historyWorkoutFilterMode || "all";
+  const workoutId = state.historyWorkoutId || "all";
+  const exQuery = (state.historyExerciseQuery || "").trim().toLowerCase();
+
+  const workoutOptions = [
+    `<option value="all" ${workoutId === "all" ? "selected" : ""}>כל התוכניות</option>`,
+    ...state.workouts.map(w => `<option value="${w.id}" ${workoutId === w.id ? "selected" : ""}>${escapeHtml(w.name)}</option>`)
+  ].join("");
+
+  const filteredSessions = [...state.sessions].filter((session, idx) => {
+    if (workoutId !== "all" && session.workoutId !== workoutId) return false;
+    if (exQuery) {
+      const names = Object.keys(session.exercises || {}).map(x => x.toLowerCase());
+      if (!names.some(n => n.includes(exQuery))) return false;
+    }
+    if (mode === "improved") {
+      const prevSameType = state.sessions.slice(0, idx).reverse().find(s => s.workoutId === session.workoutId);
+      return improvedCount(session, prevSameType) > 0;
+    }
+    return true;
+  }).reverse();
+
   if (!state.expandedSessions) state.expandedSessions = new Set();
-  return `<div style="padding:14px">${tabs}${exportBtn}${reversed.map((session, ri) => {
-    const originalIdx = state.sessions.length - 1 - ri;
+  return `<div style="padding:14px">${tabs}
+    <div class="card" style="padding:11px 12px;margin-bottom:10px;background:var(--surface)">
+      <div style="font-size:12px;color:var(--text-secondary);font-weight:600">תובנה</div>
+      <div style="font-size:12px;color:var(--text-primary);margin-top:3px;line-height:1.45">${insightWorkout}</div>
+      <div style="font-size:11px;color:var(--text-hint);margin-top:2px">${insightVolume}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+      <button onclick="state.historyWorkoutFilterMode='all';render()" style="padding:8px 10px;border-radius:10px;border:1px solid ${mode==='all'?'var(--accent)':'var(--border-med)'};background:${mode==='all'?'var(--accent)':'var(--card)'};color:${mode==='all'?'#fff':'var(--text-secondary)'};font-family:inherit;font-size:12px;cursor:pointer">הכול</button>
+      <button onclick="state.historyWorkoutFilterMode='improved';render()" style="padding:8px 10px;border-radius:10px;border:1px solid ${mode==='improved'?'var(--green)':'var(--border-med)'};background:${mode==='improved'?'var(--green-bg)':'var(--card)'};color:${mode==='improved'?'var(--green)':'var(--text-secondary)'};font-family:inherit;font-size:12px;cursor:pointer">רק עם שיפור</button>
+    </div>
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-bottom:10px">
+      <select onchange="state.historyWorkoutId=this.value;render()" style="padding:9px 10px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;font-size:12px;color:var(--text-primary)">${workoutOptions}</select>
+      <input type="text" value="${escapeHtml(state.historyExerciseQuery || "")}" oninput="state.historyExerciseQuery=this.value;render()" placeholder="חפש לפי תרגיל" style="padding:9px 10px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;font-size:12px;color:var(--text-primary)">
+    </div>
+    ${exportBtn}
+    ${filteredSessions.length === 0 ? `<div style="padding:30px;text-align:center;color:var(--text-hint);font-size:14px">לא נמצאו אימונים לפי הסינון שבחרת</div>` : filteredSessions.map((session) => {
+    const originalIdx = state.sessions.findIndex(s => s.id === session.id);
     const w = getWorkout(session.workoutId);
     const wName = w ? w.name : (session.workoutName || session.workoutId);
     const prevSameType = state.sessions.slice(0, originalIdx).reverse().find(s => s.workoutId === session.workoutId);
@@ -1172,11 +1289,7 @@ function renderHistory() {
 
     const exNames = Object.keys(session.exercises);
     const totalEx = exNames.length;
-    const improved = exNames.filter(name => {
-      const sets = (session.exercises[name]||[]).filter(s=>s.weight>0||s.reps>0);
-      const prevSets = prevSameType?.exercises?.[name]||[];
-      return prevSets.length>0 && sets.some((s,i)=>prevSets[i]&&s.weight>prevSets[i].weight);
-    }).length;
+    const improved = improvedCount(session, prevSameType);
 
     const sessionVol = calcSessionVolume(session.exercises);
     const summaryChips = `
@@ -1251,6 +1364,7 @@ function renderHistory() {
 }
 
 
+
 function renderMonthTab(tabs) {
   const now = new Date();
   const monthNames = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
@@ -1262,14 +1376,23 @@ function renderMonthTab(tabs) {
 
   const monthStart = new Date(viewYear, viewMonth, 1);
   const monthEnd = new Date(viewYear, viewMonth + 1, 0);
+  const prevMonthStart = new Date(viewYear, viewMonth - 1, 1);
+  const prevMonthEnd = new Date(viewYear, viewMonth, 0);
 
   const sessions = state.sessions.filter(s => {
     const d = new Date(s.date);
     return d >= monthStart && d <= monthEnd;
   });
+  const prevSessions = state.sessions.filter(s => {
+    const d = new Date(s.date);
+    return d >= prevMonthStart && d <= prevMonthEnd;
+  });
 
   const totalVol = sessions.reduce((t, s) => t + calcSessionVolume(s.exercises), 0);
   const totalSets = sessions.reduce((t, s) =>
+    t + Object.values(s.exercises||{}).reduce((tt, sets) => tt + sets.filter(x=>x.reps>0).length, 0), 0);
+  const prevTotalVol = prevSessions.reduce((t, s) => t + calcSessionVolume(s.exercises), 0);
+  const prevTotalSets = prevSessions.reduce((t, s) =>
     t + Object.values(s.exercises||{}).reduce((tt, sets) => tt + sets.filter(x=>x.reps>0).length, 0), 0);
 
   // PRs broken this month
@@ -1285,6 +1408,18 @@ function renderMonthTab(tabs) {
     });
   });
   const newPRs = Object.entries(allPRs).filter(([,v]) => v.inMonth > v.before && v.inMonth > 0).length;
+  const prevAllPRs = {};
+  state.sessions.forEach(s => {
+    const d = new Date(s.date);
+    const inPrevMonth = d >= prevMonthStart && d <= prevMonthEnd;
+    Object.entries(s.exercises||{}).forEach(([name, sets]) => {
+      const maxW = Math.max(...sets.map(x=>x.weight||0));
+      if (!prevAllPRs[name]) prevAllPRs[name] = { before: 0, inMonth: 0 };
+      if (inPrevMonth) prevAllPRs[name].inMonth = Math.max(prevAllPRs[name].inMonth, maxW);
+      else if (d < prevMonthStart) prevAllPRs[name].before = Math.max(prevAllPRs[name].before, maxW);
+    });
+  });
+  const prevMonthPrs = Object.entries(prevAllPRs).filter(([,v]) => v.inMonth > v.before && v.inMonth > 0).length;
 
   // Most improved exercise
   const improvements = {};
@@ -1299,6 +1434,19 @@ function renderMonthTab(tabs) {
     });
   });
   const topEx = Object.entries(improvements).sort((a,b)=>b[1]-a[1])[0];
+  const deltaText = (curr, prev, suffix = "") => {
+    const diff = curr - prev;
+    if (diff === 0) return "ללא שינוי";
+    return `${diff > 0 ? "+" : ""}${diff}${suffix} מול חודש קודם`;
+  };
+  const pctText = (curr, prev) => {
+    if (prev <= 0) return curr > 0 ? "נתון חדש החודש" : "אין שינוי";
+    const pct = Math.round(((curr - prev) / prev) * 100);
+    return `${pct >= 0 ? "+" : ""}${pct}% מול חודש קודם`;
+  };
+  const insightText = sessions.length === 0
+    ? "אין אימונים בחודש זה"
+    : `החודש בוצעו ${sessions.length} אימונים · ${newPRs} שיאים חדשים · ${topEx ? `הכי השתפרת: ${topEx[0]} (+${topEx[1]} ק״ג)` : "המשך מצוין!"}`;
 
   // calendar grid
   const firstDow = monthStart.getDay();
@@ -1346,26 +1494,31 @@ function renderMonthTab(tabs) {
       </div>
     </div>
 
+    <div class="card" style="padding:11px 12px;margin-bottom:10px;background:var(--surface)">
+      <div style="font-size:12px;color:var(--text-secondary);font-weight:600">תובנה</div>
+      <div style="font-size:12px;color:var(--text-primary);margin-top:3px;line-height:1.45">${insightText}</div>
+    </div>
+
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
       <div class="stat-card">
         <div class="stat-label">אימונים</div>
         <div class="stat-value">${sessions.length}</div>
-        <div class="stat-sub">החודש</div>
+        <div class="stat-sub">${deltaText(sessions.length, prevSessions.length)}</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">נפח כולל</div>
         <div class="stat-value" style="font-size:18px">${formatVolume(totalVol)}</div>
-        <div class="stat-sub">סה״כ הורם</div>
+        <div class="stat-sub">${pctText(totalVol, prevTotalVol)}</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">סטים</div>
         <div class="stat-value">${totalSets}</div>
-        <div class="stat-sub">כולל חזרות</div>
+        <div class="stat-sub">${deltaText(totalSets, prevTotalSets)}</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">שיאים חדשים</div>
         <div class="stat-value" style="color:${newPRs>0?"var(--green)":"var(--text-primary)"}">${newPRs}</div>
-        <div class="stat-sub">נשברו החודש</div>
+        <div class="stat-sub">${deltaText(newPRs, prevMonthPrs)}</div>
       </div>
     </div>
 

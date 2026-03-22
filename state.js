@@ -40,7 +40,8 @@ let state = {
   weightLogs: [], weightGoal: { start_weight: null, goal_weight: null }, historyTab: "workouts",
   weightRangeDays: 90,
   workoutNote: "", monthViewYear: null, monthViewMonth: null, pendingGoal: null,
-  editingExKey: null, exerciseLibrary: [], workoutExtras: [], dashboardAnimatedOnce: false
+  editingExKey: null, exerciseLibrary: [], workoutExtras: [], dashboardAnimatedOnce: false,
+  historyWorkoutFilterMode: "all", historyWorkoutId: "all", historyExerciseQuery: ""
 };
 
 window.state = state;
