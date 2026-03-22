@@ -293,7 +293,7 @@ if (inProgress) {
 
   // ── Weight card ──────────────────────────────────────────────────
   const latest = getLatestWeight();
-  const prev = getPrevWeight();
+  const weightLogsAsc = getWeightLogsAsc();
   const dSinceW = daysSinceWeight();
   const needsUpdate = dSinceW === null || dSinceW >= 7;
 
@@ -307,14 +307,31 @@ if (inProgress) {
       <button onclick="event.stopPropagation();showWeightModal()" style="background:var(--accent);border:none;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px;color:#fff;font-family:inherit;font-weight:600">הזן משקל ראשון</button>
     </div>`;
   } else if (latest) {
-    const diff = prev ? (latest.weight - prev.weight) : null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startOfCurrentWeek = new Date(today);
+    startOfCurrentWeek.setDate(today.getDate() - today.getDay()); // Sunday
+    const startOfPrevWeek = new Date(startOfCurrentWeek);
+    startOfPrevWeek.setDate(startOfCurrentWeek.getDate() - 7);
+    const endOfPrevWeek = new Date(startOfCurrentWeek);
+    endOfPrevWeek.setMilliseconds(-1); // Saturday 23:59:59.999
+
+    const prevWeekLogs = weightLogsAsc.filter(log => {
+      const dt = new Date(log.measured_at);
+      return dt >= startOfPrevWeek && dt <= endOfPrevWeek;
+    });
+    const prevWeekAvg = prevWeekLogs.length
+      ? prevWeekLogs.reduce((sum, log) => sum + Number(log.weight), 0) / prevWeekLogs.length
+      : null;
+
+    const diff = prevWeekAvg !== null ? (latest.weight - prevWeekAvg) : null;
     const diffColor = diff === null ? "var(--text-hint)" : diff < 0 ? "var(--green)" : diff > 0 ? "var(--red)" : "var(--text-hint)";
     const diffArrow = diff === null ? "" : diff < 0
       ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>`
       : diff > 0
       ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`
       : "";
-    const diffText = diff === null ? "" : `${diff > 0 ? "+" : ""}${diff.toFixed(1)} ק״ג מהשבוע הקודם`;
+    const diffText = diff === null ? "" : `${diff > 0 ? "+" : ""}${diff.toFixed(1)} ק״ג מול ממוצע שבוע שעבר`;
     const cardBorder = needsUpdate ? "var(--orange)" : "var(--border)";
     const cardBg = needsUpdate ? "var(--orange-bg)" : "var(--card)";
 
