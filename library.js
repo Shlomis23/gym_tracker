@@ -110,6 +110,94 @@
     });
   }
 
+
+  function openExercisePicker(workoutId = null) {
+    document.getElementById("ex-picker-modal")?.remove();
+    const overlay = document.createElement("div");
+    overlay.id = "ex-picker-modal";
+    overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2000;display:flex;align-items:flex-end;justify-content:center";
+
+    const options = (state.exerciseLibrary || []).slice().sort((a,b)=>a.name.localeCompare(b.name,"he"));
+    const grouped = {};
+    options.forEach(ex => {
+      const cat = ex.category || "uncategorized";
+      if (!grouped[cat]) grouped[cat] = [];
+      grouped[cat].push(ex);
+    });
+    const catOrder = [...CATEGORIES.map(c=>c.id), "uncategorized"].filter(c => grouped[c]);
+
+    const title = workoutId ? "הוספת תרגיל לאימון" : "הוספת תרגיל חד-פעמי";
+    const sheet = document.createElement("div");
+    sheet.style.cssText = "background:var(--card);border-radius:20px 20px 0 0;padding:24px 20px 32px;width:100%;direction:rtl;animation:slideUp 0.3s cubic-bezier(0.22,1,0.36,1) both;box-sizing:border-box";
+    sheet.innerHTML = `
+      <div style="font-size:15px;font-weight:700;color:var(--text-primary);margin-bottom:16px">${title}</div>
+      <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px">בחר תרגיל מהמאגר</label>
+      <select id="picker-ex-name" style="width:100%;font-family:inherit;font-size:14px;background:var(--surface);border:1px solid var(--border-med);border-radius:10px;padding:10px 12px;color:var(--text-primary);outline:none;box-sizing:border-box;margin-bottom:14px">
+        <option value="">בחר תרגיל...</option>
+        ${catOrder.map(cat => {
+          const label = cat === "uncategorized" ? "כללי" : (CATEGORIES.find(c => c.id === cat)?.label || "כללי");
+          return `<optgroup label="${label}">${grouped[cat].map(ex => `<option value="${ex.name.replace(/"/g,"&quot;")}">${ex.name}</option>`).join("")}</optgroup>`;
+        }).join("")}
+      </select>
+      ${workoutId ? `
+      <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px">זמן מנוחה (שניות)</label>
+      <input id="picker-ex-rest" type="number" value="60" min="15" max="600" step="15"
+        style="width:100%;font-family:inherit;font-size:14px;background:var(--surface);border:1px solid var(--border-med);border-radius:10px;padding:10px 12px;color:var(--text-primary);outline:none;box-sizing:border-box;margin-bottom:14px;text-align:center;direction:ltr">
+      ` : ""}
+      <button id="picker-ex-confirm" style="width:100%;padding:13px;background:var(--accent);color:#fff;border:none;border-radius:12px;cursor:pointer;font-size:15px;font-weight:700;font-family:inherit;margin-bottom:10px">הוסף</button>
+      <button id="picker-ex-cancel" style="width:100%;padding:13px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:12px;cursor:pointer;font-size:15px;font-family:inherit">ביטול</button>
+    `;
+
+    overlay.appendChild(sheet);
+    document.body.appendChild(overlay);
+
+    overlay.addEventListener("click", e => { if(e.target===overlay) overlay.remove(); });
+    sheet.querySelector("#picker-ex-cancel").addEventListener("click", () => overlay.remove());
+
+    sheet.querySelector("#picker-ex-confirm").addEventListener("click", () => {
+      const sel = sheet.querySelector("#picker-ex-name");
+      const name = sel.value.trim();
+      if (!name) {
+        sel.style.borderColor = "var(--red)";
+        return;
+      }
+
+      const entry = state.exerciseLibrary.find(e => e.name === name);
+      const category = entry?.category || null;
+
+      if (workoutId) {
+        const w = getWorkout(workoutId);
+        if (!w) return;
+        if (w.exercises.some(ex => (typeof ex === "string" ? ex : ex.name) === name)) {
+          showToast("התרגיל כבר קיים באימון");
+          return;
+        }
+        const rest = parseInt(sheet.querySelector("#picker-ex-rest")?.value, 10) || 60;
+        w.exercises.push({ name, rest, category });
+        saveWorkouts();
+      } else {
+        const w = getWorkout(state.workoutId);
+        if (!w) return;
+        const baseNames = getExNames(w);
+        const extraNames = state.workoutExtras || [];
+        if (baseNames.includes(name) || extraNames.includes(name)) {
+          showToast("התרגיל כבר קיים באימון");
+          return;
+        }
+        state.workoutExtras = [...extraNames, name];
+        state.openExercise = name;
+        state.exercises[name] = category === "cardio"
+          ? [{ num:1, minutes:0, failed:false }]
+          : [{ num:1, weight:0, reps:0, failed:false }, { num:2, weight:0, reps:0, failed:false }, { num:3, weight:0, reps:0, failed:false }];
+        saveInProgress();
+      }
+
+      overlay.remove();
+      render();
+      showToast("התרגיל נוסף ✓");
+    });
+  }
+
   // ─── ניהול מאגר ───
   function renderLibraryManager() {
     const byCategory = {};
@@ -184,6 +272,7 @@
   window.updateLibraryEntry = updateLibraryEntry;
   window.deleteFromLibrary = deleteFromLibrary;
   window.openLibraryAddExercise = openLibraryAddExercise;
+  window.openExercisePicker = openExercisePicker;
   window.renderLibraryManager = renderLibraryManager;
   window.openLibraryEdit = openLibraryEdit;
 })();

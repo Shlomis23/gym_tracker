@@ -723,6 +723,10 @@ function getExCatByName(name) {
   const lib = state.exerciseLibrary.find(e => e.name === name);
   return lib?.category || null;
 }
+function openWorkoutExtraPicker() {
+  openExercisePicker();
+}
+
 function addSet(name) {
   const sets = state.exercises[name];
   sets.push({ num:sets.length+1, weight:0, reps:0, failed:false });
