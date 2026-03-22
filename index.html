@@ -282,112 +282,120 @@ function buildWrap(mb) {
   const d = document.createElement("div"); d.style.marginBottom = mb || "16px"; return d;
 }
 
-function showWeightModal(changeGoal) {
+function showGoalModal() {
+  const wGoal = state.weightGoal || {};
+  document.getElementById("goal-modal")?.remove();
+
+  const overlay = document.createElement("div");
+  overlay.id = "goal-modal";
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2100;display:flex;align-items:flex-end;justify-content:center";
+  const sheet = document.createElement("div");
+  sheet.style.cssText = "background:var(--card);border-radius:22px 22px 0 0;padding:20px 16px 16px;width:100%;max-width:430px;direction:rtl;max-height:86vh;overflow:auto";
+
+  sheet.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+      <div>
+        <div style="font-size:17px;font-weight:800;color:var(--text-primary)">עריכת יעד</div>
+        <div style="font-size:12px;color:var(--text-hint);margin-top:3px">הגדר משקל התחלתי ויעד</div>
+      </div>
+      <button id="goal-close" style="width:30px;height:30px;border:none;background:var(--surface);border-radius:999px;cursor:pointer;color:var(--text-hint);font-size:18px">×</button>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:12px;margin-bottom:10px">
+      <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">משקל התחלתי (ק״ג)</label>
+      <input id="goal-start-inp" type="number" inputmode="decimal" step="0.1" placeholder="לדוגמה 91.0" value="${wGoal.start_weight ?? ""}" style="width:100%;padding:11px 12px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;font-size:16px">
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:12px;margin-bottom:14px">
+      <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">יעד משקל (ק״ג)</label>
+      <input id="goal-target-inp" type="number" inputmode="decimal" step="0.1" placeholder="לדוגמה 78.0" value="${wGoal.goal_weight ?? ""}" style="width:100%;padding:11px 12px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;font-size:16px">
+    </div>
+    <button id="goal-save-btn" class="btn-primary" style="margin-bottom:8px">שמור יעד</button>
+    <button id="goal-cancel-btn" style="width:100%;padding:12px;background:var(--surface);border:1px solid var(--border-med);color:var(--text-secondary);border-radius:10px;font-family:inherit;cursor:pointer">ביטול</button>
+  `;
+
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+  sheet.querySelector("#goal-close").addEventListener("click", () => overlay.remove());
+  sheet.querySelector("#goal-cancel-btn").addEventListener("click", () => overlay.remove());
+  sheet.querySelector("#goal-save-btn").addEventListener("click", async () => {
+    const startVal = parseFloat(sheet.querySelector("#goal-start-inp").value);
+    const goalVal = parseFloat(sheet.querySelector("#goal-target-inp").value);
+    if (!Number.isFinite(startVal) || !Number.isFinite(goalVal) || startVal <= 0 || goalVal <= 0) {
+      showToast("הזן משקל התחלתי ויעד תקינים");
+      return;
+    }
+    try {
+      await saveWeightGoal(startVal, goalVal);
+      overlay.remove();
+      render();
+      showToast("היעד נשמר ✓");
+    } catch (_) {}
+  });
+}
+
+function showWeightModal() {
   const latest = getLatestWeight();
-  const wGoal = state.weightGoal;
-  const hasGoal = !!(wGoal && wGoal.start_weight && wGoal.goal_weight);
-  const isChangingGoal = !!changeGoal;
+  const wGoal = state.weightGoal || {};
+  const todayIso = isoDateFromLocal(new Date());
 
   document.getElementById("weight-modal")?.remove();
 
   const overlay = document.createElement("div");
   overlay.id = "weight-modal";
-  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:flex-end;justify-content:center";
-
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2000;display:flex;align-items:flex-end;justify-content:center";
   const sheet = document.createElement("div");
-  sheet.style.cssText = "background:var(--card);border-radius:20px 20px 0 0;padding:24px 20px;width:100%;max-width:420px;direction:rtl";
+  sheet.style.cssText = "background:var(--card);border-radius:22px 22px 0 0;padding:20px 16px 16px;width:100%;max-width:430px;direction:rtl;max-height:86vh;overflow:auto";
 
-  // Header
-  const header = document.createElement("div");
-  header.style.cssText = "display:flex;justify-content:space-between;align-items:center;margin-bottom:20px";
-  const titleEl = document.createElement("span");
-  titleEl.style.cssText = "font-weight:700;font-size:16px;color:var(--text-primary)";
-  titleEl.textContent = isChangingGoal ? "שינוי יעד" : "עדכון משקל";
-  header.appendChild(titleEl);
-  const closeBtn = document.createElement("button");
-  closeBtn.textContent = "×";
-  closeBtn.style.cssText = "background:none;border:none;cursor:pointer;color:var(--text-hint);font-size:22px;line-height:1";
-  closeBtn.addEventListener("click", () => overlay.remove());
-  header.appendChild(closeBtn);
-  sheet.appendChild(header);
-
-  let currentInp = null;
-  let startInp = null;
-  let goalInp = null;
-
-  if (!isChangingGoal) {
-    // Current weight
-    const cWrap = buildWrap("16px");
-    cWrap.appendChild(buildLabel("משקל נוכחי (ק״ג)"));
-    currentInp = buildInp("number", "0.1", latest ? String(latest.weight) : "85.0", "22px");
-    currentInp.style.fontWeight = "700";
-    cWrap.appendChild(currentInp);
-    sheet.appendChild(cWrap);
-  }
-
-  if (!hasGoal || isChangingGoal) {
-    // Start weight
-    const sWrap = buildWrap("12px");
-    sWrap.appendChild(buildLabel("משקל התחלתי (ק״ג)"));
-    startInp = buildInp("number", "0.1", hasGoal ? String(wGoal.start_weight) : "91.0", "16px");
-    if (hasGoal) startInp.value = wGoal.start_weight;
-    sWrap.appendChild(startInp);
-    sheet.appendChild(sWrap);
-  }
-
-  // Goal weight
-  const gWrap = buildWrap("16px");
-  const gLabelText = hasGoal && !isChangingGoal
-    ? `יעד משקל (ק״ג) <span style="font-weight:400;color:var(--text-hint)">— נוכחי: ${wGoal.goal_weight}</span>`
-    : "יעד משקל (ק״ג)";
-  gWrap.appendChild(buildLabel(gLabelText));
-  goalInp = buildInp("number", "0.1", hasGoal ? String(wGoal.goal_weight) : "78.0", "16px");
-  if (hasGoal && isChangingGoal) goalInp.value = wGoal.goal_weight;
-  gWrap.appendChild(goalInp);
-  sheet.appendChild(gWrap);
-
-  // Submit
-  const submitBtn = document.createElement("button");
-  submitBtn.textContent = "שמור";
-  submitBtn.style.cssText = "width:100%;padding:14px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer;font-size:15px;font-weight:700;font-family:inherit;margin-bottom:" + (hasGoal && !isChangingGoal ? "0" : "0");
-  submitBtn.addEventListener("click", async () => {
-    try {
-      if (isChangingGoal) {
-        const newStart = parseFloat(startInp.value);
-        const newGoal = parseFloat(goalInp.value);
-        if (!newStart || !newGoal || isNaN(newStart) || isNaN(newGoal)) { showToast("הזן ערכים תקינים"); return; }
-        await saveWeightGoal(newStart, newGoal);
-        overlay.remove(); haptic("medium"); render(); showToast("היעד עודכן ✓");
-        return;
-      }
-      const current = parseFloat(currentInp.value);
-      if (!current || isNaN(current)) { showToast("הזן משקל תקין"); return; }
-      const goalVal = parseFloat(goalInp.value);
-      const startVal = startInp ? parseFloat(startInp.value) : null;
-      if (!hasGoal) {
-        if (!startVal || !goalVal || isNaN(startVal) || isNaN(goalVal)) { showToast("הזן משקל התחלתי ויעד"); return; }
-        await saveWeightGoal(startVal, goalVal);
-      } else if (goalVal && !isNaN(goalVal)) {
-        await saveWeightGoal(wGoal.start_weight, goalVal);
-      }
-      await saveWeightLog(current);
-      overlay.remove(); haptic("medium"); render(); showToast("המשקל עודכן ✓");
-    } catch(e) { console.error("save error:", e); showToast("שגיאה: " + e.message); }
-  });
-  sheet.appendChild(submitBtn);
-
-  // Change goal button (only when has goal and not already changing)
-  if (hasGoal && !isChangingGoal) {
-    const changeBtn = document.createElement("button");
-    changeBtn.textContent = "שנה יעד / משקל התחלתי";
-    changeBtn.style.cssText = "width:100%;padding:11px;background:transparent;color:var(--text-hint);border:none;cursor:pointer;font-size:13px;font-family:inherit;margin-top:8px;text-decoration:underline";
-    changeBtn.addEventListener("click", () => { overlay.remove(); showWeightModal(true); });
-    sheet.appendChild(changeBtn);
-  }
+  sheet.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+      <div>
+        <div style="font-size:17px;font-weight:800;color:var(--text-primary)">עדכון משקל יומי</div>
+        <div style="font-size:12px;color:var(--text-hint);margin-top:3px">שקילה אחת ביום נשמרת אוטומטית</div>
+      </div>
+      <button id="weight-close" style="width:30px;height:30px;border:none;background:var(--surface);border-radius:999px;cursor:pointer;color:var(--text-hint);font-size:18px">×</button>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:12px;margin-bottom:10px">
+      <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">תאריך מדידה</label>
+      <input id="daily-date-inp" type="date" value="${todayIso}" style="width:100%;padding:11px 12px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit">
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:12px;margin-bottom:10px">
+      <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">משקל נוכחי (ק״ג)</label>
+      <input id="daily-weight-inp" type="number" inputmode="decimal" step="0.1" placeholder="הכנס משקל בק״ג" value="${latest ? latest.weight : ""}" style="width:100%;padding:12px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;font-size:20px;font-weight:700">
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:12px;margin-bottom:14px">
+      <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">הערה (אופציונלי)</label>
+      <textarea id="daily-note-inp" rows="2" style="width:100%;padding:10px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;resize:vertical"></textarea>
+    </div>
+    <button id="daily-save-btn" class="btn-primary" style="margin-bottom:8px">שמור שקילה</button>
+    <button id="daily-goal-btn" style="width:100%;padding:12px;background:var(--surface);border:1px solid var(--border-med);color:var(--text-secondary);border-radius:10px;font-family:inherit;cursor:pointer;margin-bottom:8px">${wGoal.start_weight && wGoal.goal_weight ? "ערוך יעד" : "הגדר יעד"}</button>
+    <button id="daily-cancel-btn" style="width:100%;padding:12px;background:transparent;border:none;color:var(--text-hint);font-family:inherit;cursor:pointer">סגור</button>
+  `;
 
   overlay.appendChild(sheet);
   document.body.appendChild(overlay);
-  setTimeout(() => (currentInp || startInp)?.focus(), 100);
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+  sheet.querySelector("#weight-close").addEventListener("click", () => overlay.remove());
+  sheet.querySelector("#daily-cancel-btn").addEventListener("click", () => overlay.remove());
+  sheet.querySelector("#daily-goal-btn").addEventListener("click", () => {
+    overlay.remove();
+    showGoalModal();
+  });
+  sheet.querySelector("#daily-save-btn").addEventListener("click", async () => {
+    const dateVal = sheet.querySelector("#daily-date-inp").value;
+    const weightVal = parseFloat(sheet.querySelector("#daily-weight-inp").value);
+    const noteVal = sheet.querySelector("#daily-note-inp").value.trim();
+    if (!dateVal || !Number.isFinite(weightVal) || weightVal <= 0) {
+      showToast("הזן תאריך ומשקל תקינים");
+      return;
+    }
+    const measuredAt = new Date(`${dateVal}T09:00:00`).toISOString();
+    try {
+      await saveWeightLog(weightVal, measuredAt, noteVal);
+      overlay.remove();
+      haptic("medium");
+      render();
+    } catch (_) {}
+  });
 }
 
 
