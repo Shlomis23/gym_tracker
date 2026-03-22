@@ -89,35 +89,41 @@ function startCountUp(el) {
 function bindScrollAnimations() {
   const cards = document.querySelectorAll(".anim-card");
   if (!cards.length) return;
-
-  function activateCard(card) {
-    card.classList.add("visible");
-    const delay = parseFloat(card.style.animationDelay) || 0;
-    setTimeout(() => {
-      card.querySelectorAll("[data-countup]").forEach(startCountUp);
-      card.querySelectorAll(".day-cell-anim").forEach(cell => {
-        cell.style.animationPlayState = "running";
+  if (state.dashboardAnimatedOnce) {
+    cards.forEach(card => {
+      card.style.opacity = "1";
+      card.style.transform = "translateY(0)";
+      card.querySelectorAll("[data-countup]").forEach(el => {
+        const target = parseFloat(el.dataset.countup);
+        const suffix = el.dataset.suffix || "";
+        el.textContent = (Number.isInteger(target) ? Math.round(target) : target.toFixed(1)) + suffix;
       });
-    }, delay * 1000 + 100);
+      card.querySelectorAll(".day-cell-anim").forEach(cell => {
+        cell.style.animation = "none";
+        cell.style.opacity = "1";
+        cell.style.transform = "translateY(0) scale(1)";
+      });
+    });
+    return;
   }
-
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) { activateCard(entry.target); observer.unobserve(entry.target); }
-    });
-  }, { threshold: 0.15 });
-
-  const observerEarly = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) { activateCard(entry.target); observerEarly.unobserve(entry.target); }
-    });
-  }, { threshold: 0.03 });
-
   cards.forEach(card => {
     const delay = parseFloat(card.style.animationDelay) || 0;
-    if (delay >= 1.0) observerEarly.observe(card);
-    else observer.observe(card);
+    setTimeout(() => {
+      card.style.transition = "opacity 0.75s cubic-bezier(0.22, 1, 0.36, 1), transform 0.75s cubic-bezier(0.22, 1, 0.36, 1)";
+      card.style.opacity = "1";
+      card.style.transform = "translateY(0)";
+      card.querySelectorAll("[data-countup]").forEach(startCountUp);
+      card.querySelectorAll(".day-cell-anim").forEach(cell => {
+        const cellDelay = parseFloat(cell.style.animationDelay) || 0;
+        setTimeout(() => {
+          cell.style.transition = "opacity 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)";
+          cell.style.opacity = "1";
+          cell.style.transform = "translateY(0) scale(1)";
+        }, cellDelay * 1000);
+      });
+    }, delay * 1000);
   });
+  state.dashboardAnimatedOnce = true;
 }
 
 function getDaysSinceLastWorkout() {
@@ -146,6 +152,7 @@ function renderDashboard() {
     prByCategory[cat].push([name, pr]);
   });
   const daysSince = getDaysSinceLastWorkout();
+  const barClass = state.dashboardAnimatedOnce ? "" : "anim-bar";
 
   const now = new Date();
 const dayOfWeek = now.getDay();
@@ -349,11 +356,11 @@ if (inProgress) {
           <span>${pctW}% מהדרך</span>
         </div>
         <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
-          <div class="anim-bar" style="width:${pctW}%;height:100%;background:var(--accent);border-radius:3px;animation-delay:0.7s"></div>
+          <div class="${barClass}" style="width:${pctW}%;height:100%;background:var(--accent);border-radius:3px;animation-delay:0.7s"></div>
         </div>
       </div>` : ""}
       <div style="display:flex;justify-content:space-between;align-items:center;${hasGoal?"border-top:1px solid var(--border);padding-top:10px":""}">
-        <span style="font-size:11px;color:var(--text-hint)">${needsUpdate ? "לא שקלת השבוע" : "עודכן לפני " + dSinceW + " ימים"}</span>
+        <span style="font-size:11px;color:var(--text-hint)">${needsUpdate ? "לא שקלת השבוע" : "עודכן לפני " + dSinceW + " ימים (" + formatDate(latest.date) + ")"}</span>
         <button onclick="showWeightModal()" style="display:flex;align-items:center;gap:5px;background:${needsUpdate?"var(--orange)":"var(--surface)"};border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;color:${needsUpdate?"#fff":"var(--text-secondary)"};font-family:inherit;font-weight:600">
           ${needsUpdate ? "הזן משקל שבועי" : "עדכן משקל"}
         </button>
@@ -386,7 +393,7 @@ if (inProgress) {
         </div>
       </div>
       <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
-        <div class="anim-bar" style="width:${barW}%;height:100%;background:${color};border-radius:3px;animation-delay:0.75s"></div>
+        <div class="${barClass}" style="width:${barW}%;height:100%;background:${color};border-radius:3px;animation-delay:0.75s"></div>
       </div>
     </div>`;
   }
