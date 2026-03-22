@@ -297,10 +297,9 @@ if (inProgress) {
   const dSinceW = daysSinceWeight();
   const needsUpdate = dSinceW === null || dSinceW >= 7;
   const currentTime = new Date();
-  const nowHour = currentTime.getHours();
   const todayIso = isoDateFromLocal(currentTime);
   const hasTodayWeight = !!(latest && latest.measured_date === todayIso);
-  const shouldPromptDaily = nowHour >= 7 && !hasTodayWeight;
+  const shouldPromptDaily = !hasTodayWeight;
 
   let weightCard = "";
   if (!latest) {
