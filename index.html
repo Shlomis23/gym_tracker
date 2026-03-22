@@ -1104,7 +1104,8 @@ function renderHistory() {
     }
     const range = getWeightRangeDays();
     const filtered = getWeightRangeLogs(range);
-    const withAvg = getWeightMovingAverage(filtered, 7);
+    const avgWindowDays = Math.max(1, Math.min(range, filtered.length));
+    const withAvg = getWeightMovingAverage(filtered, avgWindowDays);
     const latest = filtered[filtered.length - 1];
     const first = filtered[0];
     const delta = latest.weight - first.weight;
@@ -1112,7 +1113,7 @@ function renderHistory() {
     const summaryCards = `
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:10px">
         <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">אחרון</div><div style="font-size:19px;font-weight:700">${latest.weight.toFixed(1)}</div></div>
-        <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">ממוצע 7 ימים</div><div style="font-size:19px;font-weight:700;color:var(--green)">${avg7.toFixed(1)}</div></div>
+        <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">ממוצע ${avgWindowDays} ימים</div><div style="font-size:19px;font-weight:700;color:var(--green)">${avg7.toFixed(1)}</div></div>
         <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">שינוי בטווח</div><div style="font-size:19px;font-weight:700;color:${delta < 0 ? "var(--green)" : delta > 0 ? "var(--red)" : "var(--text-primary)"}">${delta > 0 ? "+" : ""}${delta.toFixed(1)}</div></div>
       </div>
     `;
@@ -1153,8 +1154,7 @@ function renderHistory() {
       { days: 30, label: "30 ימים" },
       { days: 90, label: "90 ימים" },
       { days: 180, label: "6 חודשים" },
-      { days: 365, label: "שנה" },
-      { days: 0, label: "הכול" }
+      { days: 365, label: "שנה" }
     ].map(r => `<button onclick="state.weightRangeDays=${r.days};render()" style="padding:7px 10px;border-radius:999px;border:1px solid ${range===r.days?"var(--accent)":"var(--border-med)"};background:${range===r.days?"var(--accent)":"var(--surface)"};color:${range===r.days?"#fff":"var(--text-secondary)"};font-family:inherit;font-size:11px;cursor:pointer">${r.label}</button>`).join("");
     const rows = [...withAvg].reverse().map((log, ri, arr) => {
       const prev = arr[ri + 1];
@@ -1164,7 +1164,7 @@ function renderHistory() {
       return `<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px">
         <div>
           <div style="font-size:18px;font-weight:700">${log.weight.toFixed(1)} <span style="font-size:12px;font-weight:500;color:var(--text-hint)">ק״ג</span></div>
-          <div style="font-size:11px;color:var(--text-hint);margin-top:2px">${formatWeightDate(log)} · ממוצע 7י: ${log.movingAvg.toFixed(1)}</div>
+          <div style="font-size:11px;color:var(--text-hint);margin-top:2px">${formatWeightDate(log)} · ממוצע ${avgWindowDays}י: ${log.movingAvg.toFixed(1)}</div>
           ${log.note ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:3px">${escapeHtml(log.note)}</div>` : ""}
         </div>
         <div style="display:flex;align-items:center;gap:8px">
@@ -1179,7 +1179,7 @@ function renderHistory() {
         <div style="font-size:13px;color:var(--text-secondary)">My Weight</div>
         <button onclick="openWeightEntryModal()" class="btn-primary" style="width:auto;padding:8px 12px;font-size:12px">הוסף</button>
       </div>
-      <div style="display:flex;gap:6px;overflow:auto;margin-bottom:10px;padding-bottom:4px">${rangeButtons}</div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:10px">${rangeButtons}</div>
       ${summaryCards}
       ${goalCard}
       ${renderWeightChart(withAvg)}
