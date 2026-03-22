@@ -1,7 +1,11 @@
-const CACHE_NAME = 'my-app-cache-v2';
+const CACHE_NAME = 'my-app-cache-v3';
 
 const urlsToCache = [
-  './manifest.json'
+  './',
+  './index.html',
+  './styles.css',
+  './manifest.json',
+  './utils.js'
 ];
 
 self.addEventListener('install', event => {
@@ -20,6 +24,8 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
+  if (event.request.method !== 'GET') return;
+
   const url = new URL(event.request.url);
 
   // בקשות ל-Supabase — תמיד מהרשת, אף פעם לא מהcache
@@ -44,6 +50,17 @@ self.addEventListener('fetch', event => {
 
   // שאר הקבצים — Cache First
   event.respondWith(
-    caches.match(event.request).then(response => response || fetch(event.request))
+    caches.match(event.request).then(response => {
+      if (response) return response;
+
+      return fetch(event.request).then(networkResponse => {
+        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
+          return networkResponse;
+        }
+        const clone = networkResponse.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+        return networkResponse;
+      });
+    })
   );
 });
