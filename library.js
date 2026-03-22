@@ -66,6 +66,33 @@ if (!res.ok) throw new Error(await res.text());
         }
       });
     });
+    if (oldName && oldName !== cleanName) {
+      let changedSessions = false;
+      state.sessions.forEach(session => {
+        const exercises = session.exercises || {};
+        if (!exercises[oldName]) return;
+        const movedSets = exercises[oldName];
+        delete exercises[oldName];
+        exercises[cleanName] = [...(exercises[cleanName] || []), ...movedSets]
+          .sort((a, b) => (a.num || 0) - (b.num || 0));
+        changedSessions = true;
+      });
+      if (changedSessions) {
+        if (typeof saveSessions === "function") saveSessions();
+        try {
+          await fetch(
+            SUPABASE_URL + "/rest/v1/session_exercises?exercise_name=eq." + encodeURIComponent(oldName),
+            {
+              method: "PATCH",
+              headers: { ...SB_HEADERS, Prefer: "return=minimal" },
+              body: JSON.stringify({ exercise_name: cleanName })
+            }
+          );
+        } catch (syncErr) {
+          console.error("Sync renamed exercise to session history failed:", syncErr);
+        }
+      }
+    }
     saveWorkouts();
     render(); // רענן תצוגה
  } catch(e) {
