@@ -221,16 +221,17 @@ function loadSettings() {
   try {
     const s = { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(STORAGE_SETTINGS) || "{}") };
     if (!s.goalHistory || !s.goalHistory.length) {
-      s.goalHistory = [{ goal: s.weeklyGoal, from: "2020-01-06" }];
+      s.goalHistory = [{ goal: s.weeklyGoal, from: "2020-01-05" }];
     }
     return s;
-  } catch { return { ...DEFAULT_SETTINGS, goalHistory: [{ goal: 4, from: "2020-01-06" }] }; }
+  } catch { return { ...DEFAULT_SETTINGS, goalHistory: [{ goal: 4, from: "2020-01-05" }] }; }
 }
 
 function getWeekStart(date) {
-  const d = new Date(date); const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff); d.setHours(0,0,0,0);
+  const d = new Date(date);
+  const day = d.getDay(); // 0 = Sunday
+  d.setDate(d.getDate() - day);
+  d.setHours(0,0,0,0);
   return d;
 }
 
@@ -667,12 +668,7 @@ function getNextWorkout() {
 
 function getWeekStreak() {
   if (!state.sessions.length) return 0;
-  const getWeekKey = (iso) => {
-    const d = new Date(iso); const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    const mon = new Date(d); mon.setDate(diff); mon.setHours(0,0,0,0);
-    return mon.toISOString().slice(0,10);
-  };
+  const getWeekKey = (iso) => getWeekStart(iso).toISOString().slice(0,10);
   const weekCounts = {};
   state.sessions.forEach(s => {
     const k = getWeekKey(s.date);
@@ -706,10 +702,8 @@ function getWeekStreak() {
 }
 
 function getThisWeekCount() {
-  const now = new Date(); const day = now.getDay();
-  const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-  const mon = new Date(now); mon.setDate(diff); mon.setHours(0,0,0,0);
-  return state.sessions.filter(s => new Date(s.date) >= mon).length;
+  const weekStart = getWeekStart(new Date());
+  return state.sessions.filter(s => new Date(s.date) >= weekStart).length;
 }
 
 function getPRs() {
@@ -957,9 +951,7 @@ function renderDashboard() {
 
   const dayNames = ["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
   const todayDow = new Date().getDay();
-  const weekStart = new Date();
-  weekStart.setDate(weekStart.getDate() - (todayDow === 0 ? 6 : todayDow - 0));
-  weekStart.setHours(0,0,0,0);
+  const weekStart = getWeekStart(new Date());
 
   const workedDays = new Set();
   state.sessions.forEach(s => {
