@@ -294,6 +294,9 @@ if (inProgress) {
   // ── Weight card ──────────────────────────────────────────────────
   const latest = getLatestWeight();
   const prev = getPrevWeight();
+  if (!latest && (state.weightGoal?.start_weight || state.weightGoal?.goal_weight)) {
+    state.weightGoal = { start_weight: null, goal_weight: null };
+  }
   const wGoal = state.weightGoal || {};
   const hasGoal = !!(wGoal.start_weight && wGoal.goal_weight);
   const dSinceW = daysSinceWeight();
@@ -304,9 +307,9 @@ if (inProgress) {
     weightCard = `<div style="background:var(--surface);border:1px dashed var(--border-med);border-radius:14px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="showWeightModal()">
       <div>
         <div style="font-size:13px;font-weight:600;color:var(--text-secondary)">מעקב משקל</div>
-        <div style="font-size:11px;color:var(--text-hint);margin-top:2px">לחץ להגדרת יעד ומשקל</div>
+        <div style="font-size:11px;color:var(--text-hint);margin-top:2px">אין משקל שמור — הגדר מחדש משקל התחלתי ויעד</div>
       </div>
-      <button onclick="event.stopPropagation();showWeightModal()" style="background:var(--accent);border:none;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px;color:#fff;font-family:inherit;font-weight:600">הגדר</button>
+      <button onclick="event.stopPropagation();showWeightModal()" style="background:var(--accent);border:none;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px;color:#fff;font-family:inherit;font-weight:600">הגדר מהתחלה</button>
     </div>`;
   } else if (!latest && hasGoal) {
     weightCard = `<div style="background:var(--orange-bg);border:1px solid var(--orange);border-radius:14px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="showWeightModal()">
