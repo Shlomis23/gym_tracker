@@ -1104,7 +1104,7 @@ function renderHistory() {
     }
     const range = getWeightRangeDays();
     const filtered = getWeightRangeLogs(range);
-    const avgWindowDays = Math.max(1, Math.min(range, filtered.length));
+    const avgWindowDays = Math.max(1, range);
     const withAvg = getWeightMovingAverage(filtered, avgWindowDays);
     const latest = filtered[filtered.length - 1];
     const first = filtered[0];
