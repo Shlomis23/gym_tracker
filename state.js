@@ -33,6 +33,9 @@ function loadSettings() {
   } catch { return { ...DEFAULT_SETTINGS, weeklyGoal: 4, goalHistory: [{ goal: 4, from: "2020-01-05" }] }; }
 }
 
+const ACCESS_READ_ONLY_KEY = "readOnly";
+const urlParams = new URLSearchParams(window.location.search);
+
 let state = {
   screen: "dashboard", workoutId: null, openExercise: null, exercises: {},
   sessions: [], workouts: loadWorkouts(), settings: loadSettings(),
@@ -43,11 +46,11 @@ let state = {
   editingExKey: null, exerciseLibrary: [], workoutExtras: [], dashboardAnimatedOnce: false,
   historyWorkoutFilterMode: "all", historyWorkoutId: "all", historyExerciseQuery: "",
   access: {
-    readOnly: new URLSearchParams(window.location.search).get("readonly") === "1"
+    [ACCESS_READ_ONLY_KEY]: urlParams.get("readonly") === "1"
   }
 };
 
 window.state = state;
 window.isReadOnlyMode = function isReadOnlyMode() {
-  return !!(window.state && window.state.access && window.state.access.readOnly);
+  return !!(window.state && window.state.access && window.state.access[ACCESS_READ_ONLY_KEY]);
 };
