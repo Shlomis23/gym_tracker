@@ -123,12 +123,45 @@ async function saveSessionToSupabase(session) {
 
 async function loadSessionsFromSupabase() {
   try {
-    const rows = await sbGet("workout_sessions?select=*,sets:session_exercises(*)&order=date.asc");
+    const rows = await sbGet("workout_sessions?select=*&order=date.asc");
+    let exerciseRows = [];
+    try {
+      exerciseRows = await sbGet("session_exercises?select=*");
+    } catch (exerciseLoadErr) {
+      console.warn("Supabase session_exercises standalone fetch failed, using embedded relation only:", exerciseLoadErr);
+    }
+    console.debug("[loadSessionsFromSupabase] workout_sessions raw response:", rows);
+    console.debug("[loadSessionsFromSupabase] session_exercises raw response:", exerciseRows);
+
+    const setsBySessionId = new Map();
+    (exerciseRows || []).forEach(s => {
+      const key = String(s.session_id ?? s.workout_session_id ?? "");
+      if (!key) return;
+      if (!setsBySessionId.has(key)) setsBySessionId.set(key, []);
+      setsBySessionId.get(key).push(s);
+    });
+
+    const normalizeSet = s => ({
+      num: Number(s.set_number ?? s.set_no ?? s.set_index ?? s.num ?? 0),
+      weight: Number(s.weight ?? 0),
+      reps: Number(s.reps ?? 0),
+      failed: !!s.failed,
+      minutes: Number(s.minutes ?? 0)
+    });
+
     state.sessions = rows.map(row => {
       const exercises = {};
-      (row.sets || []).forEach(s => {
-        if (!exercises[s.exercise_name]) exercises[s.exercise_name] = [];
-        exercises[s.exercise_name].push({ num: s.set_number, weight: s.weight, reps: s.reps, failed: s.failed });
+      const rowSets = [
+        ...(Array.isArray(row.sets) ? row.sets : []),
+        ...(Array.isArray(row.session_exercises) ? row.session_exercises : []),
+        ...(setsBySessionId.get(String(row.id)) || [])
+      ];
+
+      rowSets.forEach(rawSet => {
+        const exName = rawSet.exercise_name ?? rawSet.exercise ?? rawSet.name;
+        if (!exName) return;
+        if (!exercises[exName]) exercises[exName] = [];
+        exercises[exName].push(normalizeSet(rawSet));
       });
       Object.values(exercises).forEach(arr => arr.sort((a,b) => a.num - b.num));
       return { id: row.local_id || row.id, workoutId: row.workout_id, workoutName: row.workout_name || "", date: row.date, exercises, note: row.note || "" };
@@ -151,9 +184,18 @@ async function deleteSessionFromSupabase(localId) {
 async function loadWeightData() {
   try {
     const logs = await sbGet("body_weight_logs?select=*&order=measured_at.asc");
+    console.debug("[loadWeightData] body_weight_logs raw response:", logs);
     state.weightLogs = (logs || []).map(mapWeightLog);
-    const goals = await sbGet("weight_goal?select=*&order=updated_at.desc&limit=1");
-    if (goals && goals.length) state.weightGoal = goals[0];
+    const goalsRaw = await sbGet("weight_goal?select=*&order=updated_at.desc&limit=1");
+    console.debug("[loadWeightData] weight_goal raw response:", goalsRaw);
+    const goalRows = Array.isArray(goalsRaw) ? goalsRaw : (goalsRaw ? [goalsRaw] : []);
+    const normalizedGoals = goalRows.map(g => ({
+      ...g,
+      start_weight: g.start_weight ?? g.startWeight ?? g.starting_weight ?? null,
+      goal_weight: g.goal_weight ?? g.goalWeight ?? g.target_weight ?? null
+    }));
+    const validGoal = normalizedGoals.find(g => Number.isFinite(Number(g.start_weight)) && Number.isFinite(Number(g.goal_weight)));
+    if (validGoal) state.weightGoal = validGoal;
   } catch(e) { console.error("Weight load failed:", e); }
 }
 
@@ -175,6 +217,11 @@ function getWeightLogsAsc() {
 
 function formatWeightDate(log) {
   return formatDate(log.measured_at || log.date);
+}
+
+function hasWeightGoal(goal) {
+  const g = goal || state.weightGoal || {};
+  return Number.isFinite(Number(g.start_weight)) && Number.isFinite(Number(g.goal_weight));
 }
 
 function isoDateFromLocal(dateLike) {
@@ -1800,12 +1847,12 @@ function renderManage() {
         <span style="font-weight:700;font-size:14px;color:var(--text-primary)">עדכון יעד משקל ומשקל התחלתי</span>
       </div>
       <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;line-height:1.5">
-        ${(state.weightGoal?.start_weight && state.weightGoal?.goal_weight)
+        ${hasWeightGoal(state.weightGoal)
           ? `<span style="display:inline-flex;gap:4px;align-items:center;direction:ltr;unicode-bidi:isolate"><span>התחלתי: ${Number(state.weightGoal.start_weight).toFixed(1)}</span><span aria-hidden="true">→</span><span>יעד: ${Number(state.weightGoal.goal_weight).toFixed(1)} ק״ג</span></span>`
           : "לא הוגדר יעד משקל עדיין"}
       </div>
       <button onclick="showGoalModal()" style="width:100%;padding:10px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-size:13px;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">
-        <i data-lucide="pencil" style="width:15px;height:15px"></i> ${state.weightGoal?.start_weight && state.weightGoal?.goal_weight ? "ערוך יעד משקל" : "הוסף יעד משקל"}
+        <i data-lucide="pencil" style="width:15px;height:15px"></i> ${hasWeightGoal(state.weightGoal) ? "ערוך יעד משקל" : "הוסף יעד משקל"}
       </button>
     </div>
 
