@@ -346,6 +346,35 @@ if (inProgress) {
       ? `<button onclick="event.preventDefault();event.stopPropagation();return false;" style="display:flex;align-items:center;gap:5px;background:var(--green);border:none;border-radius:8px;padding:6px 12px;cursor:default;font-size:12px;color:#fff;font-family:inherit;font-weight:600;opacity:0.95;pointer-events:none" disabled>שקילה יומית נרשמה</button>`
       : `<button onclick="showWeightModal()" style="display:flex;align-items:center;gap:5px;background:${shouldPromptDaily ? "var(--orange)" : "var(--surface)"};border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;color:${shouldPromptDaily ? "#fff" : "var(--text-secondary)"};font-family:inherit;font-weight:600">הזן משקל</button>`;
 
+    const weightGoalData = state.weightGoal || {};
+    const startGoal = Number(weightGoalData.start_weight);
+    const targetGoal = Number(weightGoalData.goal_weight);
+    const hasGoal = Number.isFinite(startGoal) && Number.isFinite(targetGoal) && startGoal > 0 && targetGoal > 0 && startGoal !== targetGoal;
+    const dist = hasGoal ? Math.abs(startGoal - targetGoal) : 0;
+    const progressRaw = hasGoal ? Math.abs(startGoal - latest.weight) / dist : 0;
+    const progressPct = hasGoal ? Math.max(0, Math.min(100, Math.round(progressRaw * 100))) : 0;
+    const goalDirectionDown = hasGoal && targetGoal < startGoal;
+    const remaining = hasGoal ? (goalDirectionDown ? latest.weight - targetGoal : targetGoal - latest.weight) : null;
+    const done = hasGoal && remaining <= 0;
+    const goalStatus = !hasGoal
+      ? "הגדר יעד כדי לעקוב אחרי התקדמות"
+      : done
+      ? "היעד הושג — אלוף!"
+      : `נשארו עוד ${remaining.toFixed(1)} ק״ג ליעד`;
+    const goalSection = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+      <div style="margin-bottom:7px">
+        <div style="font-size:12px;color:var(--text-secondary);font-weight:600">יעד משקל</div>
+        <div style="font-size:11px;color:var(--text-hint);margin-top:2px">${hasGoal ? `<span style="display:inline-flex;gap:4px;align-items:center;direction:rtl;unicode-bidi:isolate"><span>משקל התחלתי: ${startGoal.toFixed(1)}</span><span aria-hidden="true">←</span><span>משקל יעד: ${targetGoal.toFixed(1)} ק״ג</span></span>` : "ללא יעד מוגדר"}</div>
+      </div>
+      <div style="height:8px;background:var(--surface);border-radius:999px;overflow:hidden;margin-bottom:7px">
+        <div style="width:${progressPct}%;height:100%;background:${done ? "var(--green)" : "var(--accent)"};transition:width .25s ease"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:11px;color:${done ? "var(--green)" : "var(--text-secondary)"}">${goalStatus}</span>
+        <span style="font-size:11px;color:var(--text-hint)">${hasGoal ? progressPct + "%" : "--"}</span>
+      </div>
+    </div>`;
+
     weightCard = `<div class="anim-card" style="background:${cardBg};border:1px solid ${cardBorder};border-radius:14px;padding:14px 16px;margin-bottom:16px;animation-delay:1.0s">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
         <div>
@@ -361,6 +390,7 @@ if (inProgress) {
         <span style="font-size:11px;color:var(--text-hint)">${hasTodayWeight ? "השקילה היומית הוזנה להיום" : (needsUpdate ? "לא נשקלת השבוע" : "עודכן לפני " + dSinceW + " ימים (" + formatWeightDate(latest) + ")")}</span>
         ${dailyBtn}
       </div>
+      ${goalSection}
     </div>`;
   }
   // ─────────────────────────────────────────────────────────────────
