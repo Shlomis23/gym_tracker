@@ -365,7 +365,7 @@ if (inProgress) {
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
         <div>
           <div style="font-size:12px;color:var(--text-secondary);font-weight:600">יעד משקל</div>
-          <div style="font-size:11px;color:var(--text-hint);margin-top:2px">${hasGoal ? `${startGoal.toFixed(1)} → ${targetGoal.toFixed(1)} ק״ג` : "ללא יעד מוגדר"}</div>
+          <div style="font-size:11px;color:var(--text-hint);margin-top:2px">${hasGoal ? `<span dir="ltr">${startGoal.toFixed(1)} → ${targetGoal.toFixed(1)} ק״ג</span>` : "ללא יעד מוגדר"}</div>
         </div>
         <button onclick="showGoalModal()" style="border:none;background:var(--surface);padding:7px 11px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--text-secondary);font-family:inherit">${hasGoal ? "ערוך יעד" : "הוסף יעד"}</button>
       </div>
