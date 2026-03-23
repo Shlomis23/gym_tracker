@@ -3,9 +3,7 @@ const SUPABASE_KEY = "sb_publishable_NDyz8DAcTO8kOs6JhAjTFw_uRTgb5nf";
 
 const SB_HEADERS = {
   apikey: SUPABASE_KEY,
-  Authorization: "Bearer " + SUPABASE_KEY,
-  "Content-Type": "application/json",
-  Prefer: "return=representation"
+  "Content-Type": "application/json"
 };
 
 const STORAGE_SESSIONS = "gym_sessions_v2";
