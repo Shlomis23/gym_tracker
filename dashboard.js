@@ -151,9 +151,6 @@ function renderDashboard() {
     if (!prByCategory[cat]) prByCategory[cat] = [];
     prByCategory[cat].push([name, pr]);
   });
-  const daysSince = getDaysSinceLastWorkout();
-  const barClass = state.dashboardAnimatedOnce ? "" : "anim-bar";
-
   const now = new Date();
 const dayOfWeek = now.getDay();
 
@@ -177,10 +174,21 @@ const goalReached = thisWeek >= goal;
 
   let urgencyCard = "";
   if (!goalReached) {
-    const isUrgent = daysLeftInWeek <= workoutsLeft;
-    const urgentColor = isUrgent ? "var(--red)" : daysLeftInWeek <= 2 ? "var(--orange)" : "var(--text-primary)";
-    const urgentBg = isUrgent ? "var(--red-bg)" : daysLeftInWeek <= 2 ? "var(--orange-bg)" : "var(--surface)";
-    const urgentBorder = isUrgent ? "var(--red)" : daysLeftInWeek <= 2 ? "var(--orange)" : "var(--border)";
+    const gap = workoutsLeft - daysLeftInWeek;
+    const isUrgent = gap >= 1;
+    const isBorderline = gap === 0 || (gap < 0 && daysLeftInWeek <= 2);
+    const riskLabel = isUrgent ? "סיכון גבוה" : isBorderline ? "סיכון בינוני" : "סיכון נמוך";
+    const riskColor = isUrgent ? "var(--red)" : isBorderline ? "var(--orange)" : "var(--green)";
+    const urgentColor = isUrgent ? "var(--red)" : isBorderline ? "var(--orange)" : "var(--text-primary)";
+    const urgentBg = isUrgent ? "var(--red-bg)" : isBorderline ? "var(--orange-bg)" : "var(--surface)";
+    const urgentBorder = isUrgent ? "var(--red)" : isBorderline ? "var(--orange)" : "var(--border)";
+    const actionMsg = isUrgent
+      ? (didWorkoutToday
+          ? "פעולה מומלצת: לקבוע אימון נוסף למחר כדי להישאר במסלול."
+          : "פעולה מומלצת: לבצע אימון היום.")
+      : workoutsLeft === 1
+        ? "פעולה מומלצת: לשריין אימון אחד ב-24 השעות הקרובות."
+        : "פעולה מומלצת: לקבוע ביומן מראש את האימונים שנותרו השבוע.";
     const msg = isUrgent
       ? "⚠ לא יהיה מספיק זמן — התאמן היום!"
       : daysLeftInWeek === 0
@@ -189,12 +197,13 @@ const goalReached = thisWeek >= goal;
       ? "שבוע חדש התחיל — יש לך זמן טוב לעמוד ביעד"
       : workoutsLeft === 1
       ? "עוד אימון אחד ותשלים את היעד השבועי"
-      : `עוד ${workoutsLeft} אימונים להשלמת השבוע`;
+      : `עוד ${workoutsLeft} אימונים להשלמת היעד השבועי`;
     const dayWord = daysLeftInWeek === 1 ? "יום" : "ימים";
     const workoutWord = workoutsLeft === 1 ? "אימון" : "אימונים";
     urgencyCard = `<div class="anim-card" style="background:${urgentBg};border:1px solid ${urgentBorder};border-radius:14px;padding:14px 16px;margin-bottom:16px;animation-delay:0.75s">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <span style="font-size:13px;font-weight:600;color:${urgentColor}">${msg}</span>
+        <span style="font-size:10px;font-weight:700;color:${riskColor};background:${isUrgent?"#fee2e2":isBorderline?"#fff7ed":"#ecfdf5"};padding:3px 8px;border-radius:999px;border:1px solid ${isUrgent?"#fecaca":isBorderline?"#fed7aa":"#bbf7d0"}">${riskLabel}</span>
       </div>
       <div style="display:flex;gap:0">
         <div style="flex:1;text-align:center;border-left:1px solid ${urgentBorder}">
@@ -205,6 +214,9 @@ const goalReached = thisWeek >= goal;
           <div style="font-size:26px;font-weight:700;color:${urgentColor};line-height:1"><span data-countup="${workoutsLeft}">0</span></div>
           <div style="font-size:11px;color:${urgentColor};margin-top:3px;opacity:0.8">${workoutWord} נותרו</div>
         </div>
+      </div>
+      <div style="margin-top:8px;padding:8px 10px;border-radius:10px;background:#ffffff80;border:1px dashed ${urgentBorder};font-size:12px;color:${urgentColor};font-weight:600">
+        ${actionMsg}
       </div>
     </div>`;
   } else {
@@ -403,42 +415,12 @@ if (inProgress) {
   }
   // ─────────────────────────────────────────────────────────────────
 
-  let daysSinceCard = "";
-  if (daysSince) {
-    const d = daysSince.days;
-    const color = d <= 2 ? "var(--green)" : d <= 3 ? "var(--orange)" : "var(--red)";
-    const msg = d === 0 ? "התאמנת היום - מגיע לך לנוח" : d <= 2 ? "מחר אימון" : d <= 3 ? "קום להתאמן" : "בוא נחזור למסלול";
-    const barW = Math.min(Math.round((d / 6) * 100), 100);
-    const lastW = getWorkout(daysSince.session.workoutId);
-    daysSinceCard = `<div class="stat-card anim-card" style="margin-bottom:16px;animation-delay:0.75s">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <div>
-          <div class="stat-label">מאז האימון האחרון</div>
-          <div style="display:flex;align-items:baseline;gap:6px;margin-top:2px">
-            <span style="font-size:36px;font-weight:700;color:${color};line-height:1"><span data-countup="${d}">0</span></span>
-            <span style="font-size:14px;color:${color}">${d === 1 ? "יום" : "ימים"}</span>
-          </div>
-          <div style="font-size:12px;color:${color};margin-top:2px;font-weight:500">${msg}</div>
-        </div>
-        <div style="text-align:left">
-          <div class="stat-label">אימון אחרון</div>
-          <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-top:2px">${lastW?.name || ""}</div>
-          <div style="font-size:11px;color:var(--text-hint);margin-top:1px">${formatDate(daysSince.session.date)}</div>
-        </div>
-      </div>
-      <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
-        <div class="${barClass}" style="width:${barW}%;height:100%;background:${color};border-radius:3px;animation-delay:0.75s"></div>
-      </div>
-    </div>`;
-  }
-
   return `<div style="padding:16px 14px">
     ${nextBtn}
 
     ${weekCard}
 
     ${urgencyCard}
-    ${daysSinceCard}
 
     ${weightCard}
 

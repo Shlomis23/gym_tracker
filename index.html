@@ -743,30 +743,18 @@ function renderWorkout() {
         </div>`;
       }
 
-      const imp = p && s.weight > p.weight; const reg = p && s.weight > 0 && s.weight < p.weight;
-      const icon = s.reps > 0 && p
-        ? `<span style="display:flex;align-items:center;color:${imp?"var(--green)":reg?"var(--red)":"var(--text-hint)"}">
-             <i data-lucide="${imp?"trending-up":reg?"trending-down":"minus"}" style="width:14px;height:14px"></i>
-           </span>`
-        : `<button onclick="removeSet(decodeURIComponent('${safeNameArg}'),${i})" class="icon-btn"><i data-lucide="x" style="width:16px;height:16px"></i></button>`;
-      const failedChk = isLast ? `<label style="display:flex;align-items:center;gap:4px;margin-top:6px;cursor:pointer;font-size:11px;color:${isFailed?"var(--red)":"var(--text-hint)"}">
-        <input type="checkbox" ${isFailed?"checked":""} onchange="toggleFailed(decodeURIComponent('${safeNameArg}'),${i})" style="accent-color:var(--red);width:13px;height:13px">
-        כשל
-      </label>` : "";
+      const failedBtn = `<button type="button" onclick="toggleFailed(decodeURIComponent('${safeNameArg}'),${i})"
+        style="height:32px;border-radius:8px;border:1px solid ${isFailed?"#fecaca":"var(--border-med)"};background:${isFailed?"#fee2e2":"var(--surface)"};color:${isFailed?"var(--red)":"var(--text-secondary)"};font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">
+        ${isFailed ? "כשל" : "סמן"}
+      </button>`;
       return `<div style="margin-bottom:${isLast?"8px":"14px"}">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="min-width:16px;font-size:12px;color:${isFailed?"var(--red)":"var(--text-hint)"};font-weight:600">${s.num}</span>
-          <div style="flex:1;display:flex;gap:6px;align-items:center;min-width:0;justify-content:center">
-            <div style="flex:0 1 92px;min-width:0">
-              <input class="inp" type="number" inputmode="decimal" placeholder="${p?p.weight:"ק״ג"}" value="${s.weight||""}" style="${isFailed?"border-color:var(--red);color:var(--red)":s.weight>0?"":"color:var(--text-hint)"}" oninput="updateSet(decodeURIComponent('${safeNameArg}'),${i},'weight',this.value)">
-            </div>
-            <div style="flex:0 1 92px;min-width:0">
-              <input class="inp" type="number" inputmode="numeric" placeholder="${p?p.reps+" חז׳":"חז׳"}" value="${s.reps||""}" style="${isFailed?"border-color:var(--red);color:var(--red)":""}" oninput="updateSet(decodeURIComponent('${safeNameArg}'),${i},'reps',this.value)">
-            </div>
-            <div style="width:28px;display:flex;align-items:center;justify-content:center">${icon}</div>
-          </div>
+        <div style="display:grid;grid-template-columns:20px minmax(0,1fr) 16px minmax(0,1fr) 56px;gap:6px;align-items:center;background:${isFailed?"#fef2f2":"transparent"};border:1px solid ${isFailed?"#fecaca":"transparent"};border-radius:10px;padding:6px">
+          <span style="font-size:12px;color:${isFailed?"var(--red)":"var(--text-hint)"};font-weight:600;text-align:center">${s.num}</span>
+          <input class="inp" type="number" inputmode="decimal" placeholder="${p?p.weight:"ק״ג"}" value="${s.weight||""}" style="${isFailed?"border-color:var(--red);color:var(--red)":s.weight>0?"":"color:var(--text-hint)"}" oninput="updateSet(decodeURIComponent('${safeNameArg}'),${i},'weight',this.value)">
+          <span style="text-align:center;font-size:16px;color:${isFailed?"var(--red)":"var(--text-hint)"};line-height:1">×</span>
+          <input class="inp" type="number" inputmode="numeric" placeholder="${p?p.reps+" חז׳":"חז׳"}" value="${s.reps||""}" style="${isFailed?"border-color:var(--red);color:var(--red)":""}" oninput="updateSet(decodeURIComponent('${safeNameArg}'),${i},'reps',this.value)">
+          ${failedBtn}
         </div>
-        ${failedChk}
       </div>`;
     }).join("");
 
@@ -780,8 +768,9 @@ function renderWorkout() {
           <span style="flex:0 0 24px"></span>
           <div style="flex:1;display:flex;gap:6px;align-items:center;justify-content:center">
             <span style="flex:0 1 92px;text-align:center;font-size:11px;color:var(--text-hint);font-weight:600">משקל ק״ג</span>
+            <span style="width:16px"></span>
             <span style="flex:0 1 92px;text-align:center;font-size:11px;color:var(--text-hint);font-weight:600">חזרות</span>
-            <span style="width:28px"></span>
+            <span style="width:56px;text-align:center;font-size:11px;color:var(--text-hint);font-weight:600">כשל</span>
           </div>
         </div>`;
 
