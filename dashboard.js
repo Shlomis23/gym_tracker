@@ -255,7 +255,7 @@ const goalReached = thisWeek >= goal;
       ? isToday ? "2px solid var(--green)" : "1px solid #86efac"
       : isToday ? "2px solid var(--accent)" : isFuture ? "1px dashed var(--border-med)" : "1px solid var(--border)";
     const animDelay = (idx * 0.08).toFixed(2);
-    const initialCellOpacity = state.dashboardAnimatedOnce || worked || isToday ? "1" : "0";
+    const initialCellOpacity = "1";
     return `<div class="day-cell-anim" style="display:flex;flex-direction:column;align-items:center;gap:4px;opacity:${initialCellOpacity};animation-delay:${animDelay}s">
       <span style="font-size:10px;color:${labelColor};font-weight:${labelWeight}">${dayNames[dow]}</span>
       <div style="width:100%;aspect-ratio:1;border-radius:8px;background:${boxBg};border:${boxBorder};display:flex;align-items:center;justify-content:center">

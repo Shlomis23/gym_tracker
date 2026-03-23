@@ -581,7 +581,9 @@ function render() {
   bindDragDrop();
   const dot = document.getElementById("inprogress-dot");
   if (dot) dot.style.display = state.workoutId ? "block" : "none";
-  if (state.screen === "dashboard") setTimeout(bindScrollAnimations, 50);
+  if (state.screen === "dashboard") {
+    requestAnimationFrame(() => requestAnimationFrame(bindScrollAnimations));
+  }
   if (state.screen === "manage") setTimeout(bindWorkoutDragDrop, 0);
 }
 
