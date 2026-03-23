@@ -992,12 +992,14 @@ async function copyWeeklyWeightSummary() {
 
   const lines = [
     "טווח תאריכים",
-    `${formatDate(first.measured_at)} - ${formatDate(last.measured_at)}`,
+    `${formatDateShort(first.measured_at)} - ${formatDateShort(last.measured_at)}`,
+    "",
     ...logs.map(log => {
-      const dayName = new Date(log.measured_at).toLocaleDateString("he-IL", { weekday: "long" });
-      return `${dayName}, ${formatDate(log.measured_at)}, ${Number(log.weight).toFixed(1)} ק״ג`;
+      const dayName = new Date(log.measured_at).toLocaleDateString("he-IL", { weekday: "short" });
+      return `${dayName}, ${formatDateShort(log.measured_at)} - ${Number(log.weight).toFixed(1)} ק״ג`;
     }),
-    `ממוצע שבועי: ${avg.toFixed(1)} ק״ג`
+    "",
+    `**ממוצע שבועי: ${avg.toFixed(1)} ק״ג**`
   ];
   const text = lines.join("\n");
 
