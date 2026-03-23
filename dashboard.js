@@ -365,6 +365,43 @@ if (inProgress) {
   }
   // ─────────────────────────────────────────────────────────────────
 
+  // ── Weight goal card (dashboard only) ────────────────────────────
+  const weightGoalData = state.weightGoal || {};
+  const startGoal = Number(weightGoalData.start_weight);
+  const targetGoal = Number(weightGoalData.goal_weight);
+  const hasGoal = Number.isFinite(startGoal) && Number.isFinite(targetGoal) && startGoal > 0 && targetGoal > 0 && startGoal !== targetGoal;
+  let goalProgressCard = "";
+  if (latest) {
+    const dist = hasGoal ? Math.abs(startGoal - targetGoal) : 0;
+    const progressRaw = hasGoal ? Math.abs(startGoal - latest.weight) / dist : 0;
+    const progressPct = hasGoal ? Math.max(0, Math.min(100, Math.round(progressRaw * 100))) : 0;
+    const goalDirectionDown = hasGoal && targetGoal < startGoal;
+    const remaining = hasGoal ? (goalDirectionDown ? latest.weight - targetGoal : targetGoal - latest.weight) : null;
+    const done = hasGoal && remaining <= 0;
+    const status = !hasGoal
+      ? "הגדר יעד כדי לעקוב אחרי התקדמות"
+      : done
+      ? "היעד הושג — אלוף!"
+      : `נשארו עוד ${remaining.toFixed(1)} ק״ג ליעד`;
+    goalProgressCard = `<div class="anim-card" style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 14px;margin-bottom:16px;animation-delay:1.05s">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+        <div>
+          <div style="font-size:12px;color:var(--text-secondary);font-weight:600">יעד משקל</div>
+          <div style="font-size:11px;color:var(--text-hint);margin-top:2px">${hasGoal ? `${startGoal.toFixed(1)} → ${targetGoal.toFixed(1)} ק״ג` : "ללא יעד מוגדר"}</div>
+        </div>
+        <button onclick="showGoalModal()" style="border:none;background:var(--surface);padding:7px 11px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--text-secondary);font-family:inherit">${hasGoal ? "ערוך יעד" : "הוסף יעד"}</button>
+      </div>
+      <div style="height:8px;background:var(--surface);border-radius:999px;overflow:hidden;margin-bottom:7px">
+        <div style="width:${progressPct}%;height:100%;background:${done ? "var(--green)" : "var(--accent)"};transition:width .25s ease"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:11px;color:${done ? "var(--green)" : "var(--text-secondary)"}">${status}</span>
+        <span style="font-size:11px;color:var(--text-hint)">${hasGoal ? progressPct + "%" : "--"}</span>
+      </div>
+    </div>`;
+  }
+  // ─────────────────────────────────────────────────────────────────
+
   let daysSinceCard = "";
   if (daysSince) {
     const d = daysSince.days;
@@ -403,6 +440,7 @@ if (inProgress) {
     ${daysSinceCard}
 
     ${weightCard}
+    ${goalProgressCard}
 
     ${prEntries.length ? `<div class="card anim-card" style="padding:0;overflow:hidden;margin-bottom:16px;animation-delay:1.25s">
       <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:7px">
