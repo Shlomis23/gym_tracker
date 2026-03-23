@@ -221,11 +221,18 @@ const goalReached = thisWeek >= goal;
   const todayDow = new Date().getDay();
   const weekStart = getWeekStart(new Date());
 
+  const toLocalDayStart = (dateLike) => {
+    const d = new Date(dateLike);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  };
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 6);
+
   const workedDays = new Set();
   state.sessions.forEach(s => {
-    const d = new Date(s.date);
-    if (d >= weekStart) {
-      workedDays.add(d.getDay());
+    const dayStart = toLocalDayStart(s.date);
+    if (dayStart >= weekStart && dayStart <= weekEnd) {
+      workedDays.add(dayStart.getDay());
     }
   });
 
@@ -242,13 +249,13 @@ const goalReached = thisWeek >= goal;
     const isFuture = !isToday && !isPast;
     const worked = workedDays.has(dow);
     const labelColor = worked ? "var(--green)" : isToday ? "var(--accent)" : isFuture ? "var(--border-med)" : "var(--text-hint)";
-    const labelWeight = isToday ? "800" : "600";
+    const labelWeight = "600";
     const boxBg = worked ? "var(--green-bg)" : isToday ? "#eef2ff" : isFuture ? "var(--card)" : "var(--surface)";
     const boxBorder = worked
       ? isToday ? "2px solid var(--green)" : "1px solid #86efac"
       : isToday ? "2px solid var(--accent)" : isFuture ? "1px dashed var(--border-med)" : "1px solid var(--border)";
     const animDelay = (idx * 0.08).toFixed(2);
-    const initialCellOpacity = state.dashboardAnimatedOnce || worked || isToday ? "1" : "0";
+    const initialCellOpacity = "1";
     return `<div class="day-cell-anim" style="display:flex;flex-direction:column;align-items:center;gap:4px;opacity:${initialCellOpacity};animation-delay:${animDelay}s">
       <span style="font-size:10px;color:${labelColor};font-weight:${labelWeight}">${dayNames[dow]}</span>
       <div style="width:100%;aspect-ratio:1;border-radius:8px;background:${boxBg};border:${boxBorder};display:flex;align-items:center;justify-content:center">
