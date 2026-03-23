@@ -976,18 +976,47 @@ function getWeightMovingAverage(logs, windowSize) {
   });
 }
 
-function renderWeightChart(series) {
+function aggregateWeightByWeek(logs) {
+  if (!logs.length) return [];
+  const buckets = new Map();
+  logs.forEach(log => {
+    const weekKey = getWeekStart(log.measured_at).toISOString().slice(0, 10);
+    if (!buckets.has(weekKey)) buckets.set(weekKey, []);
+    buckets.get(weekKey).push(log);
+  });
+  return [...buckets.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([, weekLogs]) => {
+      const avgWeight = weekLogs.reduce((sum, item) => sum + Number(item.weight), 0) / weekLogs.length;
+      const lastLog = weekLogs[weekLogs.length - 1];
+      return {
+        ...lastLog,
+        weight: Number(avgWeight.toFixed(2))
+      };
+    });
+}
+
+function renderWeightChart(series, options = {}) {
   if (series.length < 2) {
     return `<div style="height:190px;display:flex;align-items:center;justify-content:center;color:var(--text-hint);font-size:13px">צריך לפחות 2 שקילות להצגת גרף</div>`;
   }
+  const rangeDays = Number(options.rangeDays || 0);
+  const denseThreshold = rangeDays >= 180 ? 28 : rangeDays >= 90 ? 40 : 55;
+  const isDense = series.length > denseThreshold || !!options.denseHint;
+  const targetPoints = rangeDays >= 180 ? 30 : rangeDays >= 90 ? 42 : 56;
+  const keepEvery = Math.max(1, Math.ceil(series.length / targetPoints));
+  const chartSeries = !isDense
+    ? series
+    : series.filter((_, idx) => idx === 0 || idx === series.length - 1 || idx % keepEvery === 0);
+
   const width = 1000;
   const height = 220;
   const pad = 28;
-  const minY = Math.min(...series.map(p => Math.min(p.weight, p.movingAvg)));
-  const maxY = Math.max(...series.map(p => Math.max(p.weight, p.movingAvg)));
+  const minY = Math.min(...chartSeries.map(p => Math.min(p.weight, p.movingAvg)));
+  const maxY = Math.max(...chartSeries.map(p => Math.max(p.weight, p.movingAvg)));
   const spanY = Math.max(maxY - minY, 0.1);
-  const stepX = (width - pad * 2) / Math.max(series.length - 1, 1);
-  const points = series.map((p, i) => {
+  const stepX = (width - pad * 2) / Math.max(chartSeries.length - 1, 1);
+  const points = chartSeries.map((p, i) => {
     const x = pad + i * stepX;
     const yW = height - pad - ((p.weight - minY) / spanY) * (height - pad * 2);
     const yAvg = height - pad - ((p.movingAvg - minY) / spanY) * (height - pad * 2);
@@ -997,12 +1026,21 @@ function renderWeightChart(series) {
   const lineAvg = points.map(p => `${p.x},${p.yAvg}`).join(" ");
   const first = points[0];
   const last = points[points.length - 1];
+  const gridLines = [0.25, 0.5, 0.75].map(ratio => {
+    const y = height - pad - (height - pad * 2) * ratio;
+    return `<line x1="${pad}" y1="${y}" x2="${width - pad}" y2="${y}" stroke="var(--border)" stroke-width="1" stroke-opacity="0.7" />`;
+  }).join("");
+  const circlePoints = isDense
+    ? points.filter((_, idx) => idx === 0 || idx === points.length - 1 || idx % Math.max(1, Math.ceil(points.length / 12)) === 0)
+    : points;
+  const weightStrokeOpacity = isDense ? 0.32 : 0.55;
+  const weightStrokeWidth = isDense ? 1.2 : 1.8;
   return `
     <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" style="display:block;width:100%;height:190px;background:var(--surface);border:1px solid var(--border-soft);border-radius:12px;overflow:hidden">
-      <polyline points="${lineWeight}" fill="none" stroke="var(--text-hint)" stroke-opacity="0.55" stroke-width="1.8" stroke-linecap="round"></polyline>
+      ${gridLines}
+      <polyline points="${lineWeight}" fill="none" stroke="var(--text-hint)" stroke-opacity="${weightStrokeOpacity}" stroke-width="${weightStrokeWidth}" stroke-linecap="round"></polyline>
       <polyline points="${lineAvg}" fill="none" stroke="var(--green)" stroke-width="3.2" stroke-linecap="round"></polyline>
-      ${points.map(p => `<circle cx="${p.x}" cy="${p.yW}" r="3.6" fill="var(--accent)"></circle>`).join("")}
-      ${points.map(p => `<text x="${p.x}" y="${Math.max(14, p.yW - 9)}" font-size="11" font-weight="700" fill="var(--text-primary)" text-anchor="middle">${Number(p.weight).toFixed(1)}</text>`).join("")}
+      ${circlePoints.map(p => `<circle cx="${p.x}" cy="${p.yW}" r="${isDense ? 2.4 : 3.6}" fill="var(--accent)"><title>${formatDate(p.measured_at)} · ${Number(p.weight).toFixed(1)} ק״ג</title></circle>`).join("")}
       <text x="${first.x}" y="${height - 8}" font-size="11" fill="var(--text-hint)" text-anchor="middle">${formatDate(first.measured_at)}</text>
       <text x="${last.x}" y="${height - 8}" font-size="11" fill="var(--text-hint)" text-anchor="middle">${formatDate(last.measured_at)}</text>
     </svg>
@@ -1106,6 +1144,9 @@ function renderHistory() {
     const filtered = getWeightRangeLogs(range);
     const avgWindowDays = Math.max(1, range);
     const withAvg = getWeightMovingAverage(filtered, avgWindowDays);
+    const chartBase = range >= 180 ? aggregateWeightByWeek(filtered) : filtered;
+    const chartAvgWindow = range >= 180 ? Math.max(2, Math.round(avgWindowDays / 7)) : avgWindowDays;
+    const chartSeries = getWeightMovingAverage(chartBase, chartAvgWindow);
     const latest = filtered[filtered.length - 1];
     const first = filtered[0];
     const delta = latest.weight - first.weight;
@@ -1182,7 +1223,7 @@ function renderHistory() {
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:10px">${rangeButtons}</div>
       ${summaryCards}
       ${goalCard}
-      ${renderWeightChart(withAvg)}
+      ${renderWeightChart(chartSeries, { rangeDays: range, denseHint: range >= 90 })}
       <div style="margin-top:10px;display:grid;gap:8px;padding-bottom:12px">${rows}</div>
     </div>`;
   }
