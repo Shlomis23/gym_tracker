@@ -976,18 +976,47 @@ function getWeightMovingAverage(logs, windowSize) {
   });
 }
 
-function renderWeightChart(series) {
+function aggregateWeightByWeek(logs) {
+  if (!logs.length) return [];
+  const buckets = new Map();
+  logs.forEach(log => {
+    const weekKey = getWeekStart(log.measured_at).toISOString().slice(0, 10);
+    if (!buckets.has(weekKey)) buckets.set(weekKey, []);
+    buckets.get(weekKey).push(log);
+  });
+  return [...buckets.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([, weekLogs]) => {
+      const avgWeight = weekLogs.reduce((sum, item) => sum + Number(item.weight), 0) / weekLogs.length;
+      const lastLog = weekLogs[weekLogs.length - 1];
+      return {
+        ...lastLog,
+        weight: Number(avgWeight.toFixed(2))
+      };
+    });
+}
+
+function renderWeightChart(series, options = {}) {
   if (series.length < 2) {
     return `<div style="height:190px;display:flex;align-items:center;justify-content:center;color:var(--text-hint);font-size:13px">צריך לפחות 2 שקילות להצגת גרף</div>`;
   }
+  const rangeDays = Number(options.rangeDays || 0);
+  const denseThreshold = rangeDays >= 180 ? 28 : rangeDays >= 90 ? 40 : 55;
+  const isDense = series.length > denseThreshold || !!options.denseHint;
+  const targetPoints = rangeDays >= 180 ? 30 : rangeDays >= 90 ? 42 : 56;
+  const keepEvery = Math.max(1, Math.ceil(series.length / targetPoints));
+  const chartSeries = !isDense
+    ? series
+    : series.filter((_, idx) => idx === 0 || idx === series.length - 1 || idx % keepEvery === 0);
+
   const width = 1000;
   const height = 220;
   const pad = 28;
-  const minY = Math.min(...series.map(p => Math.min(p.weight, p.movingAvg)));
-  const maxY = Math.max(...series.map(p => Math.max(p.weight, p.movingAvg)));
+  const minY = Math.min(...chartSeries.map(p => Math.min(p.weight, p.movingAvg)));
+  const maxY = Math.max(...chartSeries.map(p => Math.max(p.weight, p.movingAvg)));
   const spanY = Math.max(maxY - minY, 0.1);
-  const stepX = (width - pad * 2) / Math.max(series.length - 1, 1);
-  const points = series.map((p, i) => {
+  const stepX = (width - pad * 2) / Math.max(chartSeries.length - 1, 1);
+  const points = chartSeries.map((p, i) => {
     const x = pad + i * stepX;
     const yW = height - pad - ((p.weight - minY) / spanY) * (height - pad * 2);
     const yAvg = height - pad - ((p.movingAvg - minY) / spanY) * (height - pad * 2);
@@ -997,16 +1026,74 @@ function renderWeightChart(series) {
   const lineAvg = points.map(p => `${p.x},${p.yAvg}`).join(" ");
   const first = points[0];
   const last = points[points.length - 1];
+  const areaAvg = `${first.x},${height - pad} ${points.map(p => `${p.x},${p.yAvg}`).join(" ")} ${last.x},${height - pad}`;
+  const gridLines = [0.25, 0.5, 0.75].map(ratio => {
+    const y = height - pad - (height - pad * 2) * ratio;
+    return `<line x1="${pad}" y1="${y}" x2="${width - pad}" y2="${y}" stroke="var(--border)" stroke-width="1" stroke-opacity="0.7" />`;
+  }).join("");
+  const circlePoints = isDense
+    ? points.filter((_, idx) => idx === 0 || idx === points.length - 1 || idx % Math.max(1, Math.ceil(points.length / 12)) === 0)
+    : points;
+  const weightStrokeOpacity = isDense ? 0.32 : 0.55;
+  const weightStrokeWidth = isDense ? 1.2 : 1.8;
+  const chartId = `weight-chart-${Math.random().toString(36).slice(2, 8)}`;
+  const selected = circlePoints[circlePoints.length - 1];
+  const minLabel = minY.toFixed(1);
+  const maxLabel = maxY.toFixed(1);
   return `
-    <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" style="display:block;width:100%;height:190px;background:var(--surface);border:1px solid var(--border-soft);border-radius:12px;overflow:hidden">
-      <polyline points="${lineWeight}" fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round"></polyline>
-      <polyline points="${lineAvg}" fill="none" stroke="var(--green)" stroke-width="2.4" stroke-dasharray="6 4" stroke-linecap="round"></polyline>
-      ${points.map(p => `<circle cx="${p.x}" cy="${p.yW}" r="3.6" fill="var(--accent)"></circle>`).join("")}
-      ${points.map(p => `<text x="${p.x}" y="${Math.max(14, p.yW - 9)}" font-size="11" font-weight="700" fill="var(--text-primary)" text-anchor="middle">${Number(p.weight).toFixed(1)}</text>`).join("")}
-      <text x="${first.x}" y="${height - 8}" font-size="11" fill="var(--text-hint)" text-anchor="middle">${formatDate(first.measured_at)}</text>
-      <text x="${last.x}" y="${height - 8}" font-size="11" fill="var(--text-hint)" text-anchor="middle">${formatDate(last.measured_at)}</text>
-    </svg>
+    <div class="card" style="padding:10px;border-radius:12px">
+      <div id="${chartId}-selected" style="display:flex;justify-content:space-between;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 10px;margin-bottom:8px">
+        <div>
+          <div style="font-size:11px;color:var(--text-hint)">נקודה נבחרת</div>
+          <div id="${chartId}-date" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${formatDate(selected.measured_at)}</div>
+        </div>
+        <div style="text-align:left">
+          <div id="${chartId}-weight" style="font-size:18px;font-weight:700;color:var(--text-primary)">${Number(selected.weight).toFixed(1)} ק״ג</div>
+          <div id="${chartId}-avg" style="font-size:11px;color:var(--green)">ממוצע: ${Number(selected.movingAvg).toFixed(1)}</div>
+        </div>
+      </div>
+      <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" style="display:block;width:100%;height:190px;background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+        <defs>
+          <linearGradient id="${chartId}-avg-fill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#22c55e" stop-opacity="0.18"></stop>
+            <stop offset="100%" stop-color="#22c55e" stop-opacity="0.02"></stop>
+          </linearGradient>
+        </defs>
+        ${gridLines}
+        <polygon points="${areaAvg}" fill="url(#${chartId}-avg-fill)"></polygon>
+        <polyline points="${lineWeight}" fill="none" stroke="var(--text-hint)" stroke-opacity="${weightStrokeOpacity}" stroke-width="${weightStrokeWidth}" stroke-linecap="round"></polyline>
+        <polyline points="${lineAvg}" fill="none" stroke="var(--green)" stroke-width="3.2" stroke-linecap="round"></polyline>
+        ${circlePoints.map((p, idx) => {
+          const isActive = idx === circlePoints.length - 1;
+          const baseR = isDense ? 2.4 : 3.6;
+          return `<circle data-chart-id="${chartId}" data-base-r="${baseR}" data-idx="${idx}" cx="${p.x}" cy="${p.yW}" r="${isActive ? baseR + 1.2 : baseR}" fill="${isActive ? "var(--blue)" : "var(--accent)"}" opacity="${isActive ? "1" : "0.85"}" stroke="#fff" stroke-width="1.5" style="cursor:pointer" onclick="selectWeightChartPoint('${chartId}', ${idx}, '${p.measured_at}', ${Number(p.weight).toFixed(2)}, ${Number(p.movingAvg).toFixed(2)})"><title>${formatDate(p.measured_at)} · ${Number(p.weight).toFixed(1)} ק״ג</title></circle>`;
+        }).join("")}
+        <text x="${pad + 2}" y="${pad - 8}" font-size="11" fill="var(--text-hint)" text-anchor="start">${maxLabel} ק״ג</text>
+        <text x="${pad + 2}" y="${height - 10}" font-size="11" fill="var(--text-hint)" text-anchor="start">${minLabel} ק״ג</text>
+        <text x="${first.x}" y="${height - 8}" font-size="11" fill="var(--text-hint)" text-anchor="middle">${formatDate(first.measured_at)}</text>
+        <text x="${last.x}" y="${height - 8}" font-size="11" fill="var(--text-hint)" text-anchor="middle">${formatDate(last.measured_at)}</text>
+      </svg>
+    </div>
   `;
+}
+
+function selectWeightChartPoint(chartId, idx, measuredAt, weight, movingAvg) {
+  const dateEl = document.getElementById(`${chartId}-date`);
+  const weightEl = document.getElementById(`${chartId}-weight`);
+  const avgEl = document.getElementById(`${chartId}-avg`);
+  if (dateEl) dateEl.textContent = formatDate(measuredAt);
+  if (weightEl) weightEl.textContent = `${Number(weight).toFixed(1)} ק״ג`;
+  if (avgEl) avgEl.textContent = `ממוצע: ${Number(movingAvg).toFixed(1)}`;
+
+  const nodes = document.querySelectorAll(`circle[data-chart-id="${chartId}"]`);
+  nodes.forEach(node => {
+    const nodeIdx = Number(node.getAttribute("data-idx"));
+    const baseR = Number(node.getAttribute("data-base-r")) || 3.6;
+    const isActive = nodeIdx === Number(idx);
+    node.setAttribute("r", isActive ? String(baseR + 1.2) : String(baseR));
+    node.setAttribute("fill", isActive ? "var(--blue)" : "var(--accent)");
+    node.setAttribute("opacity", isActive ? "1" : "0.85");
+  });
 }
 
 async function openWeightEntryModal(logId) {
@@ -1104,7 +1191,11 @@ function renderHistory() {
     }
     const range = getWeightRangeDays();
     const filtered = getWeightRangeLogs(range);
-    const withAvg = getWeightMovingAverage(filtered, 7);
+    const avgWindowDays = Math.max(1, range);
+    const withAvg = getWeightMovingAverage(filtered, avgWindowDays);
+    const chartBase = range >= 180 ? aggregateWeightByWeek(filtered) : filtered;
+    const chartAvgWindow = range >= 180 ? Math.max(2, Math.round(avgWindowDays / 7)) : avgWindowDays;
+    const chartSeries = getWeightMovingAverage(chartBase, chartAvgWindow);
     const latest = filtered[filtered.length - 1];
     const first = filtered[0];
     const delta = latest.weight - first.weight;
@@ -1112,17 +1203,17 @@ function renderHistory() {
     const summaryCards = `
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:10px">
         <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">אחרון</div><div style="font-size:19px;font-weight:700">${latest.weight.toFixed(1)}</div></div>
-        <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">ממוצע 7 ימים</div><div style="font-size:19px;font-weight:700;color:var(--green)">${avg7.toFixed(1)}</div></div>
+        <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">ממוצע ${avgWindowDays} ימים</div><div style="font-size:19px;font-weight:700;color:var(--green)">${avg7.toFixed(1)}</div></div>
         <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">שינוי בטווח</div><div style="font-size:19px;font-weight:700;color:${delta < 0 ? "var(--green)" : delta > 0 ? "var(--red)" : "var(--text-primary)"}">${delta > 0 ? "+" : ""}${delta.toFixed(1)}</div></div>
       </div>
     `;
+
     const rangeButtons = [
       { days: 7, label: "7 ימים" },
       { days: 30, label: "30 ימים" },
       { days: 90, label: "90 ימים" },
       { days: 180, label: "6 חודשים" },
-      { days: 365, label: "שנה" },
-      { days: 0, label: "הכול" }
+      { days: 365, label: "שנה" }
     ].map(r => `<button onclick="state.weightRangeDays=${r.days};render()" style="padding:7px 10px;border-radius:999px;border:1px solid ${range===r.days?"var(--accent)":"var(--border-med)"};background:${range===r.days?"var(--accent)":"var(--surface)"};color:${range===r.days?"#fff":"var(--text-secondary)"};font-family:inherit;font-size:11px;cursor:pointer">${r.label}</button>`).join("");
     const rows = [...withAvg].reverse().map((log, ri, arr) => {
       const prev = arr[ri + 1];
@@ -1132,7 +1223,7 @@ function renderHistory() {
       return `<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px">
         <div>
           <div style="font-size:18px;font-weight:700">${log.weight.toFixed(1)} <span style="font-size:12px;font-weight:500;color:var(--text-hint)">ק״ג</span></div>
-          <div style="font-size:11px;color:var(--text-hint);margin-top:2px">${formatWeightDate(log)} · ממוצע 7י: ${log.movingAvg.toFixed(1)}</div>
+          <div style="font-size:11px;color:var(--text-hint);margin-top:2px">${formatWeightDate(log)} · ממוצע ${avgWindowDays}י: ${log.movingAvg.toFixed(1)}</div>
           ${log.note ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:3px">${escapeHtml(log.note)}</div>` : ""}
         </div>
         <div style="display:flex;align-items:center;gap:8px">
@@ -1147,9 +1238,9 @@ function renderHistory() {
         <div style="font-size:13px;color:var(--text-secondary)">My Weight</div>
         <button onclick="openWeightEntryModal()" class="btn-primary" style="width:auto;padding:8px 12px;font-size:12px">הוסף</button>
       </div>
-      <div style="display:flex;gap:6px;overflow:auto;margin-bottom:10px;padding-bottom:4px">${rangeButtons}</div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:10px">${rangeButtons}</div>
       ${summaryCards}
-      ${renderWeightChart(withAvg)}
+      ${renderWeightChart(chartSeries, { rangeDays: range, denseHint: range >= 90 })}
       <div style="margin-top:10px;display:grid;gap:8px;padding-bottom:12px">${rows}</div>
     </div>`;
   }
@@ -1161,10 +1252,51 @@ function renderHistory() {
   </div>`;
 
   if (!state.sessions.length) return `<div style="padding:14px">${tabs}${exportBtn}<div style="padding:30px;text-align:center;color:var(--text-hint);font-size:14px">אין אימונים עדיין</div></div>`;
-  const reversed = [...state.sessions].reverse();
+
+  const improvedCount = (session, prevSameType) => {
+    const exNames = Object.keys(session.exercises || {});
+    return exNames.filter(name => {
+      const sets = (session.exercises[name]||[]).filter(s=>s.weight>0||s.reps>0);
+      const prevSets = prevSameType?.exercises?.[name]||[];
+      return prevSets.length>0 && sets.some((s,i)=>prevSets[i]&&s.weight>prevSets[i].weight);
+    }).length;
+  };
+
+  const mode = state.historyWorkoutFilterMode || "all";
+  const workoutId = state.historyWorkoutId || "all";
+  const exQuery = (state.historyExerciseQuery || "").trim().toLowerCase();
+
+  const workoutOptions = [
+    `<option value="all" ${workoutId === "all" ? "selected" : ""}>כל התוכניות</option>`,
+    ...state.workouts.map(w => `<option value="${w.id}" ${workoutId === w.id ? "selected" : ""}>${escapeHtml(w.name)}</option>`)
+  ].join("");
+
+  const filteredSessions = [...state.sessions].filter((session, idx) => {
+    if (workoutId !== "all" && session.workoutId !== workoutId) return false;
+    if (exQuery) {
+      const names = Object.keys(session.exercises || {}).map(x => x.toLowerCase());
+      if (!names.some(n => n.includes(exQuery))) return false;
+    }
+    if (mode === "improved") {
+      const prevSameType = state.sessions.slice(0, idx).reverse().find(s => s.workoutId === session.workoutId);
+      return improvedCount(session, prevSameType) > 0;
+    }
+    return true;
+  }).reverse();
+
   if (!state.expandedSessions) state.expandedSessions = new Set();
-  return `<div style="padding:14px">${tabs}${exportBtn}${reversed.map((session, ri) => {
-    const originalIdx = state.sessions.length - 1 - ri;
+  return `<div style="padding:14px">${tabs}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+      <button onclick="state.historyWorkoutFilterMode='all';render()" style="padding:8px 10px;border-radius:10px;border:1px solid ${mode==='all'?'var(--accent)':'var(--border-med)'};background:${mode==='all'?'var(--accent)':'var(--card)'};color:${mode==='all'?'#fff':'var(--text-secondary)'};font-family:inherit;font-size:12px;cursor:pointer">הכול</button>
+      <button onclick="state.historyWorkoutFilterMode='improved';render()" style="padding:8px 10px;border-radius:10px;border:1px solid ${mode==='improved'?'var(--green)':'var(--border-med)'};background:${mode==='improved'?'var(--green-bg)':'var(--card)'};color:${mode==='improved'?'var(--green)':'var(--text-secondary)'};font-family:inherit;font-size:12px;cursor:pointer">רק עם שיפור</button>
+    </div>
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-bottom:10px">
+      <select onchange="state.historyWorkoutId=this.value;render()" style="padding:9px 10px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;font-size:12px;color:var(--text-primary)">${workoutOptions}</select>
+      <input id="history-exercise-search" type="text" value="${escapeHtml(state.historyExerciseQuery || "")}" oninput="onHistoryExerciseQueryInput(this)" placeholder="חפש לפי תרגיל" style="padding:9px 10px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;font-size:12px;color:var(--text-primary)">
+    </div>
+    ${exportBtn}
+    ${filteredSessions.length === 0 ? `<div style="padding:30px;text-align:center;color:var(--text-hint);font-size:14px">לא נמצאו אימונים לפי הסינון שבחרת</div>` : filteredSessions.map((session) => {
+    const originalIdx = state.sessions.findIndex(s => s.id === session.id);
     const w = getWorkout(session.workoutId);
     const wName = w ? w.name : (session.workoutName || session.workoutId);
     const prevSameType = state.sessions.slice(0, originalIdx).reverse().find(s => s.workoutId === session.workoutId);
@@ -1172,11 +1304,7 @@ function renderHistory() {
 
     const exNames = Object.keys(session.exercises);
     const totalEx = exNames.length;
-    const improved = exNames.filter(name => {
-      const sets = (session.exercises[name]||[]).filter(s=>s.weight>0||s.reps>0);
-      const prevSets = prevSameType?.exercises?.[name]||[];
-      return prevSets.length>0 && sets.some((s,i)=>prevSets[i]&&s.weight>prevSets[i].weight);
-    }).length;
+    const improved = improvedCount(session, prevSameType);
 
     const sessionVol = calcSessionVolume(session.exercises);
     const summaryChips = `
@@ -1250,6 +1378,19 @@ function renderHistory() {
   }).join("")}</div>`;
 }
 
+function onHistoryExerciseQueryInput(inputEl) {
+  state.historyExerciseQuery = inputEl.value;
+  const cursorPos = inputEl.selectionStart ?? inputEl.value.length;
+  render();
+  requestAnimationFrame(() => {
+    const nextInput = document.getElementById("history-exercise-search");
+    if (!nextInput) return;
+    nextInput.focus();
+    nextInput.setSelectionRange(cursorPos, cursorPos);
+  });
+}
+
+
 
 function renderMonthTab(tabs) {
   const now = new Date();
@@ -1262,14 +1403,23 @@ function renderMonthTab(tabs) {
 
   const monthStart = new Date(viewYear, viewMonth, 1);
   const monthEnd = new Date(viewYear, viewMonth + 1, 0);
+  const prevMonthStart = new Date(viewYear, viewMonth - 1, 1);
+  const prevMonthEnd = new Date(viewYear, viewMonth, 0);
 
   const sessions = state.sessions.filter(s => {
     const d = new Date(s.date);
     return d >= monthStart && d <= monthEnd;
   });
+  const prevSessions = state.sessions.filter(s => {
+    const d = new Date(s.date);
+    return d >= prevMonthStart && d <= prevMonthEnd;
+  });
 
   const totalVol = sessions.reduce((t, s) => t + calcSessionVolume(s.exercises), 0);
   const totalSets = sessions.reduce((t, s) =>
+    t + Object.values(s.exercises||{}).reduce((tt, sets) => tt + sets.filter(x=>x.reps>0).length, 0), 0);
+  const prevTotalVol = prevSessions.reduce((t, s) => t + calcSessionVolume(s.exercises), 0);
+  const prevTotalSets = prevSessions.reduce((t, s) =>
     t + Object.values(s.exercises||{}).reduce((tt, sets) => tt + sets.filter(x=>x.reps>0).length, 0), 0);
 
   // PRs broken this month
@@ -1285,6 +1435,18 @@ function renderMonthTab(tabs) {
     });
   });
   const newPRs = Object.entries(allPRs).filter(([,v]) => v.inMonth > v.before && v.inMonth > 0).length;
+  const prevAllPRs = {};
+  state.sessions.forEach(s => {
+    const d = new Date(s.date);
+    const inPrevMonth = d >= prevMonthStart && d <= prevMonthEnd;
+    Object.entries(s.exercises||{}).forEach(([name, sets]) => {
+      const maxW = Math.max(...sets.map(x=>x.weight||0));
+      if (!prevAllPRs[name]) prevAllPRs[name] = { before: 0, inMonth: 0 };
+      if (inPrevMonth) prevAllPRs[name].inMonth = Math.max(prevAllPRs[name].inMonth, maxW);
+      else if (d < prevMonthStart) prevAllPRs[name].before = Math.max(prevAllPRs[name].before, maxW);
+    });
+  });
+  const prevMonthPrs = Object.entries(prevAllPRs).filter(([,v]) => v.inMonth > v.before && v.inMonth > 0).length;
 
   // Most improved exercise
   const improvements = {};
@@ -1299,7 +1461,16 @@ function renderMonthTab(tabs) {
     });
   });
   const topEx = Object.entries(improvements).sort((a,b)=>b[1]-a[1])[0];
-
+  const deltaText = (curr, prev, suffix = "") => {
+    const diff = curr - prev;
+    if (diff === 0) return "ללא שינוי";
+    return `${diff > 0 ? "+" : ""}${diff}${suffix} מול חודש קודם`;
+  };
+  const pctText = (curr, prev) => {
+    if (prev <= 0) return curr > 0 ? "נתון חדש החודש" : "אין שינוי";
+    const pct = Math.round(((curr - prev) / prev) * 100);
+    return `${pct >= 0 ? "+" : ""}${pct}% מול חודש קודם`;
+  };
   // calendar grid
   const firstDow = monthStart.getDay();
   const daysInMonth = monthEnd.getDate();
@@ -1350,22 +1521,22 @@ function renderMonthTab(tabs) {
       <div class="stat-card">
         <div class="stat-label">אימונים</div>
         <div class="stat-value">${sessions.length}</div>
-        <div class="stat-sub">החודש</div>
+        <div class="stat-sub">${deltaText(sessions.length, prevSessions.length)}</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">נפח כולל</div>
         <div class="stat-value" style="font-size:18px">${formatVolume(totalVol)}</div>
-        <div class="stat-sub">סה״כ הורם</div>
+        <div class="stat-sub">${pctText(totalVol, prevTotalVol)}</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">סטים</div>
         <div class="stat-value">${totalSets}</div>
-        <div class="stat-sub">כולל חזרות</div>
+        <div class="stat-sub">${deltaText(totalSets, prevTotalSets)}</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">שיאים חדשים</div>
         <div class="stat-value" style="color:${newPRs>0?"var(--green)":"var(--text-primary)"}">${newPRs}</div>
-        <div class="stat-sub">נשברו החודש</div>
+        <div class="stat-sub">${deltaText(newPRs, prevMonthPrs)}</div>
       </div>
     </div>
 
@@ -1492,7 +1663,7 @@ function renderManage() {
     <div class="card" style="padding:14px 16px;margin-bottom:16px">
       <div style="display:flex;align-items:center;gap:7px;margin-bottom:12px">
         <i data-lucide="target" style="width:15px;height:15px;color:var(--text-secondary)"></i>
-        <span style="font-weight:700;font-size:14px;color:var(--text-primary)">יעד שבועי</span>
+        <span style="font-weight:700;font-size:14px;color:var(--text-primary)">עדכון יעד אימונים</span>
       </div>
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
         <span style="font-size:13px;color:var(--text-secondary)">אימונים בשבוע:</span>
@@ -1506,8 +1677,20 @@ function renderManage() {
       <button onclick="promptSaveGoal()" style="width:100%;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer;font-size:14px;font-weight:600;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">
         <i data-lucide="check" style="width:15px;height:15px"></i> שמור יעד (${state.pendingGoal} אימונים)
       </button>` : ""}
-      <button onclick="showGoalModal()" style="width:100%;padding:10px;margin-top:10px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-size:13px;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">
-        <i data-lucide="weight" style="width:15px;height:15px"></i> עדכון יעד ומשקל התחלתי
+    </div>
+
+    <div class="card" style="padding:14px 16px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px">
+        <i data-lucide="weight" style="width:15px;height:15px;color:var(--text-secondary)"></i>
+        <span style="font-weight:700;font-size:14px;color:var(--text-primary)">עדכון יעד משקל ומשקל התחלתי</span>
+      </div>
+      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;line-height:1.5">
+        ${(state.weightGoal?.start_weight && state.weightGoal?.goal_weight)
+          ? `<span style="display:inline-flex;gap:4px;align-items:center;direction:ltr;unicode-bidi:isolate"><span>התחלתי: ${Number(state.weightGoal.start_weight).toFixed(1)}</span><span aria-hidden="true">→</span><span>יעד: ${Number(state.weightGoal.goal_weight).toFixed(1)} ק״ג</span></span>`
+          : "לא הוגדר יעד משקל עדיין"}
+      </div>
+      <button onclick="showGoalModal()" style="width:100%;padding:10px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-size:13px;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">
+        <i data-lucide="pencil" style="width:15px;height:15px"></i> ${state.weightGoal?.start_weight && state.weightGoal?.goal_weight ? "ערוך יעד משקל" : "הוסף יעד משקל"}
       </button>
     </div>
 
