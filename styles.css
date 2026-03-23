@@ -99,7 +99,7 @@ body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg);
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 .day-cell-anim {
-  animation: dayPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-  animation-play-state: paused;
+  opacity: 1;
+  transform: translateY(0) scale(1);
 }
 </style>
