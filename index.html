@@ -40,6 +40,9 @@
     <i data-lucide="dumbbell" style="width:20px;height:20px;color:#fff"></i>
     <span class="topbar-title" id="screen-title">דשבורד</span>
   </div>
+  <div id="readonly-banner" style="display:none;background:#fff7ed;border-bottom:1px solid #fed7aa;color:#9a3412;font-size:12px;font-weight:700;padding:8px 12px;text-align:center">
+    מצב צפייה בלבד — לא ניתן לבצע שמירה/עריכה דרך הקישור הזה
+  </div>
   <div class="content" id="main-content"></div>
   <div class="bottomnav">
     <button class="navbtn active" id="nav-dashboard" onclick="navigate('dashboard')">
@@ -71,20 +74,29 @@ async function sbGet(path) {
   return r.json();
 }
 async function sbPost(path, body) {
+  if (!requireWriteAccess()) return [];
   const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, { method:"POST", headers: SB_HEADERS, body: JSON.stringify(body) });
   if (!r.ok) throw new Error(await r.text());
   return r.json();
 }
 async function sbPatch(path, body) {
+  if (!requireWriteAccess()) return [];
   const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, { method:"PATCH", headers: SB_HEADERS, body: JSON.stringify(body) });
   if (!r.ok) throw new Error(await r.text());
   return r.json();
 }
 async function sbDelete(path) {
+  if (!requireWriteAccess()) return;
   const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, { method:"DELETE", headers: SB_HEADERS });
   if (!r.ok) throw new Error(await r.text());
 }
 // ─────────────────────────────────────────────────────────────────
+
+function requireWriteAccess(message) {
+  if (!isReadOnlyMode()) return true;
+  showToast(message || "הקישור פתוח במצב צפייה בלבד");
+  return false;
+}
 
 function getGoalForWeek(weekStartIso) {
   const history = state.settings.goalHistory || [];
@@ -95,9 +107,13 @@ function getGoalForWeek(weekStartIso) {
 
 try { state.sessions = JSON.parse(localStorage.getItem(STORAGE_SESSIONS) || "[]"); } catch {}
 
-function saveSessions() { localStorage.setItem(STORAGE_SESSIONS, JSON.stringify(state.sessions)); }
+function saveSessions() {
+  if (!requireWriteAccess()) return;
+  localStorage.setItem(STORAGE_SESSIONS, JSON.stringify(state.sessions));
+}
 
 async function saveSessionToSupabase(session) {
+  if (!requireWriteAccess()) return;
   try {
     const rows = await sbPost("workout_sessions", {
       local_id: session.id,
@@ -133,7 +149,7 @@ async function loadSessionsFromSupabase() {
       Object.values(exercises).forEach(arr => arr.sort((a,b) => a.num - b.num));
       return { id: row.local_id || row.id, workoutId: row.workout_id, workoutName: row.workout_name || "", date: row.date, exercises, note: row.note || "" };
     });
-    localStorage.setItem(STORAGE_SESSIONS, JSON.stringify(state.sessions));
+    if (!isReadOnlyMode()) localStorage.setItem(STORAGE_SESSIONS, JSON.stringify(state.sessions));
   } catch(e) {
     console.error("Supabase load failed, using localStorage:", e);
     try { state.sessions = JSON.parse(localStorage.getItem(STORAGE_SESSIONS) || "[]"); } catch {}
@@ -141,6 +157,7 @@ async function loadSessionsFromSupabase() {
 }
 
 async function deleteSessionFromSupabase(localId) {
+  if (!requireWriteAccess()) return;
   try {
     await sbDelete("workout_sessions?local_id=eq." + encodeURIComponent(localId));
   } catch(e) {
@@ -223,6 +240,7 @@ function readIsoDateFromSelector(container, prefix) {
 }
 
 async function saveWeightLog(weight, measuredAtIso, note) {
+  if (!requireWriteAccess()) throw new Error("READ_ONLY_MODE");
   try {
     const path = "body_weight_logs?on_conflict=measured_date";
     const headers = { ...SB_HEADERS, Prefer: "return=representation,resolution=merge-duplicates" };
@@ -245,6 +263,7 @@ async function saveWeightLog(weight, measuredAtIso, note) {
 }
 
 async function updateWeightLog(id, weight, measuredAtIso, note) {
+  if (!requireWriteAccess()) throw new Error("READ_ONLY_MODE");
   try {
     const rows = await sbPatch("body_weight_logs?id=eq." + encodeURIComponent(id), {
       weight,
@@ -266,6 +285,7 @@ async function updateWeightLog(id, weight, measuredAtIso, note) {
 }
 
 async function saveWeightGoal(startWeight, goalWeight) {
+  if (!requireWriteAccess()) throw new Error("READ_ONLY_MODE");
   try {
     await sbDelete("weight_goal?id=neq.00000000-0000-0000-0000-000000000000");
     const row = await sbPost("weight_goal", { start_weight: startWeight, goal_weight: goalWeight });
@@ -274,6 +294,7 @@ async function saveWeightGoal(startWeight, goalWeight) {
 }
 
 async function deleteWeightLog(id) {
+  if (!requireWriteAccess()) return;
   try {
     await sbDelete("body_weight_logs?id=eq." + id);
     state.weightLogs = state.weightLogs.filter(l => l.id !== id);
@@ -320,6 +341,7 @@ function buildWrap(mb) {
 }
 
 function showGoalModal() {
+  if (!requireWriteAccess()) return;
   const wGoal = state.weightGoal || {};
   document.getElementById("goal-modal")?.remove();
 
@@ -371,6 +393,7 @@ function showGoalModal() {
 }
 
 function showWeightModal() {
+  if (!requireWriteAccess()) return;
   const latest = getLatestWeight();
   const todayIso = isoDateFromLocal(new Date());
 
@@ -431,15 +454,18 @@ function showWeightModal() {
 
 
 function saveWorkouts() {
+  if (!requireWriteAccess()) return;
   localStorage.setItem(STORAGE_WORKOUTS, JSON.stringify(state.workouts));
   saveWorkoutsToSupabase();
 }
 function saveSettings() {
+  if (!requireWriteAccess()) return;
   localStorage.setItem(STORAGE_SETTINGS, JSON.stringify(state.settings));
   saveSettingsToSupabase();
 }
 
 async function saveSettingsToSupabase() {
+  if (!requireWriteAccess()) return;
   try {
     await sbDelete("user_settings?id=neq.00000000-0000-0000-0000-000000000000");
     await sbPost("user_settings", {
@@ -456,13 +482,14 @@ async function loadSettingsFromSupabase() {
       const r = rows[0];
       state.settings.weeklyGoal = r.weekly_goal || 4;
       state.settings.goalHistory = r.goal_history || [];
-      localStorage.setItem(STORAGE_SETTINGS, JSON.stringify(state.settings));
+      if (!isReadOnlyMode()) localStorage.setItem(STORAGE_SETTINGS, JSON.stringify(state.settings));
     }
   } catch(e) { console.error("Settings load failed:", e); }
 }
 
 
 async function saveWorkoutsToSupabase() {
+  if (!requireWriteAccess()) return;
   try {
     await sbDelete("workout_plans?id=neq.00000000-0000-0000-0000-000000000000");
     const rows = state.workouts.map((w, i) => ({
@@ -482,11 +509,11 @@ async function loadWorkoutsFromSupabase() {
     if (rows && rows.length) {
       // תמיד החלף את כל ה-state — אל תצרף
       state.workouts = rows.map(r => ({ id: r.plan_id, name: r.name, exercises: r.exercises }));
-      localStorage.setItem(STORAGE_WORKOUTS, JSON.stringify(state.workouts));
+      if (!isReadOnlyMode()) localStorage.setItem(STORAGE_WORKOUTS, JSON.stringify(state.workouts));
     } else {
       // Supabase ריק — נקה גם localStorage כדי למנוע ברירות מחדל ישנות
       state.workouts = [];
-      localStorage.removeItem(STORAGE_WORKOUTS);
+      if (!isReadOnlyMode()) localStorage.removeItem(STORAGE_WORKOUTS);
     }
   } catch(e) { console.error("Workout plan load failed:", e); }
 }
@@ -514,6 +541,7 @@ function getNextWorkout() {
 }
 
 function saveInProgress() {
+  if (!requireWriteAccess()) return;
   if (state.workoutId) {
     sessionStorage.setItem("gym_in_progress", JSON.stringify({
       workoutId: state.workoutId,
@@ -571,6 +599,10 @@ function navigate(screen) {
 
 function render() {
   const el = document.getElementById("main-content");
+  const app = document.querySelector(".app");
+  const banner = document.getElementById("readonly-banner");
+  if (app) app.classList.toggle("readonly-mode", isReadOnlyMode());
+  if (banner) banner.style.display = isReadOnlyMode() ? "block" : "none";
   if (state.screen === "dashboard") el.innerHTML = renderDashboard();
   else if (state.screen === "home") el.innerHTML = state.workoutId ? renderWorkout() : renderChoose();
   else if (state.screen === "history") el.innerHTML = renderHistory();
@@ -585,10 +617,47 @@ function render() {
     requestAnimationFrame(() => requestAnimationFrame(bindScrollAnimations));
   }
   if (state.screen === "manage") setTimeout(bindWorkoutDragDrop, 0);
+  if (isReadOnlyMode()) applyReadOnlyUiLock(el);
+}
+
+function applyReadOnlyUiLock(root) {
+  const writeTriggers = [
+    "selectWorkout(", "addSet(", "removeSet(", "toggleFailed(", "finishWorkout(",
+    "openWorkoutExtraPicker(", "openWeightEntryModal(", "changeGoalTemp(", "promptSaveGoal(",
+    "showGoalModal(", "addWorkout(", "startEditName(", "deleteWorkout(", "removeExercise(",
+    "openExercisePicker(", "openLibraryAddExercise(", "openLibraryEdit(", "deleteFromLibrary("
+  ];
+  root.querySelectorAll("[onclick]").forEach(node => {
+    const raw = node.getAttribute("onclick") || "";
+    if (writeTriggers.some(pattern => raw.includes(pattern))) {
+      node.disabled = true;
+      node.style.opacity = "0.45";
+      node.style.cursor = "not-allowed";
+      node.onclick = () => requireWriteAccess();
+    }
+  });
+  root.querySelectorAll("[data-del-session],[data-del-weight]").forEach(node => {
+    node.disabled = true;
+    node.style.opacity = "0.45";
+    node.style.cursor = "not-allowed";
+    node.onclick = () => requireWriteAccess();
+  });
+  const writeInputTriggers = ["updateSet(", "updateExField(", "state.workoutNote=this.value"];
+  root.querySelectorAll("[oninput],[onchange]").forEach(node => {
+    const inputCode = `${node.getAttribute("oninput") || ""} ${node.getAttribute("onchange") || ""}`;
+    if (writeInputTriggers.some(pattern => inputCode.includes(pattern))) {
+      node.disabled = true;
+      node.style.opacity = "0.6";
+      node.style.cursor = "not-allowed";
+      node.oninput = () => requireWriteAccess();
+      node.onchange = () => requireWriteAccess();
+    }
+  });
 }
 
 
 function bindDelButtons() {
+  if (isReadOnlyMode()) return;
   document.querySelectorAll("[data-del-session]").forEach(btn => {
     btn.addEventListener("click", function() {
       const idx = parseInt(this.dataset.delSession);
@@ -637,6 +706,7 @@ function renderChoose() {
 }
 
 function selectWorkout(id) {
+  if (!requireWriteAccess()) return;
   const inProgress = sessionStorage.getItem("gym_in_progress");
   if (inProgress) {
     const data = JSON.parse(inProgress);
@@ -655,6 +725,7 @@ function selectWorkout(id) {
 }
 
 function _doSelectWorkout(id) {
+  if (!requireWriteAccess()) return;
   haptic("medium");
   state.workoutId = id;
   const w = getWorkout(id); const last = getLastSession(id);
@@ -819,6 +890,7 @@ function renderWorkout() {
 }
 
 function updateSet(name,i,field,val) {
+  if (!requireWriteAccess()) return;
   const parsed = field==="weight" ? parseFloat(val)||0 : parseInt(val)||0;
   state.exercises[name][i][field] = parsed;
   saveInProgress();
@@ -832,14 +904,16 @@ function getExCatByName(name) {
   return lib?.category || null;
 }
 function addSet(name) {
+  if (!requireWriteAccess()) return;
   const sets = state.exercises[name];
   sets.push({ num:sets.length+1, weight:0, reps:0, failed:false });
   saveInProgress(); render();
 }
-function removeSet(name,i) { state.exercises[name].splice(i,1); state.exercises[name].forEach((s,idx) => s.num=idx+1); saveInProgress(); render(); }
-function toggleFailed(name,i) { state.exercises[name][i].failed = !state.exercises[name][i].failed; saveInProgress(); render(); }
+function removeSet(name,i) { if (!requireWriteAccess()) return; state.exercises[name].splice(i,1); state.exercises[name].forEach((s,idx) => s.num=idx+1); saveInProgress(); render(); }
+function toggleFailed(name,i) { if (!requireWriteAccess()) return; state.exercises[name][i].failed = !state.exercises[name][i].failed; saveInProgress(); render(); }
 
 function finishWorkout() {
+  if (!requireWriteAccess()) return;
   const todayIso = new Date().toISOString().slice(0,10);
 
   document.getElementById("finish-sheet")?.remove();
@@ -1184,6 +1258,7 @@ function selectWeightChartPoint(chartId, idx, measuredAt, weight, movingAvg) {
 }
 
 async function openWeightEntryModal(logId) {
+  if (!requireWriteAccess()) return;
   const logs = getWeightLogsAsc();
   const editing = logId ? logs.find(l => l.id === logId) : null;
   const todayIso = isoDateFromLocal(new Date());
@@ -1838,6 +1913,7 @@ function renderManage() {
 }
 
 function changeGoalTemp(delta) {
+  if (!requireWriteAccess()) return;
   const thisWeekIso = getWeekStart(new Date()).toISOString().slice(0,10);
   const currentWeekGoal = getGoalForWeek(thisWeekIso);
   const base = state.pendingGoal ?? currentWeekGoal;
@@ -1849,6 +1925,7 @@ function changeGoalTemp(delta) {
 }
 
 function promptSaveGoal() {
+  if (!requireWriteAccess()) return;
   const newGoal = state.pendingGoal;
 
   const thisWeekStart = getWeekStart(new Date());
@@ -1872,6 +1949,7 @@ function promptSaveGoal() {
 }
 
 function applyGoal(newGoal, fromIso) {
+  if (!requireWriteAccess()) return;
   const thisWeekIso = getWeekStart(new Date()).toISOString().slice(0,10);
   const currentWeekGoalBefore = getGoalForWeek(thisWeekIso);
 
@@ -1894,11 +1972,13 @@ function startEditName(id) {
   render(); setTimeout(()=>{ const inp=document.getElementById("name-inp-"+id); if(inp){inp.focus();inp.select();} },30);
 }
 function saveWorkoutName(id) {
+  if (!requireWriteAccess()) return;
   const inp=document.getElementById("name-inp-"+id); const val=sanitizeText(inp?inp.value:"", 80);
   if(val){ const w=getWorkout(id); if(w) w.name=val; saveWorkouts(); }
   state.editingNameId=null; render();
 }
 function addWorkout() {
+  if (!requireWriteAccess()) return;
   const inp=document.getElementById("new-workout-name"); const name=sanitizeText(inp?inp.value:"", 80);
   if(!name) return;
   state.workouts.push({id:"w_"+Date.now(), name, exercises:[]});
@@ -1906,12 +1986,14 @@ function addWorkout() {
   state.editingNameId=null; saveWorkouts(); render();
 }
 function deleteWorkout(id) {
+  if (!requireWriteAccess()) return;
   if(!confirm("למחוק את האימון לצמיתות?")) return;
   state.workouts=state.workouts.filter(w=>w.id!==id);
   if(state.manageOpenId===id) state.manageOpenId=null;
   saveWorkouts(); render();
 }
 function addExercise(workoutId) {
+  if (!requireWriteAccess()) return;
   const inp=document.getElementById("new-ex-"+workoutId); const val=sanitizeText(inp?inp.value:"", 80);
   const restInp=document.getElementById("new-rest-"+workoutId);
   const rest=restInp?parseInt(restInp.value)||60:60;
@@ -1925,6 +2007,7 @@ function addExercise(workoutId) {
   }
 }
 function removeExercise(workoutId,i) {
+  if (!requireWriteAccess()) return;
   const w=getWorkout(workoutId);
   if(!w) return;
   if(w.exercises.length === 1) {
@@ -1938,10 +2021,12 @@ function removeExercise(workoutId,i) {
   w.exercises.splice(i,1); saveWorkouts(); render();
 }
 function updateExRest(workoutId,i,val) {
+  if (!requireWriteAccess()) return;
   const w=getWorkout(workoutId);
   if(w && w.exercises[i]){ w.exercises[i].rest=parseInt(val)||60; saveWorkouts(); }
 }
 function updateExField(workoutId,i,field,val) {
+  if (!requireWriteAccess()) return;
   const w=getWorkout(workoutId);
   if(!w || !w.exercises[i]) return;
   if(field==="rest") w.exercises[i].rest=parseInt(val)||60;
@@ -1984,6 +2069,7 @@ let touchDragSrc = null;
 let touchPlaceholder = null;
 
 function bindDragDrop() {
+  if (isReadOnlyMode()) return;
   document.querySelectorAll(".ex-row-drag").forEach(row => {
 
     // ── Desktop drag ──────────────────────────────────────────────
@@ -2136,6 +2222,7 @@ function showExerciseGraph(exName) {
 
 
 function openWorkoutExtraPicker() {
+  if (!requireWriteAccess()) return;
   document.getElementById("ex-picker-modal")?.remove();
   const overlay = document.createElement("div");
   overlay.id = "ex-picker-modal";
@@ -2205,6 +2292,7 @@ function openWorkoutExtraPicker() {
 function bindExtraItems(container) {
   container.querySelectorAll(".ex-pick-item").forEach(item => {
     item.addEventListener("click", () => {
+      if (!requireWriteAccess()) return;
       const name = item.dataset.name;
       const category = item.dataset.cat || null;
       document.getElementById("ex-picker-modal")?.remove();
@@ -2228,6 +2316,7 @@ function bindExtraItems(container) {
 
 
 function bindWorkoutDragDrop() {
+  if (isReadOnlyMode()) return;
   let dragSrcW = null, touchDragSrcW = null;
   document.querySelectorAll(".workout-drag").forEach(card => {
     card.addEventListener("dragstart", e => {

@@ -8,6 +8,7 @@ async function loadExerciseLibrary() {
 }
 
 async function seedLibraryFromWorkouts() {
+  if (typeof isReadOnlyMode === "function" && isReadOnlyMode()) return;
   const existingNames = new Set(state.exerciseLibrary.map(e => e.name));
   const toAdd = [];
   state.workouts.forEach(w => {
@@ -28,6 +29,7 @@ async function seedLibraryFromWorkouts() {
 }
 
 async function addToLibrary(name, category) {
+  if (typeof requireWriteAccess === "function" && !requireWriteAccess()) return null;
   const cleanName = sanitizeText(name, 80);
   if (!cleanName) return null;
   const exists = state.exerciseLibrary.find(e => e.name === cleanName);
@@ -41,6 +43,7 @@ async function addToLibrary(name, category) {
 }
 
 async function updateLibraryEntry(id, name, category) {
+  if (typeof requireWriteAccess === "function" && !requireWriteAccess()) return;
   try {
    const cleanName = sanitizeText(name, 80);
    if (!cleanName) throw new Error("Invalid exercise name");
@@ -102,6 +105,7 @@ if (!res.ok) throw new Error(await res.text());
 }
 
 async function deleteFromLibrary(id) {
+  if (typeof requireWriteAccess === "function" && !requireWriteAccess()) return;
   try {
     await sbDelete("exercise_library?id=eq." + id);
     state.exerciseLibrary = state.exerciseLibrary.filter(e => e.id !== id);
@@ -124,6 +128,7 @@ function renderLibraryScreen() {
 }
 
 function openLibraryAddExercise() {
+  if (typeof requireWriteAccess === "function" && !requireWriteAccess()) return;
   document.getElementById("ex-picker-modal")?.remove();
   const overlay = document.createElement("div");
   overlay.id = "ex-picker-modal";
@@ -196,6 +201,7 @@ function renderLibraryManager() {
 }
 
 function openLibraryEdit(id, name, category) {
+  if (typeof requireWriteAccess === "function" && !requireWriteAccess()) return;
   document.getElementById("lib-edit-modal")?.remove();
   const overlay = document.createElement("div");
   overlay.id = "lib-edit-modal";
