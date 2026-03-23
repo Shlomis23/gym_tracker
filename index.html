@@ -123,7 +123,7 @@ async function saveSessionToSupabase(session) {
 
 async function loadSessionsFromSupabase() {
   try {
-    const sessionQuery = "workout_sessions?select=*,sets:session_exercises(*)&order=date.asc";
+    const sessionQuery = "workout_sessions?select=*,sets:session_exercises(*),session_exercises(*)&order=date.asc";
     const rowsWithEmbed = await sbGet(sessionQuery);
     console.debug("[loadSessionsFromSupabase] workout_sessions (embedded sets) raw response:", rowsWithEmbed);
 
@@ -138,8 +138,17 @@ async function loadSessionsFromSupabase() {
     console.debug("[loadSessionsFromSupabase] session_exercises raw response:", exerciseRows);
 
     const setsBySessionId = new Map();
+    const getSetSessionKey = s => String(
+      s.session_id ??
+      s.workout_session_id ??
+      s.workout_session ??
+      s.session_local_id ??
+      s.local_session_id ??
+      ""
+    );
+
     (exerciseRows || []).forEach(s => {
-      const key = String(s.session_id ?? s.workout_session_id ?? "");
+      const key = getSetSessionKey(s);
       if (!key) return;
       if (!setsBySessionId.has(key)) setsBySessionId.set(key, []);
       setsBySessionId.get(key).push(s);
@@ -148,7 +157,7 @@ async function loadSessionsFromSupabase() {
     const sessionIdSet = new Set(rows.map(r => String(r.id ?? "")).filter(Boolean));
     const sessionLocalIdSet = new Set(rows.map(r => String(r.local_id ?? "")).filter(Boolean));
     const unmatchedSessionExerciseRows = (exerciseRows || []).filter(s => {
-      const sid = String(s.session_id ?? s.workout_session_id ?? "");
+      const sid = getSetSessionKey(s);
       if (!sid) return false;
       return !sessionIdSet.has(sid) && !sessionLocalIdSet.has(sid);
     });
@@ -178,12 +187,12 @@ async function loadSessionsFromSupabase() {
       ];
       const uniqueSetMap = new Map();
       rowSets.forEach(s => {
-        const dedupeKey = String(s.id ?? `${s.session_id ?? s.workout_session_id ?? ""}|${s.exercise_name ?? s.exercise ?? s.name ?? ""}|${s.set_number ?? s.set_no ?? s.set_index ?? s.num ?? ""}|${s.weight ?? ""}|${s.reps ?? ""}|${s.minutes ?? ""}`);
+        const dedupeKey = String(s.id ?? `${getSetSessionKey(s)}|${s.exercise_name ?? s.exercise?.name ?? s.exercise ?? s.name ?? ""}|${s.set_number ?? s.set_no ?? s.set_index ?? s.num ?? ""}|${s.weight ?? ""}|${s.reps ?? ""}|${s.minutes ?? ""}`);
         if (!uniqueSetMap.has(dedupeKey)) uniqueSetMap.set(dedupeKey, s);
       });
 
       [...uniqueSetMap.values()].forEach(rawSet => {
-        const exName = rawSet.exercise_name ?? rawSet.exercise ?? rawSet.name;
+        const exName = rawSet.exercise_name ?? rawSet.exercise?.name ?? rawSet.exercise ?? rawSet.name;
         if (!exName) return;
         if (!exercises[exName]) exercises[exName] = [];
         exercises[exName].push(normalizeSet(rawSet));
@@ -219,7 +228,7 @@ async function loadWeightData() {
       start_weight: g.start_weight ?? g.startWeight ?? g.starting_weight ?? null,
       goal_weight: g.goal_weight ?? g.goalWeight ?? g.target_weight ?? null
     }));
-    const validGoal = normalizedGoals.find(g => Number.isFinite(Number(g.start_weight)) && Number.isFinite(Number(g.goal_weight)));
+    const validGoal = normalizedGoals.find(g => getWeightGoalValues(g).hasGoal);
     if (validGoal) state.weightGoal = validGoal;
   } catch(e) { console.error("Weight load failed:", e); }
 }
@@ -244,9 +253,25 @@ function formatWeightDate(log) {
   return formatDate(log.measured_at || log.date);
 }
 
-function hasWeightGoal(goal) {
+function getWeightGoalValues(goal) {
   const g = goal || state.weightGoal || {};
-  return Number.isFinite(Number(g.start_weight)) && Number.isFinite(Number(g.goal_weight));
+  const pickNumber = keys => {
+    for (const key of keys) {
+      const raw = g[key] ?? g?.goal?.[key] ?? null;
+      if (raw === null || raw === undefined || raw === "") continue;
+      const num = Number(String(raw).replace(",", "."));
+      if (Number.isFinite(num)) return num;
+    }
+    return NaN;
+  };
+
+  const start = pickNumber(["start_weight", "startWeight", "starting_weight", "start", "initial_weight"]);
+  const target = pickNumber(["goal_weight", "goalWeight", "target_weight", "target", "goal"]);
+  return { start, target, hasGoal: Number.isFinite(start) && Number.isFinite(target) };
+}
+
+function hasWeightGoal(goal) {
+  return getWeightGoalValues(goal).hasGoal;
 }
 
 function isoDateFromLocal(dateLike) {
@@ -1764,6 +1789,7 @@ function toggleHistorySession(id) {
 }
 
 function renderManage() {
+  const weightGoalValues = getWeightGoalValues(state.weightGoal);
   const workoutSections = state.workouts.map(w => {
     const isOpen = state.manageOpenId === w.id;
     const isEditing = state.editingNameId === w.id;
@@ -1873,7 +1899,7 @@ function renderManage() {
       </div>
       <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;line-height:1.5">
         ${hasWeightGoal(state.weightGoal)
-          ? `<span style="display:inline-flex;gap:4px;align-items:center;direction:ltr;unicode-bidi:isolate"><span>התחלתי: ${Number(state.weightGoal.start_weight).toFixed(1)}</span><span aria-hidden="true">→</span><span>יעד: ${Number(state.weightGoal.goal_weight).toFixed(1)} ק״ג</span></span>`
+          ? `<span style="display:inline-flex;gap:4px;align-items:center;direction:ltr;unicode-bidi:isolate"><span>התחלתי: ${weightGoalValues.start.toFixed(1)}</span><span aria-hidden="true">→</span><span>יעד: ${weightGoalValues.target.toFixed(1)} ק״ג</span></span>`
           : "לא הוגדר יעד משקל עדיין"}
       </div>
       <button onclick="showGoalModal()" style="width:100%;padding:10px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-size:13px;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">

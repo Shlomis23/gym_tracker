@@ -375,9 +375,16 @@ if (inProgress) {
       : `<button onclick="showWeightModal()" style="display:flex;align-items:center;gap:5px;background:${shouldPromptDaily ? "var(--orange)" : "var(--surface)"};border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;color:${shouldPromptDaily ? "#fff" : "var(--text-secondary)"};font-family:inherit;font-weight:600">הזן משקל</button>`;
 
     const weightGoalData = state.weightGoal || {};
-    const startGoal = Number(weightGoalData.start_weight);
-    const targetGoal = Number(weightGoalData.goal_weight);
-    const hasGoal = Number.isFinite(startGoal) && Number.isFinite(targetGoal) && startGoal > 0 && targetGoal > 0 && startGoal !== targetGoal;
+    const parsedGoal = (typeof getWeightGoalValues === "function")
+      ? getWeightGoalValues(weightGoalData)
+      : {
+        start: Number(weightGoalData.start_weight),
+        target: Number(weightGoalData.goal_weight),
+        hasGoal: Number.isFinite(Number(weightGoalData.start_weight)) && Number.isFinite(Number(weightGoalData.goal_weight))
+      };
+    const startGoal = parsedGoal.start;
+    const targetGoal = parsedGoal.target;
+    const hasGoal = parsedGoal.hasGoal && startGoal > 0 && targetGoal > 0 && startGoal !== targetGoal;
     const dist = hasGoal ? Math.abs(startGoal - targetGoal) : 0;
     const progressRaw = hasGoal ? Math.abs(startGoal - latest.weight) / dist : 0;
     const progressPct = hasGoal ? Math.max(0, Math.min(100, Math.round(progressRaw * 100))) : 0;
