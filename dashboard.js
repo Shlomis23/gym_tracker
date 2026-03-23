@@ -221,11 +221,18 @@ const goalReached = thisWeek >= goal;
   const todayDow = new Date().getDay();
   const weekStart = getWeekStart(new Date());
 
+  const toLocalDayStart = (dateLike) => {
+    const d = new Date(dateLike);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  };
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 6);
+
   const workedDays = new Set();
   state.sessions.forEach(s => {
-    const d = new Date(s.date);
-    if (d >= weekStart) {
-      workedDays.add(d.getDay());
+    const dayStart = toLocalDayStart(s.date);
+    if (dayStart >= weekStart && dayStart <= weekEnd) {
+      workedDays.add(dayStart.getDay());
     }
   });
 
@@ -242,7 +249,7 @@ const goalReached = thisWeek >= goal;
     const isFuture = !isToday && !isPast;
     const worked = workedDays.has(dow);
     const labelColor = worked ? "var(--green)" : isToday ? "var(--accent)" : isFuture ? "var(--border-med)" : "var(--text-hint)";
-    const labelWeight = isToday ? "800" : "600";
+    const labelWeight = "600";
     const boxBg = worked ? "var(--green-bg)" : isToday ? "#eef2ff" : isFuture ? "var(--card)" : "var(--surface)";
     const boxBorder = worked
       ? isToday ? "2px solid var(--green)" : "1px solid #86efac"
