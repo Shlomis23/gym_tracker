@@ -1663,7 +1663,7 @@ function renderManage() {
     <div class="card" style="padding:14px 16px;margin-bottom:16px">
       <div style="display:flex;align-items:center;gap:7px;margin-bottom:12px">
         <i data-lucide="target" style="width:15px;height:15px;color:var(--text-secondary)"></i>
-        <span style="font-weight:700;font-size:14px;color:var(--text-primary)">יעד שבועי</span>
+        <span style="font-weight:700;font-size:14px;color:var(--text-primary)">עדכון יעד אימונים</span>
       </div>
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
         <span style="font-size:13px;color:var(--text-secondary)">אימונים בשבוע:</span>
@@ -1677,8 +1677,20 @@ function renderManage() {
       <button onclick="promptSaveGoal()" style="width:100%;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer;font-size:14px;font-weight:600;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">
         <i data-lucide="check" style="width:15px;height:15px"></i> שמור יעד (${state.pendingGoal} אימונים)
       </button>` : ""}
-      <button onclick="showGoalModal()" style="width:100%;padding:10px;margin-top:10px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-size:13px;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">
-        <i data-lucide="weight" style="width:15px;height:15px"></i> עדכון יעד ומשקל התחלתי
+    </div>
+
+    <div class="card" style="padding:14px 16px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px">
+        <i data-lucide="weight" style="width:15px;height:15px;color:var(--text-secondary)"></i>
+        <span style="font-weight:700;font-size:14px;color:var(--text-primary)">עדכון יעד משקל ומשקל התחלתי</span>
+      </div>
+      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;line-height:1.5">
+        ${(state.weightGoal?.start_weight && state.weightGoal?.goal_weight)
+          ? `<span style="display:inline-flex;gap:4px;align-items:center;direction:ltr;unicode-bidi:isolate"><span>התחלתי: ${Number(state.weightGoal.start_weight).toFixed(1)}</span><span aria-hidden="true">→</span><span>יעד: ${Number(state.weightGoal.goal_weight).toFixed(1)} ק״ג</span></span>`
+          : "לא הוגדר יעד משקל עדיין"}
+      </div>
+      <button onclick="showGoalModal()" style="width:100%;padding:10px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-size:13px;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">
+        <i data-lucide="pencil" style="width:15px;height:15px"></i> ${state.weightGoal?.start_weight && state.weightGoal?.goal_weight ? "ערוך יעד משקל" : "הוסף יעד משקל"}
       </button>
     </div>
 

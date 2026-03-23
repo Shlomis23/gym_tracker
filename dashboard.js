@@ -362,12 +362,9 @@ if (inProgress) {
       ? "היעד הושג — אלוף!"
       : `נשארו עוד ${remaining.toFixed(1)} ק״ג ליעד`;
     const goalSection = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
-        <div>
-          <div style="font-size:12px;color:var(--text-secondary);font-weight:600">יעד משקל</div>
-          <div style="font-size:11px;color:var(--text-hint);margin-top:2px">${hasGoal ? `<span style="display:inline-flex;gap:4px;align-items:center;direction:ltr;unicode-bidi:isolate"><span>התחלתי: ${startGoal.toFixed(1)}</span><span aria-hidden="true">→</span><span>יעד: ${targetGoal.toFixed(1)} ק״ג</span></span>` : "ללא יעד מוגדר"}</div>
-        </div>
-        <button onclick="showGoalModal()" style="border:none;background:var(--surface);padding:7px 11px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--text-secondary);font-family:inherit">${hasGoal ? "ערוך יעד" : "הוסף יעד"}</button>
+      <div style="margin-bottom:7px">
+        <div style="font-size:12px;color:var(--text-secondary);font-weight:600">יעד משקל</div>
+        <div style="font-size:11px;color:var(--text-hint);margin-top:2px">${hasGoal ? `<span style="display:inline-flex;gap:4px;align-items:center;direction:ltr;unicode-bidi:isolate"><span>התחלתי: ${startGoal.toFixed(1)}</span><span aria-hidden="true">→</span><span>יעד: ${targetGoal.toFixed(1)} ק״ג</span></span>` : "ללא יעד מוגדר"}</div>
       </div>
       <div style="height:8px;background:var(--surface);border-radius:999px;overflow:hidden;margin-bottom:7px">
         <div style="width:${progressPct}%;height:100%;background:${done ? "var(--green)" : "var(--accent)"};transition:width .25s ease"></div>
