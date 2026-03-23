@@ -35,6 +35,14 @@ const CATEGORIES = [
   { id: "cardio",    label: "קרדיו",    icon: "activity" }
 ];
 
+const supabase = window.supabase?.createClient?.(SUPABASE_URL, SUPABASE_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true
+  }
+});
+
 Object.assign(window, {
   SUPABASE_URL,
   SUPABASE_KEY,
@@ -44,5 +52,6 @@ Object.assign(window, {
   STORAGE_SETTINGS,
   DEFAULT_WORKOUTS,
   DEFAULT_SETTINGS,
-  CATEGORIES
+  CATEGORIES,
+  supabase
 });
