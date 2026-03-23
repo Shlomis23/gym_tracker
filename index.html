@@ -996,7 +996,7 @@ async function copyWeightRangeSummary() {
   const rangeLine = `${formatDateShort(first.measured_at)} - ${formatDateShort(last.measured_at)}`;
   const lines = selectedRangeDays <= 7
     ? [
-        "סיכום שקילות",
+        "*סיכום שקילות*",
         rangeLine,
         "",
         ...logs.map(log => {
@@ -1007,7 +1007,7 @@ async function copyWeightRangeSummary() {
         `**ממוצע שבועי: ${avg.toFixed(1)} ק״ג**`
       ]
     : [
-        "סיכום שקילות",
+        "*סיכום שקילות*",
         rangeLine,
         "",
         `**משקל ממוצע לתקופה זו: ${avg.toFixed(1)} ק״ג**`
