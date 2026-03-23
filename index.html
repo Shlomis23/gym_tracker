@@ -954,12 +954,97 @@ function showConfirmSheet(title, subtitle, confirmLabel, cancelLabel, onConfirm,
 }
 
 function getWeightRangeDays() {
-  return Number(state.weightRangeDays || 90);
+  return Number(state.weightRangeDays || 7);
+}
+
+function getWeightCustomRange() {
+  if (!state.weightCustomRange) {
+    state.weightCustomRange = { from: "", to: "" };
+  }
+  return state.weightCustomRange;
+}
+
+function selectCustomWeightRange() {
+  const logs = getWeightLogsAsc();
+  const customRange = getWeightCustomRange();
+  if (!customRange.from && logs.length) customRange.from = logs[0].measured_date;
+  if (!customRange.to && logs.length) customRange.to = logs[logs.length - 1].measured_date;
+  state.weightRangeMode = "custom";
+  render();
+}
+
+function setCustomWeightRangeDate(field, value) {
+  const customRange = getWeightCustomRange();
+  customRange[field] = value || "";
+  state.weightRangeMode = "custom";
+  render();
+}
+
+async function copyWeightRangeSummary() {
+  if (state.weightRangeMode !== "custom") return;
+  const logs = getWeightRangeLogs(getWeightRangeDays());
+  if (!logs.length) return;
+
+  const first = logs[0];
+  const last = logs[logs.length - 1];
+  const avg = logs.reduce((sum, log) => sum + Number(log.weight), 0) / logs.length;
+  const customRange = getWeightCustomRange();
+  const fromDate = customRange.from ? new Date(`${customRange.from}T00:00:00`) : new Date(first.measured_at);
+  const toDate = customRange.to ? new Date(`${customRange.to}T00:00:00`) : new Date(last.measured_at);
+  const selectedRangeDays = Math.max(1, Math.floor((toDate - fromDate) / (1000 * 60 * 60 * 24)) + 1);
+
+  const rangeLine = `${formatDateShort(first.measured_at)} - ${formatDateShort(last.measured_at)}`;
+  const lines = selectedRangeDays <= 7
+    ? [
+        "טווח תאריכים",
+        rangeLine,
+        "",
+        ...logs.map(log => {
+          const dayName = new Date(log.measured_at).toLocaleDateString("he-IL", { weekday: "short" });
+          return `${dayName}, ${formatDateShort(log.measured_at)} - ${Number(log.weight).toFixed(1)} ק״ג`;
+        }),
+        "",
+        `**ממוצע שבועי: ${avg.toFixed(1)} ק״ג**`
+      ]
+    : [
+        "טווח תאריכים",
+        rangeLine,
+        "",
+        `**משקל ממוצע לתקופה זו: ${avg.toFixed(1)} ק״ג**`
+      ];
+  const text = lines.join("\n");
+
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (_) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+  }
+  showToast("סיכום הטווח הועתק");
 }
 
 function getWeightRangeLogs(days) {
   const logs = getWeightLogsAsc();
   if (!logs.length) return [];
+  if (state.weightRangeMode === "custom") {
+    const customRange = getWeightCustomRange();
+    if (!customRange.from || !customRange.to) return logs;
+    const fromDate = new Date(`${customRange.from}T00:00:00`);
+    const toDate = new Date(`${customRange.to}T23:59:59.999`);
+    if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) return logs;
+    if (fromDate > toDate) return [];
+    return logs.filter(l => {
+      const measured = new Date(l.measured_at);
+      return measured >= fromDate && measured <= toDate;
+    });
+  }
   if (days === 0) return logs;
   const lastDate = new Date(logs[logs.length - 1].measured_at);
   const threshold = new Date(lastDate);
@@ -1012,8 +1097,8 @@ function renderWeightChart(series, options = {}) {
   const width = 1000;
   const height = 220;
   const pad = 28;
-  const minY = Math.min(...chartSeries.map(p => Math.min(p.weight, p.movingAvg)));
-  const maxY = Math.max(...chartSeries.map(p => Math.max(p.weight, p.movingAvg)));
+  const minY = Math.min(...series.map(p => Math.min(p.weight, p.movingAvg)));
+  const maxY = Math.max(...series.map(p => Math.max(p.weight, p.movingAvg)));
   const spanY = Math.max(maxY - minY, 0.1);
   const stepX = (width - pad * 2) / Math.max(chartSeries.length - 1, 1);
   const points = chartSeries.map((p, i) => {
@@ -1040,6 +1125,8 @@ function renderWeightChart(series, options = {}) {
   const selected = circlePoints[circlePoints.length - 1];
   const minLabel = minY.toFixed(1);
   const maxLabel = maxY.toFixed(1);
+  const midLabel = ((minY + maxY) / 2).toFixed(1);
+  const widestScaleLabel = [maxLabel, midLabel, minLabel].sort((a, b) => b.length - a.length)[0];
   return `
     <div class="card" style="padding:10px;border-radius:12px">
       <div id="${chartId}-selected" style="display:flex;justify-content:space-between;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 10px;margin-bottom:8px">
@@ -1052,27 +1139,36 @@ function renderWeightChart(series, options = {}) {
           <div id="${chartId}-avg" style="font-size:11px;color:var(--green)">ממוצע: ${Number(selected.movingAvg).toFixed(1)}</div>
         </div>
       </div>
-      <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" style="display:block;width:100%;height:190px;background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);border:1px solid var(--border);border-radius:12px;overflow:hidden">
-        <defs>
-          <linearGradient id="${chartId}-avg-fill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#22c55e" stop-opacity="0.18"></stop>
-            <stop offset="100%" stop-color="#22c55e" stop-opacity="0.02"></stop>
-          </linearGradient>
-        </defs>
-        ${gridLines}
-        <polygon points="${areaAvg}" fill="url(#${chartId}-avg-fill)"></polygon>
-        <polyline points="${lineWeight}" fill="none" stroke="var(--text-hint)" stroke-opacity="${weightStrokeOpacity}" stroke-width="${weightStrokeWidth}" stroke-linecap="round"></polyline>
-        <polyline points="${lineAvg}" fill="none" stroke="var(--green)" stroke-width="3.2" stroke-linecap="round"></polyline>
-        ${circlePoints.map((p, idx) => {
-          const isActive = idx === circlePoints.length - 1;
-          const baseR = isDense ? 2.4 : 3.6;
-          return `<circle data-chart-id="${chartId}" data-base-r="${baseR}" data-idx="${idx}" cx="${p.x}" cy="${p.yW}" r="${isActive ? baseR + 1.2 : baseR}" fill="${isActive ? "var(--blue)" : "var(--accent)"}" opacity="${isActive ? "1" : "0.85"}" stroke="#fff" stroke-width="1.5" style="cursor:pointer" onclick="selectWeightChartPoint('${chartId}', ${idx}, '${p.measured_at}', ${Number(p.weight).toFixed(2)}, ${Number(p.movingAvg).toFixed(2)})"><title>${formatDate(p.measured_at)} · ${Number(p.weight).toFixed(1)} ק״ג</title></circle>`;
-        }).join("")}
-        <text x="${pad + 2}" y="${pad - 8}" font-size="11" fill="var(--text-hint)" text-anchor="start">${maxLabel} ק״ג</text>
-        <text x="${pad + 2}" y="${height - 10}" font-size="11" fill="var(--text-hint)" text-anchor="start">${minLabel} ק״ג</text>
-        <text x="${first.x}" y="${height - 8}" font-size="11" fill="var(--text-hint)" text-anchor="middle">${formatDate(first.measured_at)}</text>
-        <text x="${last.x}" y="${height - 8}" font-size="11" fill="var(--text-hint)" text-anchor="middle">${formatDate(last.measured_at)}</text>
-      </svg>
+      <div style="display:flex;gap:8px;align-items:stretch;direction:ltr">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:0 5px;position:relative;overflow:hidden">
+          <div style="visibility:hidden;font-size:11px;font-weight:700;white-space:nowrap">${widestScaleLabel}</div>
+          <div style="position:absolute;top:${(pad / height) * 100}%;left:6px;transform:translateY(-50%);font-size:11px;font-weight:700;color:var(--text-secondary);text-align:left">${maxLabel}</div>
+          <div style="position:absolute;top:50%;left:6px;transform:translateY(-50%);font-size:10px;color:var(--text-hint);text-align:left">${midLabel}</div>
+          <div style="position:absolute;top:${((height - pad) / height) * 100}%;left:6px;transform:translateY(-50%);font-size:11px;font-weight:700;color:var(--text-secondary);text-align:left">${minLabel}</div>
+          <div style="position:absolute;bottom:6px;left:6px;font-size:9px;color:var(--text-hint);text-align:left">ק״ג</div>
+        </div>
+        <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" style="display:block;flex:1;height:190px;background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+          <defs>
+            <linearGradient id="${chartId}-avg-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#22c55e" stop-opacity="0.18"></stop>
+              <stop offset="100%" stop-color="#22c55e" stop-opacity="0.02"></stop>
+            </linearGradient>
+          </defs>
+          ${gridLines}
+          <polygon points="${areaAvg}" fill="url(#${chartId}-avg-fill)"></polygon>
+          <polyline points="${lineWeight}" fill="none" stroke="var(--text-hint)" stroke-opacity="${weightStrokeOpacity}" stroke-width="${weightStrokeWidth}" stroke-linecap="round"></polyline>
+          <polyline points="${lineAvg}" fill="none" stroke="var(--green)" stroke-width="3.2" stroke-linecap="round"></polyline>
+          ${circlePoints.map((p, idx) => {
+            const isActive = idx === circlePoints.length - 1;
+            const baseR = isDense ? 4.8 : 6;
+            return `<circle data-chart-id="${chartId}" data-base-r="${baseR}" data-idx="${idx}" cx="${p.x}" cy="${p.yW}" r="${isActive ? baseR + 1.6 : baseR}" fill="${isActive ? "var(--blue)" : "var(--accent)"}" opacity="${isActive ? "1" : "0.9"}" stroke="#fff" stroke-width="1.5" style="cursor:pointer" onclick="selectWeightChartPoint('${chartId}', ${idx}, '${p.measured_at}', ${Number(p.weight).toFixed(2)}, ${Number(p.movingAvg).toFixed(2)})"><title>${formatDate(p.measured_at)} · ${Number(p.weight).toFixed(1)} ק״ג</title></circle>`;
+          }).join("")}
+        </svg>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;justify-content:flex-start;margin-top:8px;font-size:11px;color:var(--text-secondary)">
+        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:16px;height:0;border-top:2px solid var(--text-hint);opacity:${weightStrokeOpacity}"></span>משקל בפועל</span>
+        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:16px;height:0;border-top:3px solid var(--green)"></span>ממוצע נע</span>
+      </div>
     </div>
   `;
 }
@@ -1088,11 +1184,11 @@ function selectWeightChartPoint(chartId, idx, measuredAt, weight, movingAvg) {
   const nodes = document.querySelectorAll(`circle[data-chart-id="${chartId}"]`);
   nodes.forEach(node => {
     const nodeIdx = Number(node.getAttribute("data-idx"));
-    const baseR = Number(node.getAttribute("data-base-r")) || 3.6;
+    const baseR = Number(node.getAttribute("data-base-r")) || 6;
     const isActive = nodeIdx === Number(idx);
-    node.setAttribute("r", isActive ? String(baseR + 1.2) : String(baseR));
+    node.setAttribute("r", isActive ? String(baseR + 1.6) : String(baseR));
     node.setAttribute("fill", isActive ? "var(--blue)" : "var(--accent)");
-    node.setAttribute("opacity", isActive ? "1" : "0.85");
+    node.setAttribute("opacity", isActive ? "1" : "0.9");
   });
 }
 
@@ -1191,20 +1287,29 @@ function renderHistory() {
     }
     const range = getWeightRangeDays();
     const filtered = getWeightRangeLogs(range);
-    const avgWindowDays = Math.max(1, range);
+    const isCustomRange = state.weightRangeMode === "custom";
+    const customRange = getWeightCustomRange();
+    const customFrom = customRange.from || "";
+    const customTo = customRange.to || "";
+    const customRangeDays = (customFrom && customTo)
+      ? Math.max(1, Math.floor((new Date(`${customTo}T00:00:00`) - new Date(`${customFrom}T00:00:00`)) / (1000 * 60 * 60 * 24)) + 1)
+      : 90;
+    const avgWindowDays = Math.max(1, isCustomRange ? customRangeDays : range);
+    const customRangeInvalid = isCustomRange && customFrom && customTo && new Date(`${customFrom}T00:00:00`) > new Date(`${customTo}T00:00:00`);
+    const hasFilteredData = filtered.length > 0;
     const withAvg = getWeightMovingAverage(filtered, avgWindowDays);
-    const chartBase = range >= 180 ? aggregateWeightByWeek(filtered) : filtered;
-    const chartAvgWindow = range >= 180 ? Math.max(2, Math.round(avgWindowDays / 7)) : avgWindowDays;
+    const chartBase = !isCustomRange && range >= 180 ? aggregateWeightByWeek(filtered) : filtered;
+    const chartAvgWindow = !isCustomRange && range >= 180 ? Math.max(2, Math.round(avgWindowDays / 7)) : avgWindowDays;
     const chartSeries = getWeightMovingAverage(chartBase, chartAvgWindow);
-    const latest = filtered[filtered.length - 1];
-    const first = filtered[0];
-    const delta = latest.weight - first.weight;
-    const avg7 = withAvg[withAvg.length - 1]?.movingAvg ?? latest.weight;
+    const latest = hasFilteredData ? filtered[filtered.length - 1] : null;
+    const first = hasFilteredData ? filtered[0] : null;
+    const delta = hasFilteredData ? (latest.weight - first.weight) : 0;
+    const avg7 = hasFilteredData ? (withAvg[withAvg.length - 1]?.movingAvg ?? latest.weight) : 0;
     const summaryCards = `
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:10px">
-        <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">אחרון</div><div style="font-size:19px;font-weight:700">${latest.weight.toFixed(1)}</div></div>
-        <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">ממוצע ${avgWindowDays} ימים</div><div style="font-size:19px;font-weight:700;color:var(--green)">${avg7.toFixed(1)}</div></div>
-        <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">שינוי בטווח</div><div style="font-size:19px;font-weight:700;color:${delta < 0 ? "var(--green)" : delta > 0 ? "var(--red)" : "var(--text-primary)"}">${delta > 0 ? "+" : ""}${delta.toFixed(1)}</div></div>
+        <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">אחרון</div><div style="font-size:19px;font-weight:700">${hasFilteredData ? latest.weight.toFixed(1) : "-"}</div></div>
+        <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">ממוצע ${avgWindowDays} ימים</div><div style="font-size:19px;font-weight:700;color:var(--green)">${hasFilteredData ? avg7.toFixed(1) : "-"}</div></div>
+        <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">שינוי בטווח</div><div style="font-size:19px;font-weight:700;color:${delta < 0 ? "var(--green)" : delta > 0 ? "var(--red)" : "var(--text-primary)"}">${hasFilteredData ? `${delta > 0 ? "+" : ""}${delta.toFixed(1)}` : "-"}</div></div>
       </div>
     `;
 
@@ -1214,7 +1319,25 @@ function renderHistory() {
       { days: 90, label: "90 ימים" },
       { days: 180, label: "6 חודשים" },
       { days: 365, label: "שנה" }
-    ].map(r => `<button onclick="state.weightRangeDays=${r.days};render()" style="padding:7px 10px;border-radius:999px;border:1px solid ${range===r.days?"var(--accent)":"var(--border-med)"};background:${range===r.days?"var(--accent)":"var(--surface)"};color:${range===r.days?"#fff":"var(--text-secondary)"};font-family:inherit;font-size:11px;cursor:pointer">${r.label}</button>`).join("");
+    ].map(r => `<button onclick="state.weightRangeMode='preset';state.weightRangeDays=${r.days};render()" style="padding:7px 10px;border-radius:999px;border:1px solid ${!isCustomRange&&range===r.days?"var(--accent)":"var(--border-med)"};background:${!isCustomRange&&range===r.days?"var(--accent)":"var(--surface)"};color:${!isCustomRange&&range===r.days?"#fff":"var(--text-secondary)"};font-family:inherit;font-size:11px;cursor:pointer">${r.label}</button>`).join("");
+    const customRangeBtn = `<button onclick="selectCustomWeightRange()" style="padding:7px 10px;border-radius:999px;border:1px solid ${isCustomRange?"var(--accent)":"var(--border-med)"};background:${isCustomRange?"var(--accent)":"var(--surface)"};color:${isCustomRange?"#fff":"var(--text-secondary)"};font-family:inherit;font-size:11px;cursor:pointer">טווח תאריכים</button>`;
+    const showRangeCopy = isCustomRange && hasFilteredData;
+    const customRangeControls = isCustomRange ? `
+      <div class="card" style="padding:10px;margin-bottom:10px">
+        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px">בחר טווח תאריכים להצגת המשקלים</div>
+        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+          <label style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:120px">
+            <span style="font-size:10px;color:var(--text-hint)">מתאריך</span>
+            <input type="date" value="${customFrom}" onchange="setCustomWeightRangeDate('from', this.value)" style="padding:8px;border-radius:8px;border:1px solid var(--border-med);background:var(--surface);color:var(--text-primary);font-family:inherit">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:120px">
+            <span style="font-size:10px;color:var(--text-hint)">עד תאריך</span>
+            <input type="date" value="${customTo}" onchange="setCustomWeightRangeDate('to', this.value)" style="padding:8px;border-radius:8px;border:1px solid var(--border-med);background:var(--surface);color:var(--text-primary);font-family:inherit">
+          </label>
+        </div>
+        ${customRangeInvalid ? `<div style="font-size:11px;color:var(--red);margin-top:8px">תאריך התחלה חייב להיות מוקדם או שווה לתאריך הסיום</div>` : ""}
+      </div>
+    ` : "";
     const rows = [...withAvg].reverse().map((log, ri, arr) => {
       const prev = arr[ri + 1];
       const diff = prev ? (log.weight - prev.weight) : null;
@@ -1234,13 +1357,14 @@ function renderHistory() {
       </div>`;
     }).join("");
     return `<div style="padding:14px 14px 0">${tabs}
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <div style="font-size:13px;color:var(--text-secondary)">My Weight</div>
-        <button onclick="openWeightEntryModal()" class="btn-primary" style="width:auto;padding:8px 12px;font-size:12px">הוסף</button>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:10px">${rangeButtons}</div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:10px">${rangeButtons}${customRangeBtn}</div>
+      ${customRangeControls}
       ${summaryCards}
-      ${renderWeightChart(chartSeries, { rangeDays: range, denseHint: range >= 90 })}
+      ${hasFilteredData ? renderWeightChart(chartSeries, { rangeDays: isCustomRange ? customRangeDays : range, denseHint: isCustomRange ? customRangeDays >= 90 : range >= 90 }) : `<div class="card" style="padding:18px;text-align:center;color:var(--text-hint);font-size:13px">אין נתוני משקל בטווח התאריכים שנבחר</div>`}
+      <div style="display:flex;justify-content:flex-start;margin-top:10px">
+        <button onclick="openWeightEntryModal()" class="btn-primary" style="width:auto;padding:8px 14px;font-size:12px">הוסף</button>
+        ${showRangeCopy ? `<button onclick="copyWeightRangeSummary()" style="width:auto;padding:8px 12px;font-size:12px;margin-right:8px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-family:inherit;font-weight:600">העתק סיכום</button>` : ""}
+      </div>
       <div style="margin-top:10px;display:grid;gap:8px;padding-bottom:12px">${rows}</div>
     </div>`;
   }
