@@ -147,20 +147,41 @@ async function saveSessionToSupabase(session) {
 async function loadSessionsFromSupabase() {
   try {
     const rows = await sbGet("workout_sessions?select=*,sets:session_exercises(*)&order=date.asc");
-    state.sessions = rows.map(row => {
-      const exercises = {};
-      (row.sets || []).forEach(s => {
-        if (!exercises[s.exercise_name]) exercises[s.exercise_name] = [];
-        exercises[s.exercise_name].push({ num: s.set_number, weight: s.weight, reps: s.reps, failed: s.failed });
-      });
-      Object.values(exercises).forEach(arr => arr.sort((a,b) => a.num - b.num));
-      return { id: row.local_id || row.id, workoutId: row.workout_id, workoutName: row.workout_name || "", date: row.date, exercises, note: row.note || "" };
-    });
+    state.sessions = mapSupabaseSessions(rows);
     localStorage.setItem(STORAGE_SESSIONS, JSON.stringify(state.sessions));
   } catch(e) {
-    console.error("Supabase load failed, using localStorage:", e);
-    try { state.sessions = JSON.parse(localStorage.getItem(STORAGE_SESSIONS) || "[]"); } catch {}
+    console.warn("Joined sessions query failed, trying separate session + sets queries:", e);
+    try {
+      const [sessionRows, setRows] = await Promise.all([
+        sbGet("workout_sessions?select=*&order=date.asc"),
+        sbGet("session_exercises?select=*&order=set_number.asc")
+      ]);
+      const setsBySessionId = {};
+      (setRows || []).forEach(setRow => {
+        const key = setRow.session_id;
+        if (!setsBySessionId[key]) setsBySessionId[key] = [];
+        setsBySessionId[key].push(setRow);
+      });
+      const mergedRows = (sessionRows || []).map(row => ({ ...row, sets: setsBySessionId[row.id] || [] }));
+      state.sessions = mapSupabaseSessions(mergedRows);
+      localStorage.setItem(STORAGE_SESSIONS, JSON.stringify(state.sessions));
+    } catch (fallbackErr) {
+      console.error("Supabase load failed, using localStorage:", fallbackErr);
+      try { state.sessions = JSON.parse(localStorage.getItem(STORAGE_SESSIONS) || "[]"); } catch {}
+    }
   }
+}
+
+function mapSupabaseSessions(rows) {
+  return (rows || []).map(row => {
+    const exercises = {};
+    (row.sets || []).forEach(s => {
+      if (!exercises[s.exercise_name]) exercises[s.exercise_name] = [];
+      exercises[s.exercise_name].push({ num: s.set_number, weight: s.weight, reps: s.reps, failed: s.failed });
+    });
+    Object.values(exercises).forEach(arr => arr.sort((a,b) => a.num - b.num));
+    return { id: row.local_id || row.id, workoutId: row.workout_id, workoutName: row.workout_name || "", date: row.date, exercises, note: row.note || "" };
+  });
 }
 
 async function deleteSessionFromSupabase(localId) {
@@ -175,9 +196,11 @@ async function loadWeightData() {
   try {
     const logs = await loadWeightLogsWithFallback();
     state.weightLogs = (logs || []).map(mapWeightLog);
+  } catch(e) { console.error("Weight logs load failed:", e); }
+  try {
     const goals = await sbGet("weight_goal?select=*&order=updated_at.desc&limit=1");
     if (goals && goals.length) state.weightGoal = mapWeightGoal(goals[0]);
-  } catch(e) { console.error("Weight load failed:", e); }
+  } catch(e) { console.error("Weight goal load failed:", e); }
 }
 
 async function loadWeightLogsWithFallback() {
