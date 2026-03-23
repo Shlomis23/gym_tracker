@@ -366,7 +366,14 @@ async function loadWeightData() {
 
 async function loadWeightLogsWithFallback() {
   if (isSecureShareMode()) {
-    return sbRpc("share_get_weight_logs", { p_share_token: state.access.shareToken });
+    try {
+      return await sbRpc("share_get_weight_logs", { p_share_token: state.access.shareToken });
+    } catch (e) {
+      const msg = String(e?.message || e || "");
+      if (!/measured_at/i.test(msg)) throw e;
+      console.warn("share_get_weight_logs measured_at order failed; falling back to share_get_weight_logs_compat RPC.");
+      return sbRpc("share_get_weight_logs_compat", { p_share_token: state.access.shareToken });
+    }
   }
   try {
     return await sbGet("body_weight_logs?select=*&order=measured_at.asc.nullslast");
