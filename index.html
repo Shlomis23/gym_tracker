@@ -1076,6 +1076,7 @@ function renderWeightChart(series, options = {}) {
   const minLabel = minY.toFixed(1);
   const maxLabel = maxY.toFixed(1);
   const midLabel = ((minY + maxY) / 2).toFixed(1);
+  const widestScaleLabel = [maxLabel, midLabel, minLabel].sort((a, b) => b.length - a.length)[0];
   return `
     <div class="card" style="padding:10px;border-radius:12px">
       <div id="${chartId}-selected" style="display:flex;justify-content:space-between;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 10px;margin-bottom:8px">
@@ -1089,7 +1090,8 @@ function renderWeightChart(series, options = {}) {
         </div>
       </div>
       <div style="display:flex;gap:8px;align-items:stretch;direction:ltr">
-        <div style="width:54px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:0 6px;position:relative;overflow:hidden">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:0 5px;position:relative;overflow:hidden">
+          <div style="visibility:hidden;font-size:11px;font-weight:700;white-space:nowrap">${widestScaleLabel}</div>
           <div style="position:absolute;top:${(pad / height) * 100}%;left:6px;transform:translateY(-50%);font-size:11px;font-weight:700;color:var(--text-secondary);text-align:left">${maxLabel}</div>
           <div style="position:absolute;top:50%;left:6px;transform:translateY(-50%);font-size:10px;color:var(--text-hint);text-align:left">${midLabel}</div>
           <div style="position:absolute;top:${((height - pad) / height) * 100}%;left:6px;transform:translateY(-50%);font-size:11px;font-weight:700;color:var(--text-secondary);text-align:left">${minLabel}</div>
