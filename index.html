@@ -355,9 +355,7 @@ async function deleteSessionFromSupabase(localId) {
 
 async function loadWeightData() {
   try {
-    const logs = isSecureShareMode()
-      ? await sbRpc("share_get_weight_logs", { p_share_token: state.access.shareToken })
-      : await sbGet("body_weight_logs?select=*&order=measured_at.asc");
+    const logs = await loadWeightLogsWithFallback();
     state.weightLogs = (logs || []).map(mapWeightLog);
     const goals = isSecureShareMode()
       ? await sbRpc("share_get_weight_goal", { p_share_token: state.access.shareToken })
@@ -366,12 +364,34 @@ async function loadWeightData() {
   } catch(e) { console.error("Weight load failed:", e); }
 }
 
+async function loadWeightLogsWithFallback() {
+  if (isSecureShareMode()) {
+    return sbRpc("share_get_weight_logs", { p_share_token: state.access.shareToken });
+  }
+  try {
+    return await sbGet("body_weight_logs?select=*&order=measured_at.asc.nullslast");
+  } catch (e) {
+    const msg = String(e?.message || e || "");
+    if (!/measured_at/i.test(msg)) throw e;
+    console.warn("body_weight_logs measured_at order failed; falling back to measured_date order.");
+    return sbGet("body_weight_logs?select=*&order=measured_date.asc.nullslast");
+  }
+}
+
+function normalizeWeightMeasuredAt(log) {
+  if (log?.measured_at) return log.measured_at;
+  if (log?.measured_date) return `${log.measured_date}T09:00:00.000Z`;
+  if (log?.date) return log.date;
+  return new Date().toISOString();
+}
+
 function mapWeightLog(log) {
+  const measuredAt = normalizeWeightMeasuredAt(log);
   return {
     id: log.id,
     weight: Number(log.weight),
-    measured_at: log.measured_at || log.date || new Date().toISOString(),
-    measured_date: log.measured_date || (log.date ? log.date.slice(0, 10) : new Date().toISOString().slice(0,10)),
+    measured_at: measuredAt,
+    measured_date: log.measured_date || measuredAt.slice(0, 10),
     note: log.note || ""
   };
 }
