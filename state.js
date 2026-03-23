@@ -34,20 +34,20 @@ function loadSettings() {
 }
 
 const ACCESS_READ_ONLY_KEY = "readOnly";
-const SHARE_PATH_PREFIX = "/share/";
+const SHARE_HASH_PREFIX = "#/share/";
 
 function getAccessStateFromLocation(locationLike = window.location) {
-  const pathname = locationLike?.pathname || "/";
+  const hash = locationLike?.hash || "";
   const query = locationLike?.search || "";
-  const isSharePath = pathname.startsWith(SHARE_PATH_PREFIX);
+  const isShareHash = hash.startsWith(SHARE_HASH_PREFIX);
   const queryReadOnly = new URLSearchParams(query).get("readonly") === "1";
-  const tokenFromPath = isSharePath
-    ? decodeURIComponent((pathname.slice(SHARE_PATH_PREFIX.length).split("/")[0] || "").trim()) || null
+  const tokenFromHash = isShareHash
+    ? decodeURIComponent((hash.slice(SHARE_HASH_PREFIX.length).split("/")[0] || "").trim()) || null
     : null;
 
   return {
-    [ACCESS_READ_ONLY_KEY]: isSharePath || queryReadOnly,
-    shareToken: tokenFromPath
+    [ACCESS_READ_ONLY_KEY]: isShareHash || queryReadOnly,
+    shareToken: tokenFromHash
   };
 }
 
