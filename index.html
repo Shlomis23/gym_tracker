@@ -957,9 +957,44 @@ function getWeightRangeDays() {
   return Number(state.weightRangeDays || 90);
 }
 
+function getWeightCustomRange() {
+  if (!state.weightCustomRange) {
+    state.weightCustomRange = { from: "", to: "" };
+  }
+  return state.weightCustomRange;
+}
+
+function selectCustomWeightRange() {
+  const logs = getWeightLogsAsc();
+  const customRange = getWeightCustomRange();
+  if (!customRange.from && logs.length) customRange.from = logs[0].measured_date;
+  if (!customRange.to && logs.length) customRange.to = logs[logs.length - 1].measured_date;
+  state.weightRangeMode = "custom";
+  render();
+}
+
+function setCustomWeightRangeDate(field, value) {
+  const customRange = getWeightCustomRange();
+  customRange[field] = value || "";
+  state.weightRangeMode = "custom";
+  render();
+}
+
 function getWeightRangeLogs(days) {
   const logs = getWeightLogsAsc();
   if (!logs.length) return [];
+  if (state.weightRangeMode === "custom") {
+    const customRange = getWeightCustomRange();
+    if (!customRange.from || !customRange.to) return logs;
+    const fromDate = new Date(`${customRange.from}T00:00:00`);
+    const toDate = new Date(`${customRange.to}T23:59:59.999`);
+    if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) return logs;
+    if (fromDate > toDate) return [];
+    return logs.filter(l => {
+      const measured = new Date(l.measured_at);
+      return measured >= fromDate && measured <= toDate;
+    });
+  }
   if (days === 0) return logs;
   const lastDate = new Date(logs[logs.length - 1].measured_at);
   const threshold = new Date(lastDate);
@@ -1191,20 +1226,29 @@ function renderHistory() {
     }
     const range = getWeightRangeDays();
     const filtered = getWeightRangeLogs(range);
-    const avgWindowDays = Math.max(1, range);
+    const isCustomRange = state.weightRangeMode === "custom";
+    const customRange = getWeightCustomRange();
+    const customFrom = customRange.from || "";
+    const customTo = customRange.to || "";
+    const customRangeDays = (customFrom && customTo)
+      ? Math.max(1, Math.floor((new Date(`${customTo}T00:00:00`) - new Date(`${customFrom}T00:00:00`)) / (1000 * 60 * 60 * 24)) + 1)
+      : 90;
+    const avgWindowDays = Math.max(1, isCustomRange ? customRangeDays : range);
+    const customRangeInvalid = isCustomRange && customFrom && customTo && new Date(`${customFrom}T00:00:00`) > new Date(`${customTo}T00:00:00`);
+    const hasFilteredData = filtered.length > 0;
     const withAvg = getWeightMovingAverage(filtered, avgWindowDays);
-    const chartBase = range >= 180 ? aggregateWeightByWeek(filtered) : filtered;
-    const chartAvgWindow = range >= 180 ? Math.max(2, Math.round(avgWindowDays / 7)) : avgWindowDays;
+    const chartBase = !isCustomRange && range >= 180 ? aggregateWeightByWeek(filtered) : filtered;
+    const chartAvgWindow = !isCustomRange && range >= 180 ? Math.max(2, Math.round(avgWindowDays / 7)) : avgWindowDays;
     const chartSeries = getWeightMovingAverage(chartBase, chartAvgWindow);
-    const latest = filtered[filtered.length - 1];
-    const first = filtered[0];
-    const delta = latest.weight - first.weight;
-    const avg7 = withAvg[withAvg.length - 1]?.movingAvg ?? latest.weight;
+    const latest = hasFilteredData ? filtered[filtered.length - 1] : null;
+    const first = hasFilteredData ? filtered[0] : null;
+    const delta = hasFilteredData ? (latest.weight - first.weight) : 0;
+    const avg7 = hasFilteredData ? (withAvg[withAvg.length - 1]?.movingAvg ?? latest.weight) : 0;
     const summaryCards = `
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:10px">
-        <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">אחרון</div><div style="font-size:19px;font-weight:700">${latest.weight.toFixed(1)}</div></div>
-        <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">ממוצע ${avgWindowDays} ימים</div><div style="font-size:19px;font-weight:700;color:var(--green)">${avg7.toFixed(1)}</div></div>
-        <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">שינוי בטווח</div><div style="font-size:19px;font-weight:700;color:${delta < 0 ? "var(--green)" : delta > 0 ? "var(--red)" : "var(--text-primary)"}">${delta > 0 ? "+" : ""}${delta.toFixed(1)}</div></div>
+        <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">אחרון</div><div style="font-size:19px;font-weight:700">${hasFilteredData ? latest.weight.toFixed(1) : "-"}</div></div>
+        <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">ממוצע ${avgWindowDays} ימים</div><div style="font-size:19px;font-weight:700;color:var(--green)">${hasFilteredData ? avg7.toFixed(1) : "-"}</div></div>
+        <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">שינוי בטווח</div><div style="font-size:19px;font-weight:700;color:${delta < 0 ? "var(--green)" : delta > 0 ? "var(--red)" : "var(--text-primary)"}">${hasFilteredData ? `${delta > 0 ? "+" : ""}${delta.toFixed(1)}` : "-"}</div></div>
       </div>
     `;
 
@@ -1214,7 +1258,24 @@ function renderHistory() {
       { days: 90, label: "90 ימים" },
       { days: 180, label: "6 חודשים" },
       { days: 365, label: "שנה" }
-    ].map(r => `<button onclick="state.weightRangeDays=${r.days};render()" style="padding:7px 10px;border-radius:999px;border:1px solid ${range===r.days?"var(--accent)":"var(--border-med)"};background:${range===r.days?"var(--accent)":"var(--surface)"};color:${range===r.days?"#fff":"var(--text-secondary)"};font-family:inherit;font-size:11px;cursor:pointer">${r.label}</button>`).join("");
+    ].map(r => `<button onclick="state.weightRangeMode='preset';state.weightRangeDays=${r.days};render()" style="padding:7px 10px;border-radius:999px;border:1px solid ${!isCustomRange&&range===r.days?"var(--accent)":"var(--border-med)"};background:${!isCustomRange&&range===r.days?"var(--accent)":"var(--surface)"};color:${!isCustomRange&&range===r.days?"#fff":"var(--text-secondary)"};font-family:inherit;font-size:11px;cursor:pointer">${r.label}</button>`).join("");
+    const customRangeBtn = `<button onclick="selectCustomWeightRange()" style="padding:7px 10px;border-radius:999px;border:1px solid ${isCustomRange?"var(--accent)":"var(--border-med)"};background:${isCustomRange?"var(--accent)":"var(--surface)"};color:${isCustomRange?"#fff":"var(--text-secondary)"};font-family:inherit;font-size:11px;cursor:pointer">טווח תאריכים</button>`;
+    const customRangeControls = isCustomRange ? `
+      <div class="card" style="padding:10px;margin-bottom:10px">
+        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px">בחר טווח תאריכים להצגת המשקלים</div>
+        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+          <label style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:120px">
+            <span style="font-size:10px;color:var(--text-hint)">מתאריך</span>
+            <input type="date" value="${customFrom}" onchange="setCustomWeightRangeDate('from', this.value)" style="padding:8px;border-radius:8px;border:1px solid var(--border-med);background:var(--surface);color:var(--text-primary);font-family:inherit">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:120px">
+            <span style="font-size:10px;color:var(--text-hint)">עד תאריך</span>
+            <input type="date" value="${customTo}" onchange="setCustomWeightRangeDate('to', this.value)" style="padding:8px;border-radius:8px;border:1px solid var(--border-med);background:var(--surface);color:var(--text-primary);font-family:inherit">
+          </label>
+        </div>
+        ${customRangeInvalid ? `<div style="font-size:11px;color:var(--red);margin-top:8px">תאריך התחלה חייב להיות מוקדם או שווה לתאריך הסיום</div>` : ""}
+      </div>
+    ` : "";
     const rows = [...withAvg].reverse().map((log, ri, arr) => {
       const prev = arr[ri + 1];
       const diff = prev ? (log.weight - prev.weight) : null;
@@ -1238,9 +1299,10 @@ function renderHistory() {
         <div style="font-size:13px;color:var(--text-secondary)">My Weight</div>
         <button onclick="openWeightEntryModal()" class="btn-primary" style="width:auto;padding:8px 12px;font-size:12px">הוסף</button>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:10px">${rangeButtons}</div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:10px">${rangeButtons}${customRangeBtn}</div>
+      ${customRangeControls}
       ${summaryCards}
-      ${renderWeightChart(chartSeries, { rangeDays: range, denseHint: range >= 90 })}
+      ${hasFilteredData ? renderWeightChart(chartSeries, { rangeDays: isCustomRange ? customRangeDays : range, denseHint: isCustomRange ? customRangeDays >= 90 : range >= 90 }) : `<div class="card" style="padding:18px;text-align:center;color:var(--text-hint);font-size:13px">אין נתוני משקל בטווח התאריכים שנבחר</div>`}
       <div style="margin-top:10px;display:grid;gap:8px;padding-bottom:12px">${rows}</div>
     </div>`;
   }
