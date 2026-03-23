@@ -1075,6 +1075,7 @@ function renderWeightChart(series, options = {}) {
   const selected = circlePoints[circlePoints.length - 1];
   const minLabel = minY.toFixed(1);
   const maxLabel = maxY.toFixed(1);
+  const midLabel = ((minY + maxY) / 2).toFixed(1);
   return `
     <div class="card" style="padding:10px;border-radius:12px">
       <div id="${chartId}-selected" style="display:flex;justify-content:space-between;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 10px;margin-bottom:8px">
@@ -1087,27 +1088,35 @@ function renderWeightChart(series, options = {}) {
           <div id="${chartId}-avg" style="font-size:11px;color:var(--green)">ממוצע: ${Number(selected.movingAvg).toFixed(1)}</div>
         </div>
       </div>
-      <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" style="display:block;width:100%;height:190px;background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);border:1px solid var(--border);border-radius:12px;overflow:hidden">
-        <defs>
-          <linearGradient id="${chartId}-avg-fill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#22c55e" stop-opacity="0.18"></stop>
-            <stop offset="100%" stop-color="#22c55e" stop-opacity="0.02"></stop>
-          </linearGradient>
-        </defs>
-        ${gridLines}
-        <polygon points="${areaAvg}" fill="url(#${chartId}-avg-fill)"></polygon>
-        <polyline points="${lineWeight}" fill="none" stroke="var(--text-hint)" stroke-opacity="${weightStrokeOpacity}" stroke-width="${weightStrokeWidth}" stroke-linecap="round"></polyline>
-        <polyline points="${lineAvg}" fill="none" stroke="var(--green)" stroke-width="3.2" stroke-linecap="round"></polyline>
-        ${circlePoints.map((p, idx) => {
-          const isActive = idx === circlePoints.length - 1;
-          const baseR = isDense ? 2.4 : 3.6;
-          return `<circle data-chart-id="${chartId}" data-base-r="${baseR}" data-idx="${idx}" cx="${p.x}" cy="${p.yW}" r="${isActive ? baseR + 1.2 : baseR}" fill="${isActive ? "var(--blue)" : "var(--accent)"}" opacity="${isActive ? "1" : "0.85"}" stroke="#fff" stroke-width="1.5" style="cursor:pointer" onclick="selectWeightChartPoint('${chartId}', ${idx}, '${p.measured_at}', ${Number(p.weight).toFixed(2)}, ${Number(p.movingAvg).toFixed(2)})"><title>${formatDate(p.measured_at)} · ${Number(p.weight).toFixed(1)} ק״ג</title></circle>`;
-        }).join("")}
-        <text x="${pad + 2}" y="${pad - 8}" font-size="11" fill="var(--text-hint)" text-anchor="start">${maxLabel} ק״ג</text>
-        <text x="${pad + 2}" y="${height - 10}" font-size="11" fill="var(--text-hint)" text-anchor="start">${minLabel} ק״ג</text>
-        <text x="${first.x}" y="${height - 8}" font-size="11" fill="var(--text-hint)" text-anchor="middle">${formatDate(first.measured_at)}</text>
-        <text x="${last.x}" y="${height - 8}" font-size="11" fill="var(--text-hint)" text-anchor="middle">${formatDate(last.measured_at)}</text>
-      </svg>
+      <div style="display:flex;gap:8px;align-items:stretch;direction:ltr">
+        <div style="width:54px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 6px;display:flex;flex-direction:column;justify-content:space-between">
+          <div style="font-size:11px;font-weight:700;color:var(--text-secondary);text-align:left">${maxLabel}</div>
+          <div style="font-size:10px;color:var(--text-hint);text-align:left">${midLabel}</div>
+          <div style="font-size:11px;font-weight:700;color:var(--text-secondary);text-align:left">${minLabel}</div>
+          <div style="font-size:9px;color:var(--text-hint);text-align:left;margin-top:4px">ק״ג</div>
+        </div>
+        <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" style="display:block;flex:1;height:190px;background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+          <defs>
+            <linearGradient id="${chartId}-avg-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#22c55e" stop-opacity="0.18"></stop>
+              <stop offset="100%" stop-color="#22c55e" stop-opacity="0.02"></stop>
+            </linearGradient>
+          </defs>
+          ${gridLines}
+          <polygon points="${areaAvg}" fill="url(#${chartId}-avg-fill)"></polygon>
+          <polyline points="${lineWeight}" fill="none" stroke="var(--text-hint)" stroke-opacity="${weightStrokeOpacity}" stroke-width="${weightStrokeWidth}" stroke-linecap="round"></polyline>
+          <polyline points="${lineAvg}" fill="none" stroke="var(--green)" stroke-width="3.2" stroke-linecap="round"></polyline>
+          ${circlePoints.map((p, idx) => {
+            const isActive = idx === circlePoints.length - 1;
+            const baseR = isDense ? 4.8 : 6;
+            return `<circle data-chart-id="${chartId}" data-base-r="${baseR}" data-idx="${idx}" cx="${p.x}" cy="${p.yW}" r="${isActive ? baseR + 1.6 : baseR}" fill="${isActive ? "var(--blue)" : "var(--accent)"}" opacity="${isActive ? "1" : "0.9"}" stroke="#fff" stroke-width="1.5" style="cursor:pointer" onclick="selectWeightChartPoint('${chartId}', ${idx}, '${p.measured_at}', ${Number(p.weight).toFixed(2)}, ${Number(p.movingAvg).toFixed(2)})"><title>${formatDate(p.measured_at)} · ${Number(p.weight).toFixed(1)} ק״ג</title></circle>`;
+          }).join("")}
+        </svg>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;justify-content:flex-start;margin-top:8px;font-size:11px;color:var(--text-secondary)">
+        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:16px;height:0;border-top:2px solid var(--text-hint);opacity:${weightStrokeOpacity}"></span>משקל בפועל</span>
+        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:16px;height:0;border-top:3px solid var(--green)"></span>ממוצע נע</span>
+      </div>
     </div>
   `;
 }
@@ -1123,11 +1132,11 @@ function selectWeightChartPoint(chartId, idx, measuredAt, weight, movingAvg) {
   const nodes = document.querySelectorAll(`circle[data-chart-id="${chartId}"]`);
   nodes.forEach(node => {
     const nodeIdx = Number(node.getAttribute("data-idx"));
-    const baseR = Number(node.getAttribute("data-base-r")) || 3.6;
+    const baseR = Number(node.getAttribute("data-base-r")) || 6;
     const isActive = nodeIdx === Number(idx);
-    node.setAttribute("r", isActive ? String(baseR + 1.2) : String(baseR));
+    node.setAttribute("r", isActive ? String(baseR + 1.6) : String(baseR));
     node.setAttribute("fill", isActive ? "var(--blue)" : "var(--accent)");
-    node.setAttribute("opacity", isActive ? "1" : "0.85");
+    node.setAttribute("opacity", isActive ? "1" : "0.9");
   });
 }
 
