@@ -65,6 +65,10 @@
 <script src="./dashboard.js"></script>
 <script>
 // ── Supabase ─────────────────────────────────────────────────────
+const APP_BUILD = "2026-03-23-audit-2";
+console.info("[GymBuddy] build:", APP_BUILD, "supabase:", SUPABASE_URL);
+window.__GYMBUDDY_BUILD__ = APP_BUILD;
+
 async function sbGet(path) {
   const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, { headers: SB_HEADERS });
   if (!r.ok) throw new Error(await r.text());
@@ -204,6 +208,59 @@ async function loadSessionsFromSupabase() {
   } catch(e) {
     console.error("Supabase load failed, using localStorage:", e);
     try { state.sessions = JSON.parse(localStorage.getItem(STORAGE_SESSIONS) || "[]"); } catch {}
+  }
+}
+
+async function runRuntimeDataAudit() {
+  try {
+    const [sessionsWithEmbed, standaloneSets, goals] = await Promise.all([
+      sbGet("workout_sessions?select=*,sets:session_exercises(*)&order=date.asc"),
+      sbGet("session_exercises?select=*"),
+      sbGet("weight_goal?select=*&order=updated_at.desc&limit=1")
+    ]);
+
+    const sessionRows = Array.isArray(sessionsWithEmbed) ? sessionsWithEmbed : [];
+    const hasSetsProp = sessionRows.some(r => Object.prototype.hasOwnProperty.call(r, "sets"));
+    const embeddedSetCount = sessionRows.reduce((n, r) => n + (Array.isArray(r.sets) ? r.sets.length : 0), 0);
+    const setRows = Array.isArray(standaloneSets) ? standaloneSets : [];
+
+    const sessionKeys = new Set(
+      sessionRows
+        .flatMap(r => [r.id, r.local_id])
+        .filter(Boolean)
+        .map(v => String(v))
+    );
+    const matchedStandalone = setRows.filter(s => {
+      const key = String(
+        s.session_id ??
+        s.workout_session_id ??
+        s.workout_session ??
+        s.session_local_id ??
+        s.local_session_id ??
+        ""
+      );
+      return key && sessionKeys.has(key);
+    }).length;
+    const orphanStandalone = setRows.length - matchedStandalone;
+
+    const goalRows = Array.isArray(goals) ? goals : (goals ? [goals] : []);
+    const goalParsed = goalRows[0] ? getWeightGoalValues(goalRows[0]) : { hasGoal: false, start: NaN, target: NaN };
+
+    console.info("[runtime-audit]", {
+      build: APP_BUILD,
+      supabaseUrl: SUPABASE_URL,
+      sessionsCount: sessionRows.length,
+      hasSetsProp,
+      embeddedSetCount,
+      standaloneSetCount: setRows.length,
+      matchedStandalone,
+      orphanStandalone,
+      weightGoalRows: goalRows.length,
+      weightGoalParsed: goalParsed,
+      prsFromStateCount: Object.keys(getPRs?.() || {}).length
+    });
+  } catch (err) {
+    console.warn("[runtime-audit] failed:", err);
   }
 }
 
@@ -2395,6 +2452,7 @@ if (failed.length) {
   console.error("Some data failed to load:", failed);
   showToast("חלק מהנתונים לא נטענו ⚠️");
 }
+  runRuntimeDataAudit();
   if (loader) {
     loader.style.opacity = "0";
     setTimeout(() => loader.remove(), 350);
