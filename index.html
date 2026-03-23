@@ -158,12 +158,12 @@ async function fetchAuthUser(accessToken) {
 }
 
 async function initializeOwnerAuth() {
-  if (!window.supabase) {
+  if (!window.supabaseClient) {
     clearOwnerSession();
     return;
   }
   try {
-    const { data } = await window.supabase.auth.getSession();
+    const { data } = await window.supabaseClient.auth.getSession();
     const session = data?.session || null;
     if (!session?.access_token) {
       clearOwnerSession();
@@ -174,7 +174,7 @@ async function initializeOwnerAuth() {
       state.auth.isAuthenticated = true;
       persistOwnerSession({ access_token: session.access_token, refresh_token: session.refresh_token || null, expires_at: session.expires_at || null });
     }
-    window.supabase.auth.onAuthStateChange((_event, nextSession) => {
+    window.supabaseClient.auth.onAuthStateChange((_event, nextSession) => {
       if (!nextSession?.access_token) {
         clearOwnerSession();
         return;
@@ -201,8 +201,8 @@ function exitGuestMode() {
 }
 
 async function signOutOwner() {
-  if (window.supabase) {
-    try { await window.supabase.auth.signOut(); } catch {}
+  if (window.supabaseClient) {
+    try { await window.supabaseClient.auth.signOut(); } catch {}
   }
   clearOwnerSession();
   enterGuestMode();
@@ -222,9 +222,9 @@ async function resolveDefaultGuestShareToken() {
 }
 
 async function requestMagicLink(email) {
-  if (!window.supabase) throw new Error("Supabase client unavailable");
+  if (!window.supabaseClient) throw new Error("Supabase client unavailable");
   const redirectTo = window.location.origin + window.location.pathname + window.location.search;
-  const { error } = await window.supabase.auth.signInWithOtp({
+  const { error } = await window.supabaseClient.auth.signInWithOtp({
     email,
     options: { shouldCreateUser: false, emailRedirectTo: redirectTo }
   });
