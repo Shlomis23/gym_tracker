@@ -1004,13 +1004,13 @@ async function copyWeightRangeSummary() {
           return `${dayName}, ${formatDateShort(log.measured_at)} - ${Number(log.weight).toFixed(1)} ק״ג`;
         }),
         "",
-        `**ממוצע שבועי: ${avg.toFixed(1)} ק״ג**`
+        `*ממוצע שבועי: ${avg.toFixed(1)} ק״ג*`
       ]
     : [
         "*סיכום שקילות*",
         rangeLine,
         "",
-        `**משקל ממוצע לתקופה זו: ${avg.toFixed(1)} ק״ג**`
+        `*משקל ממוצע לתקופה זו: ${avg.toFixed(1)} ק״ג*`
       ];
   const text = lines.join("\n");
 
