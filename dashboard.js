@@ -182,10 +182,6 @@ const goalReached = thisWeek >= goal;
     const urgentColor = isUrgent ? "var(--red)" : isBorderline ? "var(--orange)" : "var(--text-primary)";
     const urgentBg = isUrgent ? "var(--red-bg)" : isBorderline ? "var(--orange-bg)" : "var(--surface)";
     const urgentBorder = isUrgent ? "var(--red)" : isBorderline ? "var(--orange)" : "var(--border)";
-    const paceNeeded = daysLeftInWeek > 0 ? (workoutsLeft / daysLeftInWeek) : workoutsLeft;
-    const paceText = daysLeftInWeek > 0
-      ? `קצב נדרש: ${paceNeeded.toFixed(1)} אימון ליום`
-      : (workoutsLeft > 0 ? "היום היום האחרון לעמוד ביעד" : "היעד הושלם");
     const actionMsg = isUrgent
       ? (didWorkoutToday
           ? "פעולה מומלצת: לקבוע אימון נוסף למחר כדי להישאר במסלול."
@@ -201,7 +197,7 @@ const goalReached = thisWeek >= goal;
       ? "שבוע חדש התחיל — יש לך זמן טוב לעמוד ביעד"
       : workoutsLeft === 1
       ? "עוד אימון אחד ותשלים את היעד השבועי"
-      : `עוד ${workoutsLeft} אימונים להשלמת השבוע`;
+      : `עוד ${workoutsLeft} אימונים להשלמת היעד השבועי`;
     const dayWord = daysLeftInWeek === 1 ? "יום" : "ימים";
     const workoutWord = workoutsLeft === 1 ? "אימון" : "אימונים";
     urgencyCard = `<div class="anim-card" style="background:${urgentBg};border:1px solid ${urgentBorder};border-radius:14px;padding:14px 16px;margin-bottom:16px;animation-delay:0.75s">
@@ -218,10 +214,6 @@ const goalReached = thisWeek >= goal;
           <div style="font-size:26px;font-weight:700;color:${urgentColor};line-height:1"><span data-countup="${workoutsLeft}">0</span></div>
           <div style="font-size:11px;color:${urgentColor};margin-top:3px;opacity:0.8">${workoutWord} נותרו</div>
         </div>
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:10px">
-        <span style="font-size:11px;color:${urgentColor};font-weight:600">${paceText}</span>
-        <span style="font-size:11px;color:${urgentColor};opacity:0.85">${gap > 0 ? `חסר ${gap} כדי לעמוד בקצב` : gap === 0 ? "בדיוק על הקצה" : `מרווח ביטחון של ${Math.abs(gap)}`}</span>
       </div>
       <div style="margin-top:8px;padding:8px 10px;border-radius:10px;background:#ffffff80;border:1px dashed ${urgentBorder};font-size:12px;color:${urgentColor};font-weight:600">
         ${actionMsg}
