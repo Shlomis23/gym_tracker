@@ -123,7 +123,11 @@ async function saveSessionToSupabase(session) {
 
 async function loadSessionsFromSupabase() {
   try {
-    const rows = await sbGet("workout_sessions?select=*&order=date.asc");
+    const sessionQuery = "workout_sessions?select=*,sets:session_exercises(*)&order=date.asc";
+    const rowsWithEmbed = await sbGet(sessionQuery);
+    console.debug("[loadSessionsFromSupabase] workout_sessions (embedded sets) raw response:", rowsWithEmbed);
+
+    const rows = Array.isArray(rowsWithEmbed) ? rowsWithEmbed : [];
     let exerciseRows = [];
     try {
       exerciseRows = await sbGet("session_exercises?select=*");
@@ -141,6 +145,20 @@ async function loadSessionsFromSupabase() {
       setsBySessionId.get(key).push(s);
     });
 
+    const sessionIdSet = new Set(rows.map(r => String(r.id ?? "")).filter(Boolean));
+    const sessionLocalIdSet = new Set(rows.map(r => String(r.local_id ?? "")).filter(Boolean));
+    const unmatchedSessionExerciseRows = (exerciseRows || []).filter(s => {
+      const sid = String(s.session_id ?? s.workout_session_id ?? "");
+      if (!sid) return false;
+      return !sessionIdSet.has(sid) && !sessionLocalIdSet.has(sid);
+    });
+    if (unmatchedSessionExerciseRows.length) {
+      console.warn("[loadSessionsFromSupabase] Found session_exercises rows with non-matching FK (session_id/workout_session_id):", unmatchedSessionExerciseRows);
+    }
+
+    const hasUserIdFilter = /user_id=eq\./.test(sessionQuery);
+    console.debug("[loadSessionsFromSupabase] user_id filter in query:", hasUserIdFilter);
+
     const normalizeSet = s => ({
       num: Number(s.set_number ?? s.set_no ?? s.set_index ?? s.num ?? 0),
       weight: Number(s.weight ?? 0),
@@ -151,13 +169,20 @@ async function loadSessionsFromSupabase() {
 
     state.sessions = rows.map(row => {
       const exercises = {};
+      const rowKeys = [row.id, row.local_id].filter(Boolean).map(v => String(v));
+      const standaloneSets = rowKeys.flatMap(k => setsBySessionId.get(k) || []);
       const rowSets = [
         ...(Array.isArray(row.sets) ? row.sets : []),
         ...(Array.isArray(row.session_exercises) ? row.session_exercises : []),
-        ...(setsBySessionId.get(String(row.id)) || [])
+        ...standaloneSets
       ];
+      const uniqueSetMap = new Map();
+      rowSets.forEach(s => {
+        const dedupeKey = String(s.id ?? `${s.session_id ?? s.workout_session_id ?? ""}|${s.exercise_name ?? s.exercise ?? s.name ?? ""}|${s.set_number ?? s.set_no ?? s.set_index ?? s.num ?? ""}|${s.weight ?? ""}|${s.reps ?? ""}|${s.minutes ?? ""}`);
+        if (!uniqueSetMap.has(dedupeKey)) uniqueSetMap.set(dedupeKey, s);
+      });
 
-      rowSets.forEach(rawSet => {
+      [...uniqueSetMap.values()].forEach(rawSet => {
         const exName = rawSet.exercise_name ?? rawSet.exercise ?? rawSet.name;
         if (!exName) return;
         if (!exercises[exName]) exercises[exName] = [];
