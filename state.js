@@ -6,6 +6,31 @@ function getWeekStart(date) {
   return d;
 }
 
+const FALLBACK_DEFAULT_WORKOUTS = [
+  { id: "A", name: "אימון A", exercises: [
+    { name: "לחיצת חזה", rest: 90 }, { name: "כתפיים קדמי", rest: 60 },
+    { name: "טרייספס", rest: 60 }, { name: "בטן", rest: 45 }
+  ]},
+  { id: "B", name: "אימון B", exercises: [
+    { name: "גב רחב", rest: 90 }, { name: "בייספס", rest: 60 },
+    { name: "כתפיים אחורי", rest: 60 }, { name: "ישבן", rest: 90 }
+  ]}
+];
+
+const FALLBACK_DEFAULT_SETTINGS = { weeklyGoal: 4, goalHistory: [] };
+
+function getDefaultWorkoutsSeed() {
+  return (typeof DEFAULT_WORKOUTS !== "undefined" && Array.isArray(DEFAULT_WORKOUTS))
+    ? DEFAULT_WORKOUTS
+    : FALLBACK_DEFAULT_WORKOUTS;
+}
+
+function getDefaultSettingsSeed() {
+  return (typeof DEFAULT_SETTINGS !== "undefined" && DEFAULT_SETTINGS)
+    ? DEFAULT_SETTINGS
+    : FALLBACK_DEFAULT_SETTINGS;
+}
+
 function loadWorkouts() {
   try {
     const s = localStorage.getItem(STORAGE_WORKOUTS);
@@ -15,13 +40,13 @@ function loadWorkouts() {
       const parsed = JSON.parse(old);
       return parsed.map(w => ({ ...w, exercises: w.exercises.map(e => typeof e === "string" ? { name: e, rest: 60 } : e) }));
     }
-    return JSON.parse(JSON.stringify(DEFAULT_WORKOUTS));
-  } catch { return JSON.parse(JSON.stringify(DEFAULT_WORKOUTS)); }
+    return JSON.parse(JSON.stringify(getDefaultWorkoutsSeed()));
+  } catch { return JSON.parse(JSON.stringify(getDefaultWorkoutsSeed())); }
 }
 
 function loadSettings() {
   try {
-    const s = { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(STORAGE_SETTINGS) || "{}") };
+    const s = { ...getDefaultSettingsSeed(), ...JSON.parse(localStorage.getItem(STORAGE_SETTINGS) || "{}") };
     if (!s.goalHistory || !s.goalHistory.length) {
       s.goalHistory = [{ goal: s.weeklyGoal, from: "2020-01-05" }];
     }
@@ -30,7 +55,7 @@ function loadSettings() {
     const currentEntry = sorted.find(e => e.from <= thisWeekIso);
     s.weeklyGoal = currentEntry ? currentEntry.goal : (s.weeklyGoal || 4);
     return s;
-  } catch { return { ...DEFAULT_SETTINGS, weeklyGoal: 4, goalHistory: [{ goal: 4, from: "2020-01-05" }] }; }
+  } catch { return { ...getDefaultSettingsSeed(), weeklyGoal: 4, goalHistory: [{ goal: 4, from: "2020-01-05" }] }; }
 }
 
 const ACCESS_READ_ONLY_KEY = "readOnly";

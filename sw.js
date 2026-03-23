@@ -1,4 +1,4 @@
-const CACHE_NAME = 'my-app-cache-v3';
+const CACHE_NAME = 'my-app-cache-v4';
 
 const urlsToCache = [
   './manifest.json'
@@ -30,6 +30,20 @@ self.addEventListener('fetch', event => {
 
   // index.html — Network First (גרסה עדכנית תמיד, fallback לcache אם אין רשת)
   if (url.pathname.endsWith('/') || url.pathname.endsWith('index.html')) {
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // קבצי JS/CSS — Network First כדי למנוע מצב של קבצים לא מסונכרנים
+  if (url.pathname.endsWith('.js') || url.pathname.endsWith('.css')) {
     event.respondWith(
       fetch(event.request)
         .then(response => {
