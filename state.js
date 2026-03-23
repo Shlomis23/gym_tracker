@@ -34,7 +34,22 @@ function loadSettings() {
 }
 
 const ACCESS_READ_ONLY_KEY = "readOnly";
-const urlParams = new URLSearchParams(window.location.search);
+const SHARE_PATH_PREFIX = "/share/";
+
+function getAccessStateFromLocation(locationLike = window.location) {
+  const pathname = locationLike?.pathname || "/";
+  const query = locationLike?.search || "";
+  const isSharePath = pathname.startsWith(SHARE_PATH_PREFIX);
+  const queryReadOnly = new URLSearchParams(query).get("readonly") === "1";
+  const tokenFromPath = isSharePath
+    ? decodeURIComponent((pathname.slice(SHARE_PATH_PREFIX.length).split("/")[0] || "").trim()) || null
+    : null;
+
+  return {
+    [ACCESS_READ_ONLY_KEY]: isSharePath || queryReadOnly,
+    shareToken: tokenFromPath
+  };
+}
 
 let state = {
   screen: "dashboard", workoutId: null, openExercise: null, exercises: {},
@@ -45,12 +60,11 @@ let state = {
   workoutNote: "", monthViewYear: null, monthViewMonth: null, pendingGoal: null,
   editingExKey: null, exerciseLibrary: [], workoutExtras: [], dashboardAnimatedOnce: false,
   historyWorkoutFilterMode: "all", historyWorkoutId: "all", historyExerciseQuery: "",
-  access: {
-    [ACCESS_READ_ONLY_KEY]: urlParams.get("readonly") === "1"
-  }
+  access: getAccessStateFromLocation()
 };
 
 window.state = state;
 window.isReadOnlyMode = function isReadOnlyMode() {
   return !!(window.state && window.state.access && window.state.access[ACCESS_READ_ONLY_KEY]);
 };
+window.getAccessStateFromLocation = getAccessStateFromLocation;

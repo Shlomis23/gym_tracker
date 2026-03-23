@@ -602,7 +602,13 @@ function render() {
   const app = document.querySelector(".app");
   const banner = document.getElementById("readonly-banner");
   if (app) app.classList.toggle("readonly-mode", isReadOnlyMode());
-  if (banner) banner.style.display = isReadOnlyMode() ? "block" : "none";
+  if (banner) {
+    const token = state?.access?.shareToken;
+    banner.textContent = token
+      ? `מצב צפייה בלבד (${token}) — לא ניתן לבצע שמירה/עריכה דרך הקישור הזה`
+      : "מצב צפייה בלבד — לא ניתן לבצע שמירה/עריכה דרך הקישור הזה";
+    banner.style.display = isReadOnlyMode() ? "block" : "none";
+  }
   if (state.screen === "dashboard") el.innerHTML = renderDashboard();
   else if (state.screen === "home") el.innerHTML = state.workoutId ? renderWorkout() : renderChoose();
   else if (state.screen === "history") el.innerHTML = renderHistory();
