@@ -1,10 +1,48 @@
 async function loadExerciseLibrary() {
   try {
-    const rows = await sbGet("exercise_library?select=*&order=name.asc");
-    state.exerciseLibrary = rows || [];
+    const rows = await loadExerciseLibraryWithFallback();
+    state.exerciseLibrary = normalizeExerciseLibraryRows(rows);
     // אכלוס ראשוני — הוסף תרגילים קיימים שחסרים במאגר
     await seedLibraryFromWorkouts();
   } catch(e) { console.error("Library load failed:", e); }
+}
+
+async function loadExerciseLibraryWithFallback() {
+  const queries = [
+    "exercise_library?select=*&order=name.asc",
+    "exercise_library?select=*&order=exercise_name.asc",
+    "exercises_library?select=*&order=name.asc"
+  ];
+  let lastError = null;
+  for (const query of queries) {
+    try {
+      return await sbGet(query);
+    } catch (err) {
+      lastError = err;
+      console.warn("Exercise library query failed, trying next fallback:", query, err);
+    }
+  }
+  throw lastError || new Error("Exercise library query failed");
+}
+
+function mapExerciseLibraryRow(row) {
+  const name = row?.name || row?.exercise_name || row?.title;
+  if (!name) return null;
+  return {
+    id: row?.id || row?.exercise_id || name,
+    name,
+    category: row?.category || row?.muscle_group || null
+  };
+}
+
+function normalizeExerciseLibraryRows(rows) {
+  const deduped = new Map();
+  (rows || []).forEach(row => {
+    const mapped = mapExerciseLibraryRow(row);
+    if (!mapped) return;
+    if (!deduped.has(mapped.name)) deduped.set(mapped.name, mapped);
+  });
+  return Array.from(deduped.values()).sort((a, b) => a.name.localeCompare(b.name, "he"));
 }
 
 async function seedLibraryFromWorkouts() {
