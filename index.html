@@ -201,8 +201,8 @@ function exitGuestMode() {
 
 function signOutOwner() {
   clearOwnerSession();
-  exitGuestMode();
-  renderAuthGate();
+  enterGuestMode();
+  window.location.reload();
 }
 
 async function resolveDefaultGuestShareToken() {
@@ -232,25 +232,28 @@ async function requestMagicLink(email) {
 }
 
 function renderAuthGate() {
-  const el = document.getElementById("main-content");
-  if (!el) return;
-  el.innerHTML = `
-    <div style="padding:24px 16px">
-      <div class="card" style="padding:18px">
-        <div style="font-size:18px;font-weight:800;color:var(--text-primary);margin-bottom:8px">כניסת בעלים</div>
-        <div style="font-size:13px;color:var(--text-secondary);margin-bottom:14px">הכנס אימייל לקבלת קישור כניסה.</div>
-        <input id="owner-email-inp" type="email" placeholder="you@example.com" class="inp inp-text" style="margin-bottom:10px">
-        <button id="owner-login-btn" class="btn-primary" style="margin-bottom:8px">שלח קישור כניסה</button>
-        <button id="guest-mode-btn" class="btn-secondary">המשך כאורח</button>
-      </div>
+  document.getElementById("owner-login-modal")?.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "owner-login-modal";
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2100;display:flex;align-items:flex-end;justify-content:center";
+  overlay.innerHTML = `
+    <div style="background:var(--card);border-radius:20px 20px 0 0;padding:20px 16px 16px;width:100%;max-width:430px;box-sizing:border-box;direction:rtl">
+      <div style="font-size:18px;font-weight:800;color:var(--text-primary);margin-bottom:8px">כניסת בעלים</div>
+      <div style="font-size:13px;color:var(--text-secondary);margin-bottom:14px">הכנס אימייל לקבלת קישור כניסה.</div>
+      <input id="owner-email-inp" type="email" placeholder="you@example.com" class="inp inp-text" style="margin-bottom:10px">
+      <button id="owner-login-btn" class="btn-primary" style="margin-bottom:8px">שלח קישור כניסה</button>
+      <button id="guest-mode-btn" class="btn-secondary">המשך כאורח</button>
     </div>
   `;
+  document.body.appendChild(overlay);
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
   document.getElementById("owner-login-btn")?.addEventListener("click", async () => {
     const email = (document.getElementById("owner-email-inp")?.value || "").trim();
     if (!email) return showToast("נא להזין אימייל");
     try {
       await requestMagicLink(email);
       showToast("נשלח קישור כניסה לאימייל");
+      overlay.remove();
     } catch (e) {
       console.error(e);
       showToast("שליחת הקישור נכשלה");
@@ -258,6 +261,7 @@ function renderAuthGate() {
   });
   document.getElementById("guest-mode-btn")?.addEventListener("click", async () => {
     enterGuestMode();
+    overlay.remove();
     window.location.reload();
   });
 }
@@ -800,10 +804,10 @@ function render() {
       accessExitBtn.style.display = "inline-flex";
       accessExitBtn.textContent = "התנתק";
       accessExitBtn.onclick = signOutOwner;
-    } else if (state.access.guestMode || state.access.shareToken) {
+    } else if (state.screen === "dashboard") {
       accessExitBtn.style.display = "inline-flex";
-      accessExitBtn.textContent = "יציאה";
-      accessExitBtn.onclick = () => { exitGuestMode(); renderAuthGate(); };
+      accessExitBtn.textContent = "כניסת בעלים";
+      accessExitBtn.onclick = renderAuthGate;
     } else {
       accessExitBtn.style.display = "none";
       accessExitBtn.onclick = null;
@@ -2652,17 +2656,16 @@ window.addEventListener("load", async function() {
   state.screen = "dashboard";
   state.access = getAccessStateFromLocation();
   await initializeOwnerAuth();
+  if (state.auth.isOwnerAuthenticated) {
+    exitGuestMode();
+    state.access = getAccessStateFromLocation();
+  } else {
+    enterGuestMode();
+    state.access = getAccessStateFromLocation();
+  }
   const loader = document.getElementById("app-loader");
   if (state.access.guestMode && !state.access.shareToken) {
     await resolveDefaultGuestShareToken();
-  }
-  if (!state.auth.isOwnerAuthenticated && !isSecureShareMode()) {
-    if (loader) {
-      loader.style.opacity = "0";
-      setTimeout(() => loader.remove(), 200);
-    }
-    renderAuthGate();
-    return;
   }
   const results = await Promise.allSettled([
   loadSessionsFromSupabase(),
