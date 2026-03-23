@@ -980,27 +980,38 @@ function setCustomWeightRangeDate(field, value) {
   render();
 }
 
-async function copyWeeklyWeightSummary() {
-  const range = getWeightRangeDays();
-  if (state.weightRangeMode === "custom" || range !== 7) return;
-  const logs = getWeightRangeLogs(range);
+async function copyWeightRangeSummary() {
+  if (state.weightRangeMode !== "custom") return;
+  const logs = getWeightRangeLogs(getWeightRangeDays());
   if (!logs.length) return;
 
   const first = logs[0];
   const last = logs[logs.length - 1];
   const avg = logs.reduce((sum, log) => sum + Number(log.weight), 0) / logs.length;
+  const customRange = getWeightCustomRange();
+  const fromDate = customRange.from ? new Date(`${customRange.from}T00:00:00`) : new Date(first.measured_at);
+  const toDate = customRange.to ? new Date(`${customRange.to}T00:00:00`) : new Date(last.measured_at);
+  const selectedRangeDays = Math.max(1, Math.floor((toDate - fromDate) / (1000 * 60 * 60 * 24)) + 1);
 
-  const lines = [
-    "טווח תאריכים",
-    `${formatDateShort(first.measured_at)} - ${formatDateShort(last.measured_at)}`,
-    "",
-    ...logs.map(log => {
-      const dayName = new Date(log.measured_at).toLocaleDateString("he-IL", { weekday: "short" });
-      return `${dayName}, ${formatDateShort(log.measured_at)} - ${Number(log.weight).toFixed(1)} ק״ג`;
-    }),
-    "",
-    `**ממוצע שבועי: ${avg.toFixed(1)} ק״ג**`
-  ];
+  const rangeLine = `${formatDateShort(first.measured_at)} - ${formatDateShort(last.measured_at)}`;
+  const lines = selectedRangeDays <= 7
+    ? [
+        "טווח תאריכים",
+        rangeLine,
+        "",
+        ...logs.map(log => {
+          const dayName = new Date(log.measured_at).toLocaleDateString("he-IL", { weekday: "short" });
+          return `${dayName}, ${formatDateShort(log.measured_at)} - ${Number(log.weight).toFixed(1)} ק״ג`;
+        }),
+        "",
+        `**ממוצע שבועי: ${avg.toFixed(1)} ק״ג**`
+      ]
+    : [
+        "טווח תאריכים",
+        rangeLine,
+        "",
+        `**משקל ממוצע לתקופה זו: ${avg.toFixed(1)} ק״ג**`
+      ];
   const text = lines.join("\n");
 
   try {
@@ -1016,7 +1027,7 @@ async function copyWeeklyWeightSummary() {
     document.execCommand("copy");
     ta.remove();
   }
-  showToast("הסיכום השבועי הועתק");
+  showToast("סיכום הטווח הועתק");
 }
 
 function getWeightRangeLogs(days) {
@@ -1310,7 +1321,7 @@ function renderHistory() {
       { days: 365, label: "שנה" }
     ].map(r => `<button onclick="state.weightRangeMode='preset';state.weightRangeDays=${r.days};render()" style="padding:7px 10px;border-radius:999px;border:1px solid ${!isCustomRange&&range===r.days?"var(--accent)":"var(--border-med)"};background:${!isCustomRange&&range===r.days?"var(--accent)":"var(--surface)"};color:${!isCustomRange&&range===r.days?"#fff":"var(--text-secondary)"};font-family:inherit;font-size:11px;cursor:pointer">${r.label}</button>`).join("");
     const customRangeBtn = `<button onclick="selectCustomWeightRange()" style="padding:7px 10px;border-radius:999px;border:1px solid ${isCustomRange?"var(--accent)":"var(--border-med)"};background:${isCustomRange?"var(--accent)":"var(--surface)"};color:${isCustomRange?"#fff":"var(--text-secondary)"};font-family:inherit;font-size:11px;cursor:pointer">טווח תאריכים</button>`;
-    const showWeeklyCopy = !isCustomRange && range === 7 && hasFilteredData;
+    const showRangeCopy = isCustomRange && hasFilteredData;
     const customRangeControls = isCustomRange ? `
       <div class="card" style="padding:10px;margin-bottom:10px">
         <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px">בחר טווח תאריכים להצגת המשקלים</div>
@@ -1352,7 +1363,7 @@ function renderHistory() {
       ${hasFilteredData ? renderWeightChart(chartSeries, { rangeDays: isCustomRange ? customRangeDays : range, denseHint: isCustomRange ? customRangeDays >= 90 : range >= 90 }) : `<div class="card" style="padding:18px;text-align:center;color:var(--text-hint);font-size:13px">אין נתוני משקל בטווח התאריכים שנבחר</div>`}
       <div style="display:flex;justify-content:flex-start;margin-top:10px">
         <button onclick="openWeightEntryModal()" class="btn-primary" style="width:auto;padding:8px 14px;font-size:12px">הוסף</button>
-        ${showWeeklyCopy ? `<button onclick="copyWeeklyWeightSummary()" style="width:auto;padding:8px 12px;font-size:12px;margin-right:8px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-family:inherit;font-weight:600">העתק סיכום</button>` : ""}
+        ${showRangeCopy ? `<button onclick="copyWeightRangeSummary()" style="width:auto;padding:8px 12px;font-size:12px;margin-right:8px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-family:inherit;font-weight:600">העתק סיכום</button>` : ""}
       </div>
       <div style="margin-top:10px;display:grid;gap:8px;padding-bottom:12px">${rows}</div>
     </div>`;
