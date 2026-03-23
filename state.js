@@ -35,19 +35,22 @@ function loadSettings() {
 
 const ACCESS_READ_ONLY_KEY = "readOnly";
 const SHARE_HASH_PREFIX = "#/share/";
+const GUEST_MODE_SESSION_KEY = "gym_guest_mode";
 
 function getAccessStateFromLocation(locationLike = window.location) {
   const hash = locationLike?.hash || "";
   const query = locationLike?.search || "";
   const isShareHash = hash.startsWith(SHARE_HASH_PREFIX);
   const queryReadOnly = new URLSearchParams(query).get("readonly") === "1";
+  const persistedGuestMode = sessionStorage.getItem(GUEST_MODE_SESSION_KEY) === "1";
   const tokenFromHash = isShareHash
     ? decodeURIComponent((hash.slice(SHARE_HASH_PREFIX.length).split("/")[0] || "").trim()) || null
     : null;
 
   return {
-    [ACCESS_READ_ONLY_KEY]: isShareHash || queryReadOnly,
-    shareToken: tokenFromHash
+    [ACCESS_READ_ONLY_KEY]: isShareHash || queryReadOnly || persistedGuestMode,
+    shareToken: tokenFromHash,
+    guestMode: persistedGuestMode && !isShareHash
   };
 }
 
@@ -64,7 +67,8 @@ let state = {
   auth: {
     user: null,
     accessToken: null,
-    isOwnerAuthenticated: false
+    isOwnerAuthenticated: false,
+    isAuthenticated: false
   },
   shareLinks: []
 };

@@ -246,9 +246,25 @@ as $$
   order by el.name asc
 $$;
 
+create or replace function public.share_get_default_token()
+returns table (share_token text)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select sv.share_token
+  from public.shared_views sv
+  where sv.is_active = true
+    and (sv.expires_at is null or sv.expires_at > now())
+  order by sv.created_at desc
+  limit 1
+$$;
+
 grant execute on function public.share_get_workout_plans(text) to anon, authenticated;
 grant execute on function public.share_get_workout_sessions(text) to anon, authenticated;
 grant execute on function public.share_get_weight_logs(text) to anon, authenticated;
 grant execute on function public.share_get_weight_goal(text) to anon, authenticated;
 grant execute on function public.share_get_user_settings(text) to anon, authenticated;
 grant execute on function public.share_get_exercise_library(text) to anon, authenticated;
+grant execute on function public.share_get_default_token() to anon, authenticated;

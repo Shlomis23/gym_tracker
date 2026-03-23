@@ -39,6 +39,7 @@
   <div class="topbar">
     <i data-lucide="dumbbell" style="width:20px;height:20px;color:#fff"></i>
     <span class="topbar-title" id="screen-title">דשבורד</span>
+    <button id="access-exit-btn" style="display:none;background:transparent;border:1px solid #374151;color:#fff;border-radius:8px;padding:4px 8px;font-size:11px;font-family:inherit;cursor:pointer"></button>
   </div>
   <div id="readonly-banner" style="display:none;background:#fff7ed;border-bottom:1px solid #fed7aa;color:#9a3412;font-size:12px;font-weight:700;padding:8px 12px;text-align:center">
     מצב צפייה בלבד — לא ניתן לבצע שמירה/עריכה דרך הקישור הזה
@@ -140,6 +141,7 @@ function clearOwnerSession() {
   state.auth.user = null;
   state.auth.accessToken = null;
   state.auth.isOwnerAuthenticated = false;
+  state.auth.isAuthenticated = false;
   persistOwnerSession(null);
 }
 
@@ -180,9 +182,38 @@ async function initializeOwnerAuth() {
     state.auth.user = user;
     state.auth.accessToken = stored.access_token;
     state.auth.isOwnerAuthenticated = true;
+    state.auth.isAuthenticated = true;
     persistOwnerSession(stored);
   } catch {
     clearOwnerSession();
+  }
+}
+
+function enterGuestMode() {
+  sessionStorage.setItem("gym_guest_mode", "1");
+  state.access = getAccessStateFromLocation();
+}
+
+function exitGuestMode() {
+  sessionStorage.removeItem("gym_guest_mode");
+  state.access = getAccessStateFromLocation();
+}
+
+function signOutOwner() {
+  clearOwnerSession();
+  exitGuestMode();
+  renderAuthGate();
+}
+
+async function resolveDefaultGuestShareToken() {
+  try {
+    const rows = await sbRpc("share_get_default_token", {});
+    const token = rows && rows.length ? rows[0].share_token : null;
+    if (token) state.access.shareToken = token;
+    return token;
+  } catch (e) {
+    console.error("Default guest share token resolve failed:", e);
+    return null;
   }
 }
 
@@ -209,7 +240,8 @@ function renderAuthGate() {
         <div style="font-size:18px;font-weight:800;color:var(--text-primary);margin-bottom:8px">כניסת בעלים</div>
         <div style="font-size:13px;color:var(--text-secondary);margin-bottom:14px">הכנס אימייל לקבלת קישור כניסה.</div>
         <input id="owner-email-inp" type="email" placeholder="you@example.com" class="inp inp-text" style="margin-bottom:10px">
-        <button id="owner-login-btn" class="btn-primary">שלח קישור כניסה</button>
+        <button id="owner-login-btn" class="btn-primary" style="margin-bottom:8px">שלח קישור כניסה</button>
+        <button id="guest-mode-btn" class="btn-secondary">המשך כאורח</button>
       </div>
     </div>
   `;
@@ -223,6 +255,10 @@ function renderAuthGate() {
       console.error(e);
       showToast("שליחת הקישור נכשלה");
     }
+  });
+  document.getElementById("guest-mode-btn")?.addEventListener("click", async () => {
+    enterGuestMode();
+    window.location.reload();
   });
 }
 
@@ -757,12 +793,28 @@ function render() {
   const el = document.getElementById("main-content");
   const app = document.querySelector(".app");
   const banner = document.getElementById("readonly-banner");
+  const accessExitBtn = document.getElementById("access-exit-btn");
   if (app) app.classList.toggle("readonly-mode", isReadOnlyMode());
+  if (accessExitBtn) {
+    if (state.auth.isOwnerAuthenticated) {
+      accessExitBtn.style.display = "inline-flex";
+      accessExitBtn.textContent = "התנתק";
+      accessExitBtn.onclick = signOutOwner;
+    } else if (state.access.guestMode || state.access.shareToken) {
+      accessExitBtn.style.display = "inline-flex";
+      accessExitBtn.textContent = "יציאה";
+      accessExitBtn.onclick = () => { exitGuestMode(); renderAuthGate(); };
+    } else {
+      accessExitBtn.style.display = "none";
+      accessExitBtn.onclick = null;
+    }
+  }
   if (banner) {
     const token = state?.access?.shareToken;
+    const guestPrefix = state?.access?.guestMode ? "מצב אורח — " : "";
     banner.textContent = token
-      ? `מצב צפייה בלבד (${token}) — לא ניתן לבצע שמירה/עריכה דרך הקישור הזה`
-      : "מצב צפייה בלבד — לא ניתן לבצע שמירה/עריכה דרך הקישור הזה";
+      ? `${guestPrefix}מצב צפייה בלבד (${token}) — לא ניתן לבצע שמירה/עריכה דרך הקישור הזה`
+      : `${guestPrefix}מצב צפייה בלבד — לא ניתן לבצע שמירה/עריכה דרך הקישור הזה`;
     banner.style.display = isReadOnlyMode() ? "block" : "none";
   }
   if (state.screen === "dashboard") el.innerHTML = renderDashboard();
@@ -2598,8 +2650,12 @@ function bindWorkoutDragDrop() {
 
 window.addEventListener("load", async function() {
   state.screen = "dashboard";
+  state.access = getAccessStateFromLocation();
   await initializeOwnerAuth();
   const loader = document.getElementById("app-loader");
+  if (state.access.guestMode && !state.access.shareToken) {
+    await resolveDefaultGuestShareToken();
+  }
   if (!state.auth.isOwnerAuthenticated && !isSecureShareMode()) {
     if (loader) {
       loader.style.opacity = "0";
