@@ -60,7 +60,13 @@ let state = {
   workoutNote: "", monthViewYear: null, monthViewMonth: null, pendingGoal: null,
   editingExKey: null, exerciseLibrary: [], workoutExtras: [], dashboardAnimatedOnce: false,
   historyWorkoutFilterMode: "all", historyWorkoutId: "all", historyExerciseQuery: "",
-  access: getAccessStateFromLocation()
+  access: getAccessStateFromLocation(),
+  auth: {
+    user: null,
+    accessToken: null,
+    isOwnerAuthenticated: false
+  },
+  shareLinks: []
 };
 
 window.state = state;

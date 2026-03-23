@@ -1,6 +1,8 @@
 async function loadExerciseLibrary() {
   try {
-    const rows = await sbGet("exercise_library?select=*&order=name.asc");
+    const rows = (state?.access?.shareToken)
+      ? await sbRpc("share_get_exercise_library", { p_share_token: state.access.shareToken })
+      : await sbGet("exercise_library?select=*&order=name.asc");
     state.exerciseLibrary = rows || [];
     // אכלוס ראשוני — הוסף תרגילים קיימים שחסרים במאגר
     await seedLibraryFromWorkouts();
@@ -35,7 +37,7 @@ async function addToLibrary(name, category) {
   const exists = state.exerciseLibrary.find(e => e.name === cleanName);
   if (exists) return exists;
   try {
-    const rows = await sbPost("exercise_library", { name: cleanName, category: category || null });
+    const rows = await sbPost("exercise_library", { user_id: state.auth.user?.id, name: cleanName, category: category || null });
     const entry = rows[0];
     state.exerciseLibrary.push(entry);
     return entry;
@@ -49,7 +51,7 @@ async function updateLibraryEntry(id, name, category) {
    if (!cleanName) throw new Error("Invalid exercise name");
    const res = await fetch(SUPABASE_URL + "/rest/v1/exercise_library?id=eq." + id, {
   method: "PATCH",
-  headers: { ...SB_HEADERS, Prefer: "return=representation" },
+  headers: { ...getSbHeaders({ prefer: "return=representation" }) },
   body: JSON.stringify({ name: cleanName, category: category || null })
 });
 if (!res.ok) throw new Error(await res.text());
@@ -87,7 +89,7 @@ if (!res.ok) throw new Error(await res.text());
             SUPABASE_URL + "/rest/v1/session_exercises?exercise_name=eq." + encodeURIComponent(oldName),
             {
               method: "PATCH",
-              headers: { ...SB_HEADERS, Prefer: "return=minimal" },
+              headers: { ...getSbHeaders({ prefer: "return=minimal" }) },
               body: JSON.stringify({ exercise_name: cleanName })
             }
           );
