@@ -110,6 +110,7 @@ function requireWriteAccess(message) {
 }
 
 const OWNER_SESSION_STORAGE_KEY = "gym_owner_session_v1";
+const PREFERRED_GUEST_SHARE_TOKEN_KEY = "gym_preferred_guest_share_token_v1";
 
 function getCurrentAuthToken() {
   return state?.auth?.accessToken || null;
@@ -147,6 +148,19 @@ function clearOwnerSession() {
   state.auth.isOwnerAuthenticated = false;
   state.auth.isAuthenticated = false;
   persistOwnerSession(null);
+}
+
+function persistPreferredGuestShareToken(token) {
+  if (!token) {
+    localStorage.removeItem(PREFERRED_GUEST_SHARE_TOKEN_KEY);
+    return;
+  }
+  localStorage.setItem(PREFERRED_GUEST_SHARE_TOKEN_KEY, token);
+}
+
+function loadPreferredGuestShareToken() {
+  const token = (localStorage.getItem(PREFERRED_GUEST_SHARE_TOKEN_KEY) || "").trim();
+  return token || null;
 }
 
 async function fetchAuthUser(accessToken) {
@@ -210,10 +224,18 @@ async function signOutOwner() {
 }
 
 async function resolveDefaultGuestShareToken() {
+  const persisted = loadPreferredGuestShareToken();
+  if (persisted) {
+    state.access.shareToken = persisted;
+    return persisted;
+  }
   try {
     const rows = await sbRpc("share_get_default_token", {});
     const token = rows && rows.length ? rows[0].share_token : null;
-    if (token) state.access.shareToken = token;
+    if (token) {
+      state.access.shareToken = token;
+      persistPreferredGuestShareToken(token);
+    }
     return token;
   } catch (e) {
     console.error("Default guest share token resolve failed:", e);
@@ -2024,6 +2046,10 @@ async function loadShareLinks() {
   if (!state.auth.isOwnerAuthenticated) return;
   try {
     state.shareLinks = await sbGet("shared_views?select=*&order=created_at.desc");
+    const latestActive = (state.shareLinks || []).find(link => link?.is_active && link?.share_token);
+    if (latestActive?.share_token) {
+      persistPreferredGuestShareToken(latestActive.share_token);
+    }
   } catch (e) {
     console.error("Share links load failed:", e);
   }
@@ -2040,6 +2066,7 @@ async function createShareLink() {
       is_active: true
     });
     await loadShareLinks();
+    persistPreferredGuestShareToken(token);
     const url = `${window.location.origin}${window.location.pathname}#/share/${token}`;
     await navigator.clipboard.writeText(url);
     showToast("לינק שיתוף נוצר והועתק");
@@ -2056,6 +2083,13 @@ async function disableShareLink(id) {
   try {
     await sbPatch("shared_views?id=eq." + encodeURIComponent(id), { is_active: false });
     await loadShareLinks();
+    const activeTokens = (state.shareLinks || [])
+      .filter(link => link?.is_active && link?.share_token)
+      .map(link => link.share_token);
+    const preferred = loadPreferredGuestShareToken();
+    if (preferred && !activeTokens.includes(preferred)) {
+      persistPreferredGuestShareToken(activeTokens[0] || null);
+    }
     showToast("לינק בוטל");
     render();
   } catch (e) {
@@ -2684,6 +2718,9 @@ function bindWorkoutDragDrop() {
 window.addEventListener("load", async function() {
   state.screen = "dashboard";
   state.access = getAccessStateFromLocation();
+  if (state.access.shareToken) {
+    persistPreferredGuestShareToken(state.access.shareToken);
+  }
   await initializeOwnerAuth();
   if (state.auth.isOwnerAuthenticated) {
     exitGuestMode();
