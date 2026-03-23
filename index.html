@@ -176,7 +176,7 @@ async function loadWeightData() {
     const logs = await loadWeightLogsWithFallback();
     state.weightLogs = (logs || []).map(mapWeightLog);
     const goals = await sbGet("weight_goal?select=*&order=updated_at.desc&limit=1");
-    if (goals && goals.length) state.weightGoal = goals[0];
+    if (goals && goals.length) state.weightGoal = mapWeightGoal(goals[0]);
   } catch(e) { console.error("Weight load failed:", e); }
 }
 
@@ -232,6 +232,14 @@ function mapWeightLog(log) {
     measured_at: measuredAt,
     measured_date: log.measured_date || measuredAt.slice(0, 10),
     note: log.note || ""
+  };
+}
+
+function mapWeightGoal(goalRow) {
+  return {
+    ...goalRow,
+    start_weight: goalRow?.start_weight ?? goalRow?.startWeight ?? goalRow?.initial_weight ?? null,
+    goal_weight: goalRow?.goal_weight ?? goalRow?.goalWeight ?? goalRow?.target_weight ?? null
   };
 }
 
@@ -337,7 +345,7 @@ async function saveWeightGoal(startWeight, goalWeight) {
   try {
     await sbDelete("weight_goal?id=neq.00000000-0000-0000-0000-000000000000");
     const row = await sbPost("weight_goal", { start_weight: startWeight, goal_weight: goalWeight });
-    state.weightGoal = row[0];
+    state.weightGoal = mapWeightGoal(row[0]);
   } catch(e) { console.error("Weight goal save failed:", e); showToast("שגיאה בשמירת יעד"); throw e; }
 }
 

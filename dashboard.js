@@ -50,7 +50,8 @@ function getPRs() {
   state.sessions.forEach(session => {
     Object.entries(session.exercises||{}).forEach(([name, sets]) => {
       sets.forEach(s => {
-        if (s.weight > (prs[name]?.weight || 0)) {
+        const setWeight = Number(s?.weight ?? s?.kg ?? 0);
+        if (setWeight > (prs[name]?.weight || 0)) {
           // חפש קטגוריה — קודם בתוכניות הפעילות, אחר כך במאגר
           let category = null;
           state.workouts.forEach(w => {
@@ -61,7 +62,7 @@ function getPRs() {
             const libEntry = state.exerciseLibrary.find(e => e.name === name);
             if (libEntry?.category) category = libEntry.category;
           }
-          prs[name] = { weight: s.weight, date: session.date, category };
+          prs[name] = { weight: setWeight, date: session.date, category };
         }
       });
     });
@@ -144,7 +145,7 @@ function renderDashboard() {
   const prs = getPRs();
   const prEntries = Object.entries(prs).sort((a, b) => b[1].weight - a[1].weight);
   // קבץ לפי קטגוריה
-  const CAT_ORDER = ["chest","back","shoulders","arms","legs","core","cardio"];
+  const CAT_ORDER = ["chest","back","shoulders","arms","legs","core","cardio", null];
   const prByCategory = {};
   prEntries.forEach(([name, pr]) => {
     const cat = pr.category || null;
