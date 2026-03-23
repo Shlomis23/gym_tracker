@@ -1,10 +1,16 @@
 async function loadExerciseLibrary() {
+  let loadedFromRemote = false;
   try {
     const rows = await loadExerciseLibraryWithFallback();
     state.exerciseLibrary = normalizeExerciseLibraryRows(rows);
-    // אכלוס ראשוני — הוסף תרגילים קיימים שחסרים במאגר
-    await seedLibraryFromWorkouts();
+    loadedFromRemote = true;
   } catch(e) { console.error("Library load failed:", e); }
+  // אכלוס ראשוני — הוסף תרגילים קיימים שחסרים במאגר
+  // גם אם הטעינה מ-Supabase נכשלה (למשל RLS), כדי לא להישאר עם מאגר ריק.
+  await seedLibraryFromWorkouts();
+  if (!loadedFromRemote && !state.exerciseLibrary.length) {
+    console.warn("Exercise library unavailable from Supabase and no local workout exercises were found.");
+  }
 }
 
 async function loadExerciseLibraryWithFallback() {
@@ -18,6 +24,7 @@ async function loadExerciseLibraryWithFallback() {
     try {
       return await sbGet(query);
     } catch (err) {
+      if (!shouldRetryLibraryQuery(err)) throw err;
       lastError = err;
       console.warn("Exercise library query failed, trying next fallback:", query, err);
     }
@@ -43,6 +50,26 @@ function normalizeExerciseLibraryRows(rows) {
     if (!deduped.has(mapped.name)) deduped.set(mapped.name, mapped);
   });
   return Array.from(deduped.values()).sort((a, b) => a.name.localeCompare(b.name, "he"));
+}
+
+function parseLibrarySupabaseError(error) {
+  const rawMessage = String(error?.message || "");
+  try {
+    const parsed = JSON.parse(rawMessage);
+    return {
+      code: parsed?.code || "",
+      message: String(parsed?.message || rawMessage).toLowerCase()
+    };
+  } catch {
+    return { code: "", message: rawMessage.toLowerCase() };
+  }
+}
+
+function shouldRetryLibraryQuery(error) {
+  const { code, message } = parseLibrarySupabaseError(error);
+  if (code === "42501") return false;
+  if (message.includes("permission denied") || message.includes("unauthorized")) return false;
+  return true;
 }
 
 async function seedLibraryFromWorkouts() {

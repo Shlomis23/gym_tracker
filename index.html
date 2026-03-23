@@ -161,9 +161,32 @@ async function loadWeightLogsWithFallback() {
   try {
     return await sbGet("body_weight_logs?select=*&order=measured_at.asc");
   } catch (measuredAtError) {
+    if (!shouldRetryWeightLoadFallback(measuredAtError)) {
+      throw measuredAtError;
+    }
     console.warn("Weight logs measured_at query failed, trying measured_date fallback:", measuredAtError);
     return await sbGet("body_weight_logs?select=*&order=measured_date.asc");
   }
+}
+
+function parseSupabaseError(error) {
+  const rawMessage = String(error?.message || "");
+  try {
+    const parsed = JSON.parse(rawMessage);
+    return {
+      code: parsed?.code || "",
+      message: String(parsed?.message || rawMessage).toLowerCase()
+    };
+  } catch {
+    return { code: "", message: rawMessage.toLowerCase() };
+  }
+}
+
+function shouldRetryWeightLoadFallback(error) {
+  const { code, message } = parseSupabaseError(error);
+  if (code === "42501") return false;
+  if (message.includes("permission denied") || message.includes("unauthorized")) return false;
+  return true;
 }
 
 function normalizeWeightMeasuredAt(log) {
