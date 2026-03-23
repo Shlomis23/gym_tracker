@@ -241,14 +241,15 @@ const goalReached = thisWeek >= goal;
     const isPast = todayDow === 0 ? dow === 0 : dow < todayDow || dow === 0 && todayDow > 0;
     const isFuture = !isToday && !isPast;
     const worked = workedDays.has(dow);
-    const labelColor = worked ? "var(--green)" : isFuture ? "var(--border-med)" : "var(--text-hint)";
-    const labelWeight = isToday ? "700" : "600";
-    const boxBg = worked ? "var(--green-bg)" : isFuture ? "var(--card)" : "var(--surface)";
+    const labelColor = worked ? "var(--green)" : isToday ? "var(--accent)" : isFuture ? "var(--border-med)" : "var(--text-hint)";
+    const labelWeight = isToday ? "800" : "600";
+    const boxBg = worked ? "var(--green-bg)" : isToday ? "#eef2ff" : isFuture ? "var(--card)" : "var(--surface)";
     const boxBorder = worked
       ? isToday ? "2px solid var(--green)" : "1px solid #86efac"
-      : isFuture ? "1px dashed var(--border-med)" : "1px solid var(--border)";
+      : isToday ? "2px solid var(--accent)" : isFuture ? "1px dashed var(--border-med)" : "1px solid var(--border)";
     const animDelay = (idx * 0.08).toFixed(2);
-    return `<div class="day-cell-anim" style="display:flex;flex-direction:column;align-items:center;gap:4px;opacity:0;animation-delay:${animDelay}s">
+    const initialCellOpacity = state.dashboardAnimatedOnce || worked || isToday ? "1" : "0";
+    return `<div class="day-cell-anim" style="display:flex;flex-direction:column;align-items:center;gap:4px;opacity:${initialCellOpacity};animation-delay:${animDelay}s">
       <span style="font-size:10px;color:${labelColor};font-weight:${labelWeight}">${dayNames[dow]}</span>
       <div style="width:100%;aspect-ratio:1;border-radius:8px;background:${boxBg};border:${boxBorder};display:flex;align-items:center;justify-content:center">
         ${worked ? checkIcon : ""}
