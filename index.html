@@ -14,6 +14,7 @@
 <meta name="theme-color" content="#000000">
 
 <link rel="apple-touch-icon" href="icon-192x192.png">
+<link rel="icon" type="image/png" href="icon-192x192.png">
 </head>
 <body>
 <div id="app-loader" style="position:fixed;inset:0;background:#ffffff;z-index:9999;display:flex;align-items:center;justify-content:center;transition:opacity 0.35s ease">
@@ -413,7 +414,6 @@ async function saveWeightLog(weight, measuredAtIso, note) {
       user_id: userId,
       weight,
       measured_at: measuredAt,
-      measured_date: measuredAt.slice(0, 10),
       note: note || ""
     }];
     const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, {
