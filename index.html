@@ -735,9 +735,37 @@ async function saveWorkoutsToSupabase() {
 }
 
 async function loadWorkoutsFromSupabase() {
+  const fetchWorkoutRows = async (path, diagLabel) => {
+    const res = await fetch(SUPABASE_URL + "/rest/v1/" + path, { headers: SB_HEADERS });
+    const rawText = await res.text();
+    dlog("[loadWorkoutsFromSupabase]", diagLabel, "status:", res.status, "body:", rawText);
+    if (!res.ok) throw new Error(`${diagLabel} failed (${res.status}): ${rawText}`);
+    if (!rawText) return [];
+    try {
+      return JSON.parse(rawText);
+    } catch (parseErr) {
+      throw new Error(`${diagLabel} parse failed: ${parseErr.message}`);
+    }
+  };
+
   try {
-    const rows = await sbGet("workout_plans?select=*&order=sort_order.asc");
+    let rows;
+    let fallbackReason = "";
+    try {
+      rows = await fetchWorkoutRows("workout_plans?select=*&order=sort_order.asc", "ordered_fetch");
+    } catch (orderedErr) {
+      const orderedMsg = String(orderedErr?.message || orderedErr);
+      if (orderedMsg.includes("sort_order")) {
+        fallbackReason = "sort_order_missing_or_invalid";
+        console.warn("[loadWorkoutsFromSupabase] ordered query failed, retrying without order:", orderedMsg);
+        rows = await fetchWorkoutRows("workout_plans?select=*", "unordered_fetch");
+      } else {
+        throw orderedErr;
+      }
+    }
+
     const rowsArray = Array.isArray(rows) ? rows : (rows ? [rows] : []);
+    dlog("[loadWorkoutsFromSupabase] parsed rows:", rowsArray.length, "fallbackReason:", fallbackReason || "none");
     if (rowsArray.length) {
       // תמיד החלף את כל ה-state — אל תצרף
       const normalized = rowsArray.map((r, idx) => {
@@ -769,7 +797,7 @@ async function loadWorkoutsFromSupabase() {
       setDataSource("workouts", "local");
       setSyncError("לא נמצאו תוכניות בענן — מוצגות תוכניות מקומיות");
     }
-  } catch(e) { console.error("Workout plan load failed:", e); setSyncError("טעינת תוכנית מהענן נכשלה"); }
+  } catch(e) { console.error("Workout plan load failed (fetch/parse/normalize):", e); setSyncError("טעינת תוכנית מהענן נכשלה"); }
   if ((state.syncStatus?.dataSource?.workouts) !== "supabase") {
     setDataSource("workouts", "local");
   }
