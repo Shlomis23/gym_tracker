@@ -68,6 +68,20 @@
 const APP_BUILD = "2026-03-23-audit-2";
 console.info("[GymBuddy] build:", APP_BUILD, "supabase:", SUPABASE_URL);
 window.__GYMBUDDY_BUILD__ = APP_BUILD;
+const STORAGE_USER_ID = "gym_user_id_v1";
+
+function ensureUserId() {
+  if (state.userId) return state.userId;
+  const saved = localStorage.getItem(STORAGE_USER_ID);
+  if (saved) {
+    state.userId = saved;
+    return saved;
+  }
+  const generated = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ("uid-" + Date.now());
+  state.userId = generated;
+  localStorage.setItem(STORAGE_USER_ID, generated);
+  return generated;
+}
 
 async function sbGet(path) {
   const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, { headers: SB_HEADERS });
@@ -276,10 +290,22 @@ async function loadWeightData() {
   try {
     const logs = await sbGet("body_weight_logs?select=*&order=measured_at.asc");
     console.debug("[loadWeightData] body_weight_logs raw response:", logs);
+    const knownUserId = (logs || []).find(l => l.user_id)?.user_id;
+    if (knownUserId) {
+      state.userId = knownUserId;
+      localStorage.setItem(STORAGE_USER_ID, knownUserId);
+    } else {
+      ensureUserId();
+    }
     state.weightLogs = (logs || []).map(mapWeightLog);
     const goalsRaw = await sbGet("weight_goal?select=*&order=updated_at.desc&limit=1");
     console.debug("[loadWeightData] weight_goal raw response:", goalsRaw);
     const goalRows = Array.isArray(goalsRaw) ? goalsRaw : (goalsRaw ? [goalsRaw] : []);
+    const goalUserId = goalRows.find(g => g.user_id)?.user_id;
+    if (!state.userId && goalUserId) {
+      state.userId = goalUserId;
+      localStorage.setItem(STORAGE_USER_ID, goalUserId);
+    }
     const normalizedGoals = goalRows.map(g => ({
       ...g,
       start_weight: g.start_weight ?? g.startWeight ?? g.starting_weight ?? null,
@@ -293,6 +319,7 @@ async function loadWeightData() {
 function mapWeightLog(log) {
   return {
     id: log.id,
+    user_id: log.user_id || null,
     weight: Number(log.weight),
     measured_at: log.measured_at || log.date || new Date().toISOString(),
     measured_date: log.measured_date || (log.date ? log.date.slice(0, 10) : new Date().toISOString().slice(0,10)),
@@ -378,9 +405,17 @@ function readIsoDateFromSelector(container, prefix) {
 
 async function saveWeightLog(weight, measuredAtIso, note) {
   try {
-    const path = "body_weight_logs?on_conflict=measured_date";
+    const userId = ensureUserId();
+    const measuredAt = measuredAtIso || new Date().toISOString();
+    const path = "body_weight_logs?on_conflict=user_id,measured_date";
     const headers = { ...SB_HEADERS, Prefer: "return=representation,resolution=merge-duplicates" };
-    const payload = [{ weight, measured_at: measuredAtIso || new Date().toISOString(), note: note || "" }];
+    const payload = [{
+      user_id: userId,
+      weight,
+      measured_at: measuredAt,
+      measured_date: measuredAt.slice(0, 10),
+      note: note || ""
+    }];
     const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, {
       method: "POST",
       headers,
@@ -421,8 +456,9 @@ async function updateWeightLog(id, weight, measuredAtIso, note) {
 
 async function saveWeightGoal(startWeight, goalWeight) {
   try {
-    await sbDelete("weight_goal?id=neq.00000000-0000-0000-0000-000000000000");
-    const row = await sbPost("weight_goal", { start_weight: startWeight, goal_weight: goalWeight });
+    const userId = ensureUserId();
+    await sbDelete("weight_goal?user_id=eq." + encodeURIComponent(userId));
+    const row = await sbPost("weight_goal", { user_id: userId, start_weight: startWeight, goal_weight: goalWeight });
     state.weightGoal = row[0];
   } catch(e) { console.error("Weight goal save failed:", e); showToast("שגיאה בשמירת יעד"); throw e; }
 }

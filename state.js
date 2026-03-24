@@ -38,6 +38,7 @@ let state = {
   sessions: [], workouts: loadWorkouts(), settings: loadSettings(),
   manageOpenId: null, editingNameId: null, selectedWorkoutId: null, expandedSessions: new Set(),
   weightLogs: [], weightGoal: { start_weight: null, goal_weight: null }, historyTab: "workouts",
+  userId: null,
   weightRangeDays: 7, weightRangeMode: "preset", weightCustomRange: { from: "", to: "" },
   workoutNote: "", monthViewYear: null, monthViewMonth: null, pendingGoal: null,
   editingExKey: null, exerciseLibrary: [], workoutExtras: [], dashboardAnimatedOnce: false,
