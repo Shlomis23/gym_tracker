@@ -14,6 +14,7 @@
 <meta name="theme-color" content="#000000">
 
 <link rel="apple-touch-icon" href="icon-192x192.png">
+<link rel="icon" type="image/png" href="icon-192x192.png">
 </head>
 <body>
 <div id="app-loader" style="position:fixed;inset:0;background:#ffffff;z-index:9999;display:flex;align-items:center;justify-content:center;transition:opacity 0.35s ease">
@@ -65,6 +66,62 @@
 <script src="./dashboard.js"></script>
 <script>
 // ── Supabase ─────────────────────────────────────────────────────
+const APP_BUILD = "2026-03-23-audit-2";
+const DEBUG = localStorage.getItem("gym_debug") === "1";
+const dlog = (...args) => { if (DEBUG) console.debug(...args); };
+const dinfo = (...args) => { if (DEBUG) console.info(...args); };
+dinfo("[GymBuddy] build:", APP_BUILD, "supabase:", SUPABASE_URL);
+window.__GYMBUDDY_BUILD__ = APP_BUILD;
+const STORAGE_USER_ID = "gym_user_id_v1";
+
+function ensureUserId() {
+  if (state.userId) return state.userId;
+  const saved = localStorage.getItem(STORAGE_USER_ID);
+  if (saved) {
+    state.userId = saved;
+    return saved;
+  }
+  const generated = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ("uid-" + Date.now());
+  state.userId = generated;
+  localStorage.setItem(STORAGE_USER_ID, generated);
+  return generated;
+}
+
+function requireUserIdOrThrow(contextLabel) {
+  const userId = ensureUserId();
+  if (!userId || typeof userId !== "string" || !userId.trim()) {
+    throw new Error(`${contextLabel}: missing user_id`);
+  }
+  return userId;
+}
+
+function setDataSource(key, source) {
+  if (!state.syncStatus) return;
+  state.syncStatus.dataSource[key] = source;
+}
+function setSyncError(message) {
+  if (!state.syncStatus) return;
+  state.syncStatus.lastError = message;
+}
+function clearSyncError() {
+  if (!state.syncStatus) return;
+  state.syncStatus.lastError = null;
+}
+function renderSyncNotice() {
+  const status = state.syncStatus || {};
+  const localSources = Object.entries(status.dataSource || {})
+    .filter(([, src]) => src === "local")
+    .map(([k]) => k);
+  const fallbackLine = localSources.length
+    ? `<div style="font-size:11px;color:var(--orange)">מציג נתונים מקומיים: ${localSources.join(", ")}</div>`
+    : "";
+  const errorLine = status.lastError
+    ? `<div style="font-size:11px;color:var(--red);margin-top:${fallbackLine ? "4px" : "0"}">${escapeHtml(status.lastError)}</div>`
+    : "";
+  if (!fallbackLine && !errorLine) return "";
+  return `<div style="margin:10px 14px 0;padding:8px 10px;border-radius:10px;background:var(--surface);border:1px solid var(--border-med)">${fallbackLine}${errorLine}</div>`;
+}
+
 async function sbGet(path) {
   const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, { headers: SB_HEADERS });
   if (!r.ok) throw new Error(await r.text());
@@ -99,44 +156,180 @@ function saveSessions() { localStorage.setItem(STORAGE_SESSIONS, JSON.stringify(
 
 async function saveSessionToSupabase(session) {
   try {
+    const userId = requireUserIdOrThrow("saveSessionToSupabase");
     const rows = await sbPost("workout_sessions", {
+      user_id: userId,
       local_id: session.id,
       workout_id: session.workoutId,
       workout_name: getWorkout(session.workoutId)?.name || session.workoutId,
       date: session.date,
       note: session.note || ""
     });
+    if (!Array.isArray(rows) || !rows.length || !rows[0]?.id) {
+      throw new Error("Invalid workout_sessions write response");
+    }
     const sessionRow = rows[0];
     const sets = [];
     Object.entries(session.exercises || {}).forEach(([exName, exSets]) => {
       exSets.forEach(s => {
         if (s.weight > 0 || s.reps > 0) {
-          sets.push({ session_id: sessionRow.id, exercise_name: exName, set_number: s.num, weight: s.weight, reps: s.reps, failed: !!s.failed });
+          sets.push({ user_id: userId, session_id: sessionRow.id, exercise_name: exName, set_number: s.num, weight: s.weight, reps: s.reps, failed: !!s.failed });
         }
       });
     });
     if (sets.length) await sbPost("session_exercises", sets);
+    clearSyncError();
   } catch(e) {
     console.error("Supabase save failed:", e);
+    setSyncError("האימון נשמר מקומית בלבד (סנכרון לענן נכשל)");
+    throw e;
   }
 }
 
 async function loadSessionsFromSupabase() {
   try {
-    const rows = await sbGet("workout_sessions?select=*,sets:session_exercises(*)&order=date.asc");
+    const sessionQuery = "workout_sessions?select=*,sets:session_exercises(*),session_exercises(*)&order=date.asc";
+    const rowsWithEmbed = await sbGet(sessionQuery);
+    dlog("[loadSessionsFromSupabase] workout_sessions (embedded sets) raw response:", rowsWithEmbed);
+
+    const rows = Array.isArray(rowsWithEmbed) ? rowsWithEmbed : [];
+    let exerciseRows = [];
+    try {
+      exerciseRows = await sbGet("session_exercises?select=*");
+    } catch (exerciseLoadErr) {
+      if (DEBUG) console.warn("Supabase session_exercises standalone fetch failed, using embedded relation only:", exerciseLoadErr);
+    }
+    dlog("[loadSessionsFromSupabase] workout_sessions raw response:", rows);
+    dlog("[loadSessionsFromSupabase] session_exercises raw response:", exerciseRows);
+
+    const setsBySessionId = new Map();
+    const getSetSessionKey = s => String(
+      s.session_id ??
+      s.workout_session_id ??
+      s.workout_session ??
+      s.session_local_id ??
+      s.local_session_id ??
+      ""
+    );
+
+    (exerciseRows || []).forEach(s => {
+      const key = getSetSessionKey(s);
+      if (!key) return;
+      if (!setsBySessionId.has(key)) setsBySessionId.set(key, []);
+      setsBySessionId.get(key).push(s);
+    });
+
+    const sessionIdSet = new Set(rows.map(r => String(r.id ?? "")).filter(Boolean));
+    const sessionLocalIdSet = new Set(rows.map(r => String(r.local_id ?? "")).filter(Boolean));
+    const unmatchedSessionExerciseRows = (exerciseRows || []).filter(s => {
+      const sid = getSetSessionKey(s);
+      if (!sid) return false;
+      return !sessionIdSet.has(sid) && !sessionLocalIdSet.has(sid);
+    });
+    if (unmatchedSessionExerciseRows.length) {
+      console.warn("[loadSessionsFromSupabase] Found session_exercises rows with non-matching FK (session_id/workout_session_id):", unmatchedSessionExerciseRows);
+    }
+
+    const hasUserIdFilter = /user_id=eq\./.test(sessionQuery);
+    dlog("[loadSessionsFromSupabase] user_id filter in query:", hasUserIdFilter);
+
+    const normalizeSet = s => ({
+      num: Number(s.set_number ?? s.set_no ?? s.set_index ?? s.num ?? 0),
+      weight: Number(s.weight ?? 0),
+      reps: Number(s.reps ?? 0),
+      failed: !!s.failed,
+      minutes: Number(s.minutes ?? 0)
+    });
+
     state.sessions = rows.map(row => {
       const exercises = {};
-      (row.sets || []).forEach(s => {
-        if (!exercises[s.exercise_name]) exercises[s.exercise_name] = [];
-        exercises[s.exercise_name].push({ num: s.set_number, weight: s.weight, reps: s.reps, failed: s.failed });
+      const rowKeys = [row.id, row.local_id].filter(Boolean).map(v => String(v));
+      const standaloneSets = rowKeys.flatMap(k => setsBySessionId.get(k) || []);
+      const rowSets = [
+        ...(Array.isArray(row.sets) ? row.sets : []),
+        ...(Array.isArray(row.session_exercises) ? row.session_exercises : []),
+        ...standaloneSets
+      ];
+      const uniqueSetMap = new Map();
+      rowSets.forEach(s => {
+        const dedupeKey = String(s.id ?? `${getSetSessionKey(s)}|${s.exercise_name ?? s.exercise?.name ?? s.exercise ?? s.name ?? ""}|${s.set_number ?? s.set_no ?? s.set_index ?? s.num ?? ""}|${s.weight ?? ""}|${s.reps ?? ""}|${s.minutes ?? ""}`);
+        if (!uniqueSetMap.has(dedupeKey)) uniqueSetMap.set(dedupeKey, s);
+      });
+
+      [...uniqueSetMap.values()].forEach(rawSet => {
+        const exName = rawSet.exercise_name ?? rawSet.exercise?.name ?? rawSet.exercise ?? rawSet.name;
+        if (!exName) return;
+        if (!exercises[exName]) exercises[exName] = [];
+        exercises[exName].push(normalizeSet(rawSet));
       });
       Object.values(exercises).forEach(arr => arr.sort((a,b) => a.num - b.num));
       return { id: row.local_id || row.id, workoutId: row.workout_id, workoutName: row.workout_name || "", date: row.date, exercises, note: row.note || "" };
     });
+    const sessionsWithoutExercises = state.sessions.filter(s => !Object.keys(s.exercises || {}).length).length;
+    if (state.sessions.length && sessionsWithoutExercises === state.sessions.length) {
+      console.warn("[loadSessionsFromSupabase] Sessions loaded but no exercise rows were mapped.");
+    }
     localStorage.setItem(STORAGE_SESSIONS, JSON.stringify(state.sessions));
+    setDataSource("sessions", "supabase");
   } catch(e) {
     console.error("Supabase load failed, using localStorage:", e);
     try { state.sessions = JSON.parse(localStorage.getItem(STORAGE_SESSIONS) || "[]"); } catch {}
+    setDataSource("sessions", "local");
+    setSyncError("טעינת אימונים מהענן נכשלה — מוצגים נתונים מקומיים");
+  }
+}
+
+async function runRuntimeDataAudit() {
+  if (!DEBUG) return;
+  try {
+    const [sessionsWithEmbed, standaloneSets, goals] = await Promise.all([
+      sbGet("workout_sessions?select=*,sets:session_exercises(*)&order=date.asc"),
+      sbGet("session_exercises?select=*"),
+      sbGet("weight_goal?select=*&order=updated_at.desc&limit=1")
+    ]);
+
+    const sessionRows = Array.isArray(sessionsWithEmbed) ? sessionsWithEmbed : [];
+    const hasSetsProp = sessionRows.some(r => Object.prototype.hasOwnProperty.call(r, "sets"));
+    const embeddedSetCount = sessionRows.reduce((n, r) => n + (Array.isArray(r.sets) ? r.sets.length : 0), 0);
+    const setRows = Array.isArray(standaloneSets) ? standaloneSets : [];
+
+    const sessionKeys = new Set(
+      sessionRows
+        .flatMap(r => [r.id, r.local_id])
+        .filter(Boolean)
+        .map(v => String(v))
+    );
+    const matchedStandalone = setRows.filter(s => {
+      const key = String(
+        s.session_id ??
+        s.workout_session_id ??
+        s.workout_session ??
+        s.session_local_id ??
+        s.local_session_id ??
+        ""
+      );
+      return key && sessionKeys.has(key);
+    }).length;
+    const orphanStandalone = setRows.length - matchedStandalone;
+
+    const goalRows = Array.isArray(goals) ? goals : (goals ? [goals] : []);
+    const goalParsed = goalRows[0] ? getWeightGoalValues(goalRows[0]) : { hasGoal: false, start: NaN, target: NaN };
+
+    console.info("[runtime-audit]", {
+      build: APP_BUILD,
+      supabaseUrl: SUPABASE_URL,
+      sessionsCount: sessionRows.length,
+      hasSetsProp,
+      embeddedSetCount,
+      standaloneSetCount: setRows.length,
+      matchedStandalone,
+      orphanStandalone,
+      weightGoalRows: goalRows.length,
+      weightGoalParsed: goalParsed,
+      prsFromStateCount: Object.keys(getPRs?.() || {}).length
+    });
+  } catch (err) {
+    console.warn("[runtime-audit] failed:", err);
   }
 }
 
@@ -151,15 +344,39 @@ async function deleteSessionFromSupabase(localId) {
 async function loadWeightData() {
   try {
     const logs = await sbGet("body_weight_logs?select=*&order=measured_at.asc");
+    dlog("[loadWeightData] body_weight_logs raw response:", logs);
+    const knownUserId = (logs || []).find(l => l.user_id)?.user_id;
+    if (knownUserId) {
+      state.userId = knownUserId;
+      localStorage.setItem(STORAGE_USER_ID, knownUserId);
+    } else {
+      ensureUserId();
+    }
     state.weightLogs = (logs || []).map(mapWeightLog);
-    const goals = await sbGet("weight_goal?select=*&order=updated_at.desc&limit=1");
-    if (goals && goals.length) state.weightGoal = goals[0];
-  } catch(e) { console.error("Weight load failed:", e); }
+    const goalsRaw = await sbGet("weight_goal?select=*&order=updated_at.desc&limit=1");
+    dlog("[loadWeightData] weight_goal raw response:", goalsRaw);
+    const goalRows = Array.isArray(goalsRaw) ? goalsRaw : (goalsRaw ? [goalsRaw] : []);
+    const goalUserId = goalRows.find(g => g.user_id)?.user_id;
+    if (!state.userId && goalUserId) {
+      state.userId = goalUserId;
+      localStorage.setItem(STORAGE_USER_ID, goalUserId);
+    }
+    const normalizedGoals = goalRows.map(g => ({
+      ...g,
+      start_weight: g.start_weight ?? g.startWeight ?? g.starting_weight ?? null,
+      goal_weight: g.goal_weight ?? g.goalWeight ?? g.target_weight ?? null
+    }));
+    const validGoal = normalizedGoals.find(g => getWeightGoalValues(g).hasGoal);
+    if (validGoal) state.weightGoal = validGoal;
+    else if (goalRows.length) console.warn("[loadWeightData] weight_goal row exists but could not be parsed:", goalRows[0]);
+    setDataSource("weight", "supabase");
+  } catch(e) { console.error("Weight load failed:", e); setDataSource("weight", "local"); setSyncError("טעינת נתוני משקל מהענן נכשלה"); }
 }
 
 function mapWeightLog(log) {
   return {
     id: log.id,
+    user_id: log.user_id || null,
     weight: Number(log.weight),
     measured_at: log.measured_at || log.date || new Date().toISOString(),
     measured_date: log.measured_date || (log.date ? log.date.slice(0, 10) : new Date().toISOString().slice(0,10)),
@@ -175,6 +392,27 @@ function getWeightLogsAsc() {
 
 function formatWeightDate(log) {
   return formatDate(log.measured_at || log.date);
+}
+
+function getWeightGoalValues(goal) {
+  const g = goal || state.weightGoal || {};
+  const pickNumber = keys => {
+    for (const key of keys) {
+      const raw = g[key] ?? g?.goal?.[key] ?? null;
+      if (raw === null || raw === undefined || raw === "") continue;
+      const num = Number(String(raw).replace(",", "."));
+      if (Number.isFinite(num)) return num;
+    }
+    return NaN;
+  };
+
+  const start = pickNumber(["start_weight", "startWeight", "starting_weight", "start", "initial_weight"]);
+  const target = pickNumber(["goal_weight", "goalWeight", "target_weight", "target", "goal"]);
+  return { start, target, hasGoal: Number.isFinite(start) && Number.isFinite(target) };
+}
+
+function hasWeightGoal(goal) {
+  return getWeightGoalValues(goal).hasGoal;
 }
 
 function isoDateFromLocal(dateLike) {
@@ -224,9 +462,16 @@ function readIsoDateFromSelector(container, prefix) {
 
 async function saveWeightLog(weight, measuredAtIso, note) {
   try {
-    const path = "body_weight_logs?on_conflict=measured_date";
+    const userId = ensureUserId();
+    const measuredAt = measuredAtIso || new Date().toISOString();
+    const path = "body_weight_logs?on_conflict=user_id,measured_date";
     const headers = { ...SB_HEADERS, Prefer: "return=representation,resolution=merge-duplicates" };
-    const payload = [{ weight, measured_at: measuredAtIso || new Date().toISOString(), note: note || "" }];
+    const payload = [{
+      user_id: userId,
+      weight,
+      measured_at: measuredAt,
+      note: note || ""
+    }];
     const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, {
       method: "POST",
       headers,
@@ -234,11 +479,13 @@ async function saveWeightLog(weight, measuredAtIso, note) {
     });
     if (!r.ok) throw new Error(await r.text());
     const rows = await r.json();
+    if (!Array.isArray(rows) || !rows.length) throw new Error("Invalid body_weight_logs write response");
     const saved = mapWeightLog(rows[0]);
     const idx = state.weightLogs.findIndex(l => l.id === saved.id);
     if (idx >= 0) state.weightLogs[idx] = saved;
     else state.weightLogs.push(saved);
     state.weightLogs = getWeightLogsAsc();
+    clearSyncError();
     showToast("המשקל נשמר ✓");
     return saved;
   } catch(e) { console.error("Weight save failed:", e); showToast("שגיאה בשמירת משקל ⚠️"); throw e; }
@@ -267,9 +514,12 @@ async function updateWeightLog(id, weight, measuredAtIso, note) {
 
 async function saveWeightGoal(startWeight, goalWeight) {
   try {
-    await sbDelete("weight_goal?id=neq.00000000-0000-0000-0000-000000000000");
-    const row = await sbPost("weight_goal", { start_weight: startWeight, goal_weight: goalWeight });
+    const userId = ensureUserId();
+    await sbDelete("weight_goal?user_id=eq." + encodeURIComponent(userId));
+    const row = await sbPost("weight_goal", { user_id: userId, start_weight: startWeight, goal_weight: goalWeight });
+    if (!Array.isArray(row) || !row.length) throw new Error("Invalid weight_goal write response");
     state.weightGoal = row[0];
+    clearSyncError();
   } catch(e) { console.error("Weight goal save failed:", e); showToast("שגיאה בשמירת יעד"); throw e; }
 }
 
@@ -446,7 +696,8 @@ async function saveSettingsToSupabase() {
       weekly_goal: state.settings.weeklyGoal,
       goal_history: state.settings.goalHistory || []
     });
-  } catch(e) { console.error("Settings save failed:", e); }
+    clearSyncError();
+  } catch(e) { console.error("Settings save failed:", e); setSyncError("שמירת הגדרות לענן נכשלה"); showToast("שמירת הגדרות לענן נכשלה ⚠️"); }
 }
 
 async function loadSettingsFromSupabase() {
@@ -458,14 +709,20 @@ async function loadSettingsFromSupabase() {
       state.settings.goalHistory = r.goal_history || [];
       localStorage.setItem(STORAGE_SETTINGS, JSON.stringify(state.settings));
     }
-  } catch(e) { console.error("Settings load failed:", e); }
+    setDataSource("settings", "supabase");
+  } catch(e) { console.error("Settings load failed:", e); setSyncError("טעינת הגדרות מהענן נכשלה"); }
+  if ((state.syncStatus?.dataSource?.settings) !== "supabase") {
+    setDataSource("settings", "local");
+  }
 }
 
 
 async function saveWorkoutsToSupabase() {
   try {
+    const userId = requireUserIdOrThrow("saveWorkoutsToSupabase");
     await sbDelete("workout_plans?id=neq.00000000-0000-0000-0000-000000000000");
     const rows = state.workouts.map((w, i) => ({
+      user_id: userId,
       plan_id: w.id,
       name: w.name,
       exercises: w.exercises,
@@ -473,22 +730,49 @@ async function saveWorkoutsToSupabase() {
     }));
     if (rows.length) await sbPost("workout_plans", rows);
     showToast("התוכנית נשמרה ✓");
-  } catch(e) { console.error("Workout plan save failed:", e); showToast("שגיאה בשמירת התוכנית ⚠️"); }
+    clearSyncError();
+  } catch(e) { console.error("Workout plan save failed:", e); setSyncError("שמירת תוכנית לענן נכשלה"); showToast("שגיאה בשמירת התוכנית ⚠️"); }
 }
 
 async function loadWorkoutsFromSupabase() {
   try {
     const rows = await sbGet("workout_plans?select=*&order=sort_order.asc");
-    if (rows && rows.length) {
+    const rowsArray = Array.isArray(rows) ? rows : (rows ? [rows] : []);
+    if (rowsArray.length) {
       // תמיד החלף את כל ה-state — אל תצרף
-      state.workouts = rows.map(r => ({ id: r.plan_id, name: r.name, exercises: r.exercises }));
-      localStorage.setItem(STORAGE_WORKOUTS, JSON.stringify(state.workouts));
+      const normalized = rowsArray.map((r, idx) => {
+        const id = r.plan_id ?? r.id ?? r.workout_id ?? null;
+        if (!id) return null;
+        const rawName = (r.name ?? r.workout_name ?? "").toString().trim();
+        return {
+          id: String(id),
+          name: rawName || `אימון ${idx + 1}`,
+          exercises: Array.isArray(r.exercises) ? r.exercises : []
+        };
+      }).filter(Boolean);
+
+      if (normalized.length) {
+        state.workouts = normalized;
+        localStorage.setItem(STORAGE_WORKOUTS, JSON.stringify(state.workouts));
+        setDataSource("workouts", "supabase");
+      } else {
+        // הגיעו rows אבל בלי מזהה תקין — אל תדרוס state קיים
+        if (!state.workouts?.length) state.workouts = JSON.parse(JSON.stringify(DEFAULT_WORKOUTS));
+        setDataSource("workouts", "local");
+        setSyncError("תוכניות בענן בפורמט לא תקין — מוצגות תוכניות מקומיות");
+      }
     } else {
-      // Supabase ריק — נקה גם localStorage כדי למנוע ברירות מחדל ישנות
-      state.workouts = [];
-      localStorage.removeItem(STORAGE_WORKOUTS);
+      // Supabase ריק — השאר נתונים מקומיים קיימים כדי לא להעלים את רשימת האימונים
+      if (!state.workouts?.length) {
+        state.workouts = JSON.parse(JSON.stringify(DEFAULT_WORKOUTS));
+      }
+      setDataSource("workouts", "local");
+      setSyncError("לא נמצאו תוכניות בענן — מוצגות תוכניות מקומיות");
     }
-  } catch(e) { console.error("Workout plan load failed:", e); }
+  } catch(e) { console.error("Workout plan load failed:", e); setSyncError("טעינת תוכנית מהענן נכשלה"); }
+  if ((state.syncStatus?.dataSource?.workouts) !== "supabase") {
+    setDataSource("workouts", "local");
+  }
 }
 function getWorkout(id) { return state.workouts.find(w => w.id === id); }
 function getLastSession(id) { return [...state.sessions].reverse().find(s => s.workoutId === id) || null; }
@@ -571,11 +855,13 @@ function navigate(screen) {
 
 function render() {
   const el = document.getElementById("main-content");
-  if (state.screen === "dashboard") el.innerHTML = renderDashboard();
-  else if (state.screen === "home") el.innerHTML = state.workoutId ? renderWorkout() : renderChoose();
-  else if (state.screen === "history") el.innerHTML = renderHistory();
-  else if (state.screen === "library") el.innerHTML = renderLibraryScreen();
-  else el.innerHTML = renderManage();
+  let screenHtml = "";
+  if (state.screen === "dashboard") screenHtml = renderDashboard();
+  else if (state.screen === "home") screenHtml = state.workoutId ? renderWorkout() : renderChoose();
+  else if (state.screen === "history") screenHtml = renderHistory();
+  else if (state.screen === "library") screenHtml = renderLibraryScreen();
+  else screenHtml = renderManage();
+  el.innerHTML = renderSyncNotice() + screenHtml;
   if (window.lucide) lucide.createIcons();
   bindDelButtons();
   bindDragDrop();
@@ -886,7 +1172,8 @@ function finishWorkout() {
     saveSessionToSupabase(session).then(() => {
       showToast("נשמר ✓");
     }).catch(() => {
-      showToast("שגיאה בשמירה — נסה שוב ⚠️");
+      showToast("האימון נשמר מקומית בלבד — סנכרון לענן נכשל ⚠️");
+      render();
     });
     haptic("success");
     navigate("dashboard");
@@ -1692,6 +1979,7 @@ function toggleHistorySession(id) {
 }
 
 function renderManage() {
+  const weightGoalValues = getWeightGoalValues(state.weightGoal);
   const workoutSections = state.workouts.map(w => {
     const isOpen = state.manageOpenId === w.id;
     const isEditing = state.editingNameId === w.id;
@@ -1800,12 +2088,12 @@ function renderManage() {
         <span style="font-weight:700;font-size:14px;color:var(--text-primary)">עדכון יעד משקל ומשקל התחלתי</span>
       </div>
       <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;line-height:1.5">
-        ${(state.weightGoal?.start_weight && state.weightGoal?.goal_weight)
-          ? `<span style="display:inline-flex;gap:4px;align-items:center;direction:ltr;unicode-bidi:isolate"><span>התחלתי: ${Number(state.weightGoal.start_weight).toFixed(1)}</span><span aria-hidden="true">→</span><span>יעד: ${Number(state.weightGoal.goal_weight).toFixed(1)} ק״ג</span></span>`
+        ${hasWeightGoal(state.weightGoal)
+          ? `<span style="display:inline-flex;gap:4px;align-items:center;direction:ltr;unicode-bidi:isolate"><span>התחלתי: ${weightGoalValues.start.toFixed(1)}</span><span aria-hidden="true">→</span><span>יעד: ${weightGoalValues.target.toFixed(1)} ק״ג</span></span>`
           : "לא הוגדר יעד משקל עדיין"}
       </div>
       <button onclick="showGoalModal()" style="width:100%;padding:10px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-size:13px;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">
-        <i data-lucide="pencil" style="width:15px;height:15px"></i> ${state.weightGoal?.start_weight && state.weightGoal?.goal_weight ? "ערוך יעד משקל" : "הוסף יעד משקל"}
+        <i data-lucide="pencil" style="width:15px;height:15px"></i> ${hasWeightGoal(state.weightGoal) ? "ערוך יעד משקל" : "הוסף יעד משקל"}
       </button>
     </div>
 
@@ -2297,6 +2585,7 @@ if (failed.length) {
   console.error("Some data failed to load:", failed);
   showToast("חלק מהנתונים לא נטענו ⚠️");
 }
+  runRuntimeDataAudit();
   if (loader) {
     loader.style.opacity = "0";
     setTimeout(() => loader.remove(), 350);
@@ -2307,9 +2596,10 @@ if (failed.length) {
   <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js')
+      navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
         .then(registration => {
           console.log('ServiceWorker registration successful:', registration.scope);
+          registration.update().catch(() => {});
         })
         .catch(err => {
           console.log('ServiceWorker registration failed:', err);
