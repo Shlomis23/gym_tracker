@@ -2545,6 +2545,7 @@ function openExercisePicker(workoutId) {
   state.libraryPickerTargetWorkoutId = workoutId;
   openWorkoutExtraPicker();
 }
+window.openExercisePicker = openExercisePicker;
 
 function bindExtraItems(container) {
   container.querySelectorAll(".ex-pick-item").forEach(item => {
