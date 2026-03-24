@@ -65,6 +65,7 @@
 <script src="./library.js"></script>
 <script src="./dashboard.js"></script>
 <script src="./api.js"></script>
+<script src="./workouts-domain.js"></script>
 <script src="./workouts-data.js"></script>
 <script src="./weight-data.js"></script>
 <script>
@@ -467,13 +468,7 @@ async function loadSettingsFromSupabase() {
 async function saveWorkoutsToSupabase() {
   try {
     const userId = requireUserIdOrThrow("saveWorkoutsToSupabase");
-    const rows = state.workouts.map((w, i) => ({
-      user_id: userId,
-      plan_id: w.id,
-      name: w.name,
-      exercises: w.exercises,
-      sort_order: i
-    }));
+    const rows = buildWorkoutPlanRows(state.workouts, userId);
     if (!rows.length) {
       if (!ALLOW_EMPTY_WORKOUT_SYNC) {
         setSyncError("נחסמה מחיקה גורפת של תוכניות בענן (ALLOW_EMPTY_WORKOUT_SYNC=false)");
@@ -542,16 +537,7 @@ async function loadWorkoutsFromSupabase() {
     dlog("[loadWorkoutsFromSupabase] parsed rows:", rowsArray.length, "fallbackReason:", fallbackReason || "none");
     if (rowsArray.length) {
       // תמיד החלף את כל ה-state — אל תצרף
-      const normalized = rowsArray.map((r, idx) => {
-        const id = r.plan_id ?? r.id ?? r.workout_id ?? null;
-        if (!id) return null;
-        const rawName = (r.name ?? r.workout_name ?? "").toString().trim();
-        return {
-          id: String(id),
-          name: rawName || `אימון ${idx + 1}`,
-          exercises: Array.isArray(r.exercises) ? r.exercises : []
-        };
-      }).filter(Boolean);
+      const normalized = mapWorkoutPlansFromRows(rowsArray);
 
       if (normalized.length) {
         state.workouts = normalized;
@@ -576,8 +562,6 @@ async function loadWorkoutsFromSupabase() {
     setDataSource("workouts", "local");
   }
 }
-function getWorkout(id) { return state.workouts.find(w => w.id === id); }
-function getLastSession(id) { return [...state.sessions].reverse().find(s => s.workoutId === id) || null; }
 
 
 function getCategoryIcon(catId) {
@@ -589,14 +573,6 @@ function getCategoryLabel(catId) {
 function getExCategory(w, name) {
   const ex = w.exercises.find(e => (typeof e==="string"?e:e.name) === name);
   return ex?.category || null;
-}
-
-function getNextWorkout() {
-  if (!state.sessions.length) return state.workouts[0] || null;
-  const last = state.sessions[state.sessions.length - 1];
-  const lastIdx = state.workouts.findIndex(w => w.id === last.workoutId);
-  if (lastIdx === -1) return state.workouts[0] || null;
-  return state.workouts[(lastIdx + 1) % state.workouts.length];
 }
 
 function saveInProgress() {
@@ -1994,13 +1970,13 @@ function saveWorkoutName(id) {
 function addWorkout() {
   const inp=document.getElementById("new-workout-name"); const name=sanitizeText(inp?inp.value:"", 80);
   if(!name) return;
-  state.workouts.push({id:"w_"+Date.now(), name, exercises:[]});
-  state.manageOpenId=state.workouts[state.workouts.length-1].id;
+  const newWorkout = addWorkoutToState(name);
+  state.manageOpenId=newWorkout.id;
   state.editingNameId=null; saveWorkouts(); render();
 }
 function deleteWorkout(id) {
   if(!confirm("למחוק את האימון לצמיתות?")) return;
-  state.workouts=state.workouts.filter(w=>w.id!==id);
+  removeWorkoutFromState(id);
   if(state.manageOpenId===id) state.manageOpenId=null;
   saveWorkouts(); render();
 }
@@ -2011,8 +1987,7 @@ function addExercise(workoutId) {
   const catEl=document.getElementById("new-cat-"+workoutId);
   const category=catEl?catEl.value||null:null;
   if(!val) return; const w=getWorkout(workoutId);
-  if(w){
-    w.exercises.push({name:val, rest, category});
+  if(addExerciseToWorkoutState(w, val, rest, category)){
     saveWorkouts(); render();
     addToLibrary(val, category);
   }
@@ -2022,28 +1997,21 @@ function removeExercise(workoutId,i) {
   if(!w) return;
   if(w.exercises.length === 1) {
     if(confirm("אם תמחק תרגיל זה, האימון יישאר ריק. האם למחוק את האימון לגמרי?")) {
-      state.workouts = state.workouts.filter(x => x.id !== workoutId);
+      removeWorkoutFromState(workoutId);
       if(state.manageOpenId === workoutId) state.manageOpenId = null;
       saveWorkouts(); render();
     }
     return;
   }
-  w.exercises.splice(i,1); saveWorkouts(); render();
+  removeExerciseFromWorkoutState(w, i); saveWorkouts(); render();
 }
 function updateExRest(workoutId,i,val) {
   const w=getWorkout(workoutId);
-  if(w && w.exercises[i]){ w.exercises[i].rest=parseInt(val)||60; saveWorkouts(); }
+  if(updateExerciseRestInWorkoutState(w, i, val)){ saveWorkouts(); }
 }
 function updateExField(workoutId,i,field,val) {
   const w=getWorkout(workoutId);
-  if(!w || !w.exercises[i]) return;
-  if(field==="rest") w.exercises[i].rest=parseInt(val)||60;
-  else if(field==="name") {
-    const clean = sanitizeText(val, 80);
-    if(clean) w.exercises[i].name=clean;
-  }
-  else if(field==="category") w.exercises[i].category=val||null;
-  saveWorkouts();
+  if(updateExerciseFieldInWorkoutState(w, i, field, val)) saveWorkouts();
 }
 
 function exportCSV() {
