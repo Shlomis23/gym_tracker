@@ -68,6 +68,7 @@
 // ── Supabase ─────────────────────────────────────────────────────
 const APP_BUILD = "2026-03-23-audit-2";
 const DEBUG = localStorage.getItem("gym_debug") === "1";
+const ALLOW_EMPTY_WORKOUT_SYNC = false;
 const dlog = (...args) => { if (DEBUG) console.debug(...args); };
 const dinfo = (...args) => { if (DEBUG) console.info(...args); };
 dinfo("[GymBuddy] build:", APP_BUILD, "supabase:", SUPABASE_URL);
@@ -720,7 +721,6 @@ async function loadSettingsFromSupabase() {
 async function saveWorkoutsToSupabase() {
   try {
     const userId = requireUserIdOrThrow("saveWorkoutsToSupabase");
-    await sbDelete("workout_plans?id=neq.00000000-0000-0000-0000-000000000000");
     const rows = state.workouts.map((w, i) => ({
       user_id: userId,
       plan_id: w.id,
@@ -728,7 +728,29 @@ async function saveWorkoutsToSupabase() {
       exercises: w.exercises,
       sort_order: i
     }));
-    if (rows.length) await sbPost("workout_plans", rows);
+    if (!rows.length) {
+      if (!ALLOW_EMPTY_WORKOUT_SYNC) {
+        setSyncError("נחסמה מחיקה גורפת של תוכניות בענן (ALLOW_EMPTY_WORKOUT_SYNC=false)");
+        showToast("המחיקה בענן נחסמה להגנה על הנתונים ⚠️");
+        return;
+      }
+    } else {
+      await sbPost("workout_plans?on_conflict=plan_id", rows);
+    }
+
+    const remoteRows = await sbGet("workout_plans?select=plan_id,user_id");
+    const localIds = new Set(rows.map(r => String(r.plan_id)));
+    const staleRemoteIds = (remoteRows || [])
+      .filter(r => String(r.user_id || "") === String(userId))
+      .map(r => String(r.plan_id))
+      .filter(id => id && !localIds.has(id));
+
+    if (staleRemoteIds.length) {
+      console.warn("[saveWorkoutsToSupabase] deleting stale workout plans:", staleRemoteIds);
+      for (const staleId of staleRemoteIds) {
+        await sbDelete("workout_plans?user_id=eq." + encodeURIComponent(userId) + "&plan_id=eq." + encodeURIComponent(staleId));
+      }
+    }
     showToast("התוכנית נשמרה ✓");
     clearSyncError();
   } catch(e) { console.error("Workout plan save failed:", e); setSyncError("שמירת תוכנית לענן נכשלה"); showToast("שגיאה בשמירת התוכנית ⚠️"); }
