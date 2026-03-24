@@ -1,14 +1,29 @@
-const CACHE_NAME = 'gymbuddy-cache-v4';
+const CACHE_NAME = 'gymbuddy-cache-v5';
 
-const urlsToCache = [
+const APP_SHELL_URLS = [
+  './',
+  './index.html',
+  './styles.css',
   './manifest.json',
-  './index.html'
+  './config.js',
+  './state.js',
+  './utils.js',
+  './library.js',
+  './dashboard.js',
+  './api.js',
+  './sync-status.js',
+  './workouts-domain.js',
+  './workouts-data.js',
+  './weight-domain.js',
+  './weight-data.js',
+  './icon-192x192.png',
+  './icon-512x512.png'
 ];
 
 self.addEventListener('install', event => {
   self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache))
+    caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL_URLS))
   );
 });
 
@@ -21,6 +36,7 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
+  if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
 
   // בקשות ל-Supabase — תמיד מהרשת, אף פעם לא מהcache
@@ -30,23 +46,37 @@ self.addEventListener('fetch', event => {
   }
 
   const isSameOrigin = url.origin === self.location.origin;
-  const isAppShellAsset = isSameOrigin && (
-    url.pathname.endsWith('/') ||
-    url.pathname.endsWith('index.html') ||
-    url.pathname.endsWith('.js') ||
-    url.pathname.endsWith('.css')
-  );
+  const isNavigation = event.request.mode === 'navigate';
+  const isAppShellAsset = isSameOrigin && APP_SHELL_URLS.some(path => url.pathname.endsWith(path.replace('./', '/')));
 
-  // App shell assets — Network First (עדיפות לגרסה עדכנית)
-  if (isAppShellAsset) {
+  if (isNavigation) {
     event.respondWith(
       fetch(event.request)
         .then(response => {
           const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+          caches.open(CACHE_NAME).then(cache => cache.put('./index.html', clone));
           return response;
         })
-        .catch(() => caches.match(event.request))
+        .catch(async () => {
+          const cached = await caches.match(event.request, { ignoreSearch: true });
+          if (cached) return cached;
+          return caches.match('./index.html');
+        })
+    );
+    return;
+  }
+
+  // App shell assets — Cache First (offline-first boot reliability)
+  if (isAppShellAsset) {
+    event.respondWith(
+      caches.match(event.request, { ignoreSearch: true }).then(cached => {
+        if (cached) return cached;
+        return fetch(event.request).then(response => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+          return response;
+        });
+      })
     );
     return;
   }
