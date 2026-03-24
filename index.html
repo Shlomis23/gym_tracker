@@ -910,7 +910,10 @@ function render() {
   else if (state.screen === "home") screenHtml = state.workoutId ? renderWorkout() : renderChoose();
   else if (state.screen === "history") screenHtml = renderHistory();
   else if (state.screen === "library") screenHtml = renderLibraryScreen();
-  else screenHtml = renderManage();
+  else {
+    dlog("[library-add] render() -> manage screen");
+    screenHtml = renderManage();
+  }
   el.innerHTML = renderSyncNotice() + screenHtml;
   if (window.lucide) lucide.createIcons();
   bindDelButtons();
@@ -2473,8 +2476,8 @@ function showExerciseGraph(exName) {
 }
 
 
-function openWorkoutExtraPicker() {
-  state.libraryPickerTargetWorkoutId = null;
+function openWorkoutExtraPicker(resetTarget = true) {
+  if (resetTarget) state.libraryPickerTargetWorkoutId = null;
   document.getElementById("ex-picker-modal")?.remove();
   const overlay = document.createElement("div");
   overlay.id = "ex-picker-modal";
@@ -2542,8 +2545,10 @@ function openWorkoutExtraPicker() {
 }
 
 function openExercisePicker(workoutId) {
+  dlog("[library-add] openExercisePicker called with workoutId:", workoutId);
   state.libraryPickerTargetWorkoutId = workoutId;
-  openWorkoutExtraPicker();
+  dlog("[library-add] stored target workout id:", state.libraryPickerTargetWorkoutId);
+  openWorkoutExtraPicker(false);
 }
 window.openExercisePicker = openExercisePicker;
 
@@ -2552,17 +2557,25 @@ function bindExtraItems(container) {
     item.addEventListener("click", () => {
       const name = item.dataset.name;
       const category = item.dataset.cat || null;
+      dlog("[library-add] exercise selected:", { name, category, itemDataset: { ...item.dataset } });
       document.getElementById("ex-picker-modal")?.remove();
       const targetWorkoutId = state.libraryPickerTargetWorkoutId || null;
+      dlog("[library-add] target workout id at selection:", targetWorkoutId);
       if (targetWorkoutId) {
         const workout = getWorkout(targetWorkoutId);
+        dlog("[library-add] workout found before mutation:", workout ? { id: workout.id, name: workout.name, exercisesCount: (workout.exercises || []).length } : null);
         if (workout) {
+          const beforeLen = workout.exercises.length;
           const exists = workout.exercises.some(ex => (typeof ex === "string" ? ex : ex.name) === name);
           if (!exists) workout.exercises.push({ name, rest: 60, category });
+          const afterLen = workout.exercises.length;
+          dlog("[library-add] exercises length before/after:", { beforeLen, afterLen, exists });
           saveWorkouts();
           state.manageOpenId = targetWorkoutId;
         }
         state.libraryPickerTargetWorkoutId = null;
+        dlog("[library-add] final workouts snapshot before render:", state.workouts.map(w => ({ id: w.id, name: w.name, exercisesCount: (w.exercises || []).length })));
+        dlog("[library-add] calling render after insertion path");
         render();
         return;
       }
