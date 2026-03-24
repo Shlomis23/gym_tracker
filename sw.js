@@ -1,7 +1,8 @@
-const CACHE_NAME = 'my-app-cache-v3';
+const CACHE_NAME = 'gymbuddy-cache-v4';
 
 const urlsToCache = [
-  './manifest.json'
+  './manifest.json',
+  './index.html'
 ];
 
 self.addEventListener('install', event => {
@@ -28,8 +29,16 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // index.html — Network First (גרסה עדכנית תמיד, fallback לcache אם אין רשת)
-  if (url.pathname.endsWith('/') || url.pathname.endsWith('index.html')) {
+  const isSameOrigin = url.origin === self.location.origin;
+  const isAppShellAsset = isSameOrigin && (
+    url.pathname.endsWith('/') ||
+    url.pathname.endsWith('index.html') ||
+    url.pathname.endsWith('.js') ||
+    url.pathname.endsWith('.css')
+  );
+
+  // App shell assets — Network First (עדיפות לגרסה עדכנית)
+  if (isAppShellAsset) {
     event.respondWith(
       fetch(event.request)
         .then(response => {
@@ -42,8 +51,18 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // שאר הקבצים — Cache First
+  // שאר הקבצים — Cache First + fill
   event.respondWith(
-    caches.match(event.request).then(response => response || fetch(event.request))
+    caches.match(event.request).then(response => {
+      if (response) return response;
+      return fetch(event.request).then(networkResponse => {
+        if (!isSameOrigin || !networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
+          return networkResponse;
+        }
+        const clone = networkResponse.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+        return networkResponse;
+      });
+    })
   );
 });

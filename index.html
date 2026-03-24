@@ -2562,9 +2562,10 @@ if (failed.length) {
   <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js')
+      navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
         .then(registration => {
           console.log('ServiceWorker registration successful:', registration.scope);
+          registration.update().catch(() => {});
         })
         .catch(err => {
           console.log('ServiceWorker registration failed:', err);
