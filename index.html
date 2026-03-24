@@ -2474,6 +2474,7 @@ function showExerciseGraph(exName) {
 
 
 function openWorkoutExtraPicker() {
+  state.libraryPickerTargetWorkoutId = null;
   document.getElementById("ex-picker-modal")?.remove();
   const overlay = document.createElement("div");
   overlay.id = "ex-picker-modal";
@@ -2540,12 +2541,30 @@ function openWorkoutExtraPicker() {
   bindExtraItems(sheet.querySelector("#ex-extra-list"));
 }
 
+function openExercisePicker(workoutId) {
+  state.libraryPickerTargetWorkoutId = workoutId;
+  openWorkoutExtraPicker();
+}
+
 function bindExtraItems(container) {
   container.querySelectorAll(".ex-pick-item").forEach(item => {
     item.addEventListener("click", () => {
       const name = item.dataset.name;
       const category = item.dataset.cat || null;
       document.getElementById("ex-picker-modal")?.remove();
+      const targetWorkoutId = state.libraryPickerTargetWorkoutId || null;
+      if (targetWorkoutId) {
+        const workout = getWorkout(targetWorkoutId);
+        if (workout) {
+          const exists = workout.exercises.some(ex => (typeof ex === "string" ? ex : ex.name) === name);
+          if (!exists) workout.exercises.push({ name, rest: 60, category });
+          saveWorkouts();
+          state.manageOpenId = targetWorkoutId;
+        }
+        state.libraryPickerTargetWorkoutId = null;
+        render();
+        return;
+      }
       if (!state.workoutExtras) state.workoutExtras = [];
       if (!state.workoutExtras.includes(name)) state.workoutExtras.push(name);
       if (!state.exercises[name]) {
