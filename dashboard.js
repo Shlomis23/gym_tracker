@@ -48,7 +48,12 @@ function getThisWeekCount() {
 function getPRs() {
   const prs = {};
   state.sessions.forEach(session => {
-    Object.entries(session.exercises||{}).forEach(([name, sets]) => {
+    const sessionExercises = (session && typeof session.exercises === "object" && session.exercises) ? session.exercises : {};
+    Object.entries(sessionExercises).forEach(([name, sets]) => {
+      if (!Array.isArray(sets)) {
+        console.warn("[getPRs] Invalid sets shape for exercise:", name, sets);
+        return;
+      }
       sets.forEach(s => {
         if (s.weight > (prs[name]?.weight || 0)) {
           // חפש קטגוריה — קודם בתוכניות הפעילות, אחר כך במאגר

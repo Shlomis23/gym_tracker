@@ -67,7 +67,10 @@
 <script>
 // ── Supabase ─────────────────────────────────────────────────────
 const APP_BUILD = "2026-03-23-audit-2";
-console.info("[GymBuddy] build:", APP_BUILD, "supabase:", SUPABASE_URL);
+const DEBUG = localStorage.getItem("gym_debug") === "1";
+const dlog = (...args) => { if (DEBUG) console.debug(...args); };
+const dinfo = (...args) => { if (DEBUG) console.info(...args); };
+dinfo("[GymBuddy] build:", APP_BUILD, "supabase:", SUPABASE_URL);
 window.__GYMBUDDY_BUILD__ = APP_BUILD;
 const STORAGE_USER_ID = "gym_user_id_v1";
 
@@ -82,6 +85,33 @@ function ensureUserId() {
   state.userId = generated;
   localStorage.setItem(STORAGE_USER_ID, generated);
   return generated;
+}
+
+function setDataSource(key, source) {
+  if (!state.syncStatus) return;
+  state.syncStatus.dataSource[key] = source;
+}
+function setSyncError(message) {
+  if (!state.syncStatus) return;
+  state.syncStatus.lastError = message;
+}
+function clearSyncError() {
+  if (!state.syncStatus) return;
+  state.syncStatus.lastError = null;
+}
+function renderSyncNotice() {
+  const status = state.syncStatus || {};
+  const localSources = Object.entries(status.dataSource || {})
+    .filter(([, src]) => src === "local")
+    .map(([k]) => k);
+  const fallbackLine = localSources.length
+    ? `<div style="font-size:11px;color:var(--orange)">מציג נתונים מקומיים: ${localSources.join(", ")}</div>`
+    : "";
+  const errorLine = status.lastError
+    ? `<div style="font-size:11px;color:var(--red);margin-top:${fallbackLine ? "4px" : "0"}">${escapeHtml(status.lastError)}</div>`
+    : "";
+  if (!fallbackLine && !errorLine) return "";
+  return `<div style="margin:10px 14px 0;padding:8px 10px;border-radius:10px;background:var(--surface);border:1px solid var(--border-med)">${fallbackLine}${errorLine}</div>`;
 }
 
 async function sbGet(path) {
@@ -125,6 +155,9 @@ async function saveSessionToSupabase(session) {
       date: session.date,
       note: session.note || ""
     });
+    if (!Array.isArray(rows) || !rows.length || !rows[0]?.id) {
+      throw new Error("Invalid workout_sessions write response");
+    }
     const sessionRow = rows[0];
     const sets = [];
     Object.entries(session.exercises || {}).forEach(([exName, exSets]) => {
@@ -135,8 +168,11 @@ async function saveSessionToSupabase(session) {
       });
     });
     if (sets.length) await sbPost("session_exercises", sets);
+    clearSyncError();
   } catch(e) {
     console.error("Supabase save failed:", e);
+    setSyncError("האימון נשמר מקומית בלבד (סנכרון לענן נכשל)");
+    throw e;
   }
 }
 
@@ -144,17 +180,17 @@ async function loadSessionsFromSupabase() {
   try {
     const sessionQuery = "workout_sessions?select=*,sets:session_exercises(*),session_exercises(*)&order=date.asc";
     const rowsWithEmbed = await sbGet(sessionQuery);
-    console.debug("[loadSessionsFromSupabase] workout_sessions (embedded sets) raw response:", rowsWithEmbed);
+    dlog("[loadSessionsFromSupabase] workout_sessions (embedded sets) raw response:", rowsWithEmbed);
 
     const rows = Array.isArray(rowsWithEmbed) ? rowsWithEmbed : [];
     let exerciseRows = [];
     try {
       exerciseRows = await sbGet("session_exercises?select=*");
     } catch (exerciseLoadErr) {
-      console.warn("Supabase session_exercises standalone fetch failed, using embedded relation only:", exerciseLoadErr);
+      if (DEBUG) console.warn("Supabase session_exercises standalone fetch failed, using embedded relation only:", exerciseLoadErr);
     }
-    console.debug("[loadSessionsFromSupabase] workout_sessions raw response:", rows);
-    console.debug("[loadSessionsFromSupabase] session_exercises raw response:", exerciseRows);
+    dlog("[loadSessionsFromSupabase] workout_sessions raw response:", rows);
+    dlog("[loadSessionsFromSupabase] session_exercises raw response:", exerciseRows);
 
     const setsBySessionId = new Map();
     const getSetSessionKey = s => String(
@@ -185,7 +221,7 @@ async function loadSessionsFromSupabase() {
     }
 
     const hasUserIdFilter = /user_id=eq\./.test(sessionQuery);
-    console.debug("[loadSessionsFromSupabase] user_id filter in query:", hasUserIdFilter);
+    dlog("[loadSessionsFromSupabase] user_id filter in query:", hasUserIdFilter);
 
     const normalizeSet = s => ({
       num: Number(s.set_number ?? s.set_no ?? s.set_index ?? s.num ?? 0),
@@ -219,14 +255,22 @@ async function loadSessionsFromSupabase() {
       Object.values(exercises).forEach(arr => arr.sort((a,b) => a.num - b.num));
       return { id: row.local_id || row.id, workoutId: row.workout_id, workoutName: row.workout_name || "", date: row.date, exercises, note: row.note || "" };
     });
+    const sessionsWithoutExercises = state.sessions.filter(s => !Object.keys(s.exercises || {}).length).length;
+    if (state.sessions.length && sessionsWithoutExercises === state.sessions.length) {
+      console.warn("[loadSessionsFromSupabase] Sessions loaded but no exercise rows were mapped.");
+    }
     localStorage.setItem(STORAGE_SESSIONS, JSON.stringify(state.sessions));
+    setDataSource("sessions", "supabase");
   } catch(e) {
     console.error("Supabase load failed, using localStorage:", e);
     try { state.sessions = JSON.parse(localStorage.getItem(STORAGE_SESSIONS) || "[]"); } catch {}
+    setDataSource("sessions", "local");
+    setSyncError("טעינת אימונים מהענן נכשלה — מוצגים נתונים מקומיים");
   }
 }
 
 async function runRuntimeDataAudit() {
+  if (!DEBUG) return;
   try {
     const [sessionsWithEmbed, standaloneSets, goals] = await Promise.all([
       sbGet("workout_sessions?select=*,sets:session_exercises(*)&order=date.asc"),
@@ -290,7 +334,7 @@ async function deleteSessionFromSupabase(localId) {
 async function loadWeightData() {
   try {
     const logs = await sbGet("body_weight_logs?select=*&order=measured_at.asc");
-    console.debug("[loadWeightData] body_weight_logs raw response:", logs);
+    dlog("[loadWeightData] body_weight_logs raw response:", logs);
     const knownUserId = (logs || []).find(l => l.user_id)?.user_id;
     if (knownUserId) {
       state.userId = knownUserId;
@@ -300,7 +344,7 @@ async function loadWeightData() {
     }
     state.weightLogs = (logs || []).map(mapWeightLog);
     const goalsRaw = await sbGet("weight_goal?select=*&order=updated_at.desc&limit=1");
-    console.debug("[loadWeightData] weight_goal raw response:", goalsRaw);
+    dlog("[loadWeightData] weight_goal raw response:", goalsRaw);
     const goalRows = Array.isArray(goalsRaw) ? goalsRaw : (goalsRaw ? [goalsRaw] : []);
     const goalUserId = goalRows.find(g => g.user_id)?.user_id;
     if (!state.userId && goalUserId) {
@@ -314,7 +358,9 @@ async function loadWeightData() {
     }));
     const validGoal = normalizedGoals.find(g => getWeightGoalValues(g).hasGoal);
     if (validGoal) state.weightGoal = validGoal;
-  } catch(e) { console.error("Weight load failed:", e); }
+    else if (goalRows.length) console.warn("[loadWeightData] weight_goal row exists but could not be parsed:", goalRows[0]);
+    setDataSource("weight", "supabase");
+  } catch(e) { console.error("Weight load failed:", e); setDataSource("weight", "local"); setSyncError("טעינת נתוני משקל מהענן נכשלה"); }
 }
 
 function mapWeightLog(log) {
@@ -423,11 +469,13 @@ async function saveWeightLog(weight, measuredAtIso, note) {
     });
     if (!r.ok) throw new Error(await r.text());
     const rows = await r.json();
+    if (!Array.isArray(rows) || !rows.length) throw new Error("Invalid body_weight_logs write response");
     const saved = mapWeightLog(rows[0]);
     const idx = state.weightLogs.findIndex(l => l.id === saved.id);
     if (idx >= 0) state.weightLogs[idx] = saved;
     else state.weightLogs.push(saved);
     state.weightLogs = getWeightLogsAsc();
+    clearSyncError();
     showToast("המשקל נשמר ✓");
     return saved;
   } catch(e) { console.error("Weight save failed:", e); showToast("שגיאה בשמירת משקל ⚠️"); throw e; }
@@ -459,7 +507,9 @@ async function saveWeightGoal(startWeight, goalWeight) {
     const userId = ensureUserId();
     await sbDelete("weight_goal?user_id=eq." + encodeURIComponent(userId));
     const row = await sbPost("weight_goal", { user_id: userId, start_weight: startWeight, goal_weight: goalWeight });
+    if (!Array.isArray(row) || !row.length) throw new Error("Invalid weight_goal write response");
     state.weightGoal = row[0];
+    clearSyncError();
   } catch(e) { console.error("Weight goal save failed:", e); showToast("שגיאה בשמירת יעד"); throw e; }
 }
 
@@ -636,7 +686,8 @@ async function saveSettingsToSupabase() {
       weekly_goal: state.settings.weeklyGoal,
       goal_history: state.settings.goalHistory || []
     });
-  } catch(e) { console.error("Settings save failed:", e); }
+    clearSyncError();
+  } catch(e) { console.error("Settings save failed:", e); setSyncError("שמירת הגדרות לענן נכשלה"); showToast("שמירת הגדרות לענן נכשלה ⚠️"); }
 }
 
 async function loadSettingsFromSupabase() {
@@ -648,7 +699,11 @@ async function loadSettingsFromSupabase() {
       state.settings.goalHistory = r.goal_history || [];
       localStorage.setItem(STORAGE_SETTINGS, JSON.stringify(state.settings));
     }
-  } catch(e) { console.error("Settings load failed:", e); }
+    setDataSource("settings", "supabase");
+  } catch(e) { console.error("Settings load failed:", e); setSyncError("טעינת הגדרות מהענן נכשלה"); }
+  if ((state.syncStatus?.dataSource?.settings) !== "supabase") {
+    setDataSource("settings", "local");
+  }
 }
 
 
@@ -663,7 +718,8 @@ async function saveWorkoutsToSupabase() {
     }));
     if (rows.length) await sbPost("workout_plans", rows);
     showToast("התוכנית נשמרה ✓");
-  } catch(e) { console.error("Workout plan save failed:", e); showToast("שגיאה בשמירת התוכנית ⚠️"); }
+    clearSyncError();
+  } catch(e) { console.error("Workout plan save failed:", e); setSyncError("שמירת תוכנית לענן נכשלה"); showToast("שגיאה בשמירת התוכנית ⚠️"); }
 }
 
 async function loadWorkoutsFromSupabase() {
@@ -678,7 +734,11 @@ async function loadWorkoutsFromSupabase() {
       state.workouts = [];
       localStorage.removeItem(STORAGE_WORKOUTS);
     }
-  } catch(e) { console.error("Workout plan load failed:", e); }
+    setDataSource("workouts", "supabase");
+  } catch(e) { console.error("Workout plan load failed:", e); setSyncError("טעינת תוכנית מהענן נכשלה"); }
+  if ((state.syncStatus?.dataSource?.workouts) !== "supabase") {
+    setDataSource("workouts", "local");
+  }
 }
 function getWorkout(id) { return state.workouts.find(w => w.id === id); }
 function getLastSession(id) { return [...state.sessions].reverse().find(s => s.workoutId === id) || null; }
@@ -761,11 +821,13 @@ function navigate(screen) {
 
 function render() {
   const el = document.getElementById("main-content");
-  if (state.screen === "dashboard") el.innerHTML = renderDashboard();
-  else if (state.screen === "home") el.innerHTML = state.workoutId ? renderWorkout() : renderChoose();
-  else if (state.screen === "history") el.innerHTML = renderHistory();
-  else if (state.screen === "library") el.innerHTML = renderLibraryScreen();
-  else el.innerHTML = renderManage();
+  let screenHtml = "";
+  if (state.screen === "dashboard") screenHtml = renderDashboard();
+  else if (state.screen === "home") screenHtml = state.workoutId ? renderWorkout() : renderChoose();
+  else if (state.screen === "history") screenHtml = renderHistory();
+  else if (state.screen === "library") screenHtml = renderLibraryScreen();
+  else screenHtml = renderManage();
+  el.innerHTML = renderSyncNotice() + screenHtml;
   if (window.lucide) lucide.createIcons();
   bindDelButtons();
   bindDragDrop();
@@ -1076,7 +1138,8 @@ function finishWorkout() {
     saveSessionToSupabase(session).then(() => {
       showToast("נשמר ✓");
     }).catch(() => {
-      showToast("שגיאה בשמירה — נסה שוב ⚠️");
+      showToast("האימון נשמר מקומית בלבד — סנכרון לענן נכשל ⚠️");
+      render();
     });
     haptic("success");
     navigate("dashboard");
