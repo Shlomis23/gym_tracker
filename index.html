@@ -14,6 +14,7 @@
 <meta name="theme-color" content="#000000">
 
 <link rel="apple-touch-icon" href="icon-192x192.png">
+<link rel="icon" type="image/png" href="icon-192x192.png">
 </head>
 <body>
 <div id="app-loader" style="position:fixed;inset:0;background:#ffffff;z-index:9999;display:flex;align-items:center;justify-content:center;transition:opacity 0.35s ease">
@@ -63,27 +64,38 @@
 <script src="./utils.js"></script>
 <script src="./library.js"></script>
 <script src="./dashboard.js"></script>
+<script src="./api.js"></script>
+<script src="./sync-status.js"></script>
+<script src="./workouts-domain.js"></script>
+<script src="./workouts-data.js"></script>
+<script src="./weight-domain.js"></script>
+<script src="./weight-data.js"></script>
 <script>
 // ── Supabase ─────────────────────────────────────────────────────
-async function sbGet(path) {
-  const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, { headers: SB_HEADERS });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
+const ALLOW_EMPTY_WORKOUT_SYNC = false;
+const STORAGE_USER_ID = "gym_user_id_v1";
+
+function ensureUserId() {
+  if (state.userId) return state.userId;
+  const saved = localStorage.getItem(STORAGE_USER_ID);
+  if (saved) {
+    state.userId = saved;
+    return saved;
+  }
+  const generated = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ("uid-" + Date.now());
+  state.userId = generated;
+  localStorage.setItem(STORAGE_USER_ID, generated);
+  return generated;
 }
-async function sbPost(path, body) {
-  const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, { method:"POST", headers: SB_HEADERS, body: JSON.stringify(body) });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
+
+function requireUserIdOrThrow(contextLabel) {
+  const userId = ensureUserId();
+  if (!userId || typeof userId !== "string" || !userId.trim()) {
+    throw new Error(`${contextLabel}: missing user_id`);
+  }
+  return userId;
 }
-async function sbPatch(path, body) {
-  const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, { method:"PATCH", headers: SB_HEADERS, body: JSON.stringify(body) });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
-}
-async function sbDelete(path) {
-  const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, { method:"DELETE", headers: SB_HEADERS });
-  if (!r.ok) throw new Error(await r.text());
-}
+
 // ─────────────────────────────────────────────────────────────────
 
 function getGoalForWeek(weekStartIso) {
@@ -97,85 +109,6 @@ try { state.sessions = JSON.parse(localStorage.getItem(STORAGE_SESSIONS) || "[]"
 
 function saveSessions() { localStorage.setItem(STORAGE_SESSIONS, JSON.stringify(state.sessions)); }
 
-async function saveSessionToSupabase(session) {
-  try {
-    const rows = await sbPost("workout_sessions", {
-      local_id: session.id,
-      workout_id: session.workoutId,
-      workout_name: getWorkout(session.workoutId)?.name || session.workoutId,
-      date: session.date,
-      note: session.note || ""
-    });
-    const sessionRow = rows[0];
-    const sets = [];
-    Object.entries(session.exercises || {}).forEach(([exName, exSets]) => {
-      exSets.forEach(s => {
-        if (s.weight > 0 || s.reps > 0) {
-          sets.push({ session_id: sessionRow.id, exercise_name: exName, set_number: s.num, weight: s.weight, reps: s.reps, failed: !!s.failed });
-        }
-      });
-    });
-    if (sets.length) await sbPost("session_exercises", sets);
-  } catch(e) {
-    console.error("Supabase save failed:", e);
-  }
-}
-
-async function loadSessionsFromSupabase() {
-  try {
-    const rows = await sbGet("workout_sessions?select=*,sets:session_exercises(*)&order=date.asc");
-    state.sessions = rows.map(row => {
-      const exercises = {};
-      (row.sets || []).forEach(s => {
-        if (!exercises[s.exercise_name]) exercises[s.exercise_name] = [];
-        exercises[s.exercise_name].push({ num: s.set_number, weight: s.weight, reps: s.reps, failed: s.failed });
-      });
-      Object.values(exercises).forEach(arr => arr.sort((a,b) => a.num - b.num));
-      return { id: row.local_id || row.id, workoutId: row.workout_id, workoutName: row.workout_name || "", date: row.date, exercises, note: row.note || "" };
-    });
-    localStorage.setItem(STORAGE_SESSIONS, JSON.stringify(state.sessions));
-  } catch(e) {
-    console.error("Supabase load failed, using localStorage:", e);
-    try { state.sessions = JSON.parse(localStorage.getItem(STORAGE_SESSIONS) || "[]"); } catch {}
-  }
-}
-
-async function deleteSessionFromSupabase(localId) {
-  try {
-    await sbDelete("workout_sessions?local_id=eq." + encodeURIComponent(localId));
-  } catch(e) {
-    console.error("Supabase delete failed:", e);
-  }
-}
-
-async function loadWeightData() {
-  try {
-    const logs = await sbGet("body_weight_logs?select=*&order=measured_at.asc");
-    state.weightLogs = (logs || []).map(mapWeightLog);
-    const goals = await sbGet("weight_goal?select=*&order=updated_at.desc&limit=1");
-    if (goals && goals.length) state.weightGoal = goals[0];
-  } catch(e) { console.error("Weight load failed:", e); }
-}
-
-function mapWeightLog(log) {
-  return {
-    id: log.id,
-    weight: Number(log.weight),
-    measured_at: log.measured_at || log.date || new Date().toISOString(),
-    measured_date: log.measured_date || (log.date ? log.date.slice(0, 10) : new Date().toISOString().slice(0,10)),
-    note: log.note || ""
-  };
-}
-
-function getWeightLogsAsc() {
-  return [...state.weightLogs]
-    .map(mapWeightLog)
-    .sort((a, b) => new Date(a.measured_at) - new Date(b.measured_at));
-}
-
-function formatWeightDate(log) {
-  return formatDate(log.measured_at || log.date);
-}
 
 function isoDateFromLocal(dateLike) {
   const dt = new Date(dateLike);
@@ -222,88 +155,6 @@ function readIsoDateFromSelector(container, prefix) {
   return `${year}-${String(month).padStart(2, "0")}-${String(normalizedDay).padStart(2, "0")}`;
 }
 
-async function saveWeightLog(weight, measuredAtIso, note) {
-  try {
-    const path = "body_weight_logs?on_conflict=measured_date";
-    const headers = { ...SB_HEADERS, Prefer: "return=representation,resolution=merge-duplicates" };
-    const payload = [{ weight, measured_at: measuredAtIso || new Date().toISOString(), note: note || "" }];
-    const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload)
-    });
-    if (!r.ok) throw new Error(await r.text());
-    const rows = await r.json();
-    const saved = mapWeightLog(rows[0]);
-    const idx = state.weightLogs.findIndex(l => l.id === saved.id);
-    if (idx >= 0) state.weightLogs[idx] = saved;
-    else state.weightLogs.push(saved);
-    state.weightLogs = getWeightLogsAsc();
-    showToast("המשקל נשמר ✓");
-    return saved;
-  } catch(e) { console.error("Weight save failed:", e); showToast("שגיאה בשמירת משקל ⚠️"); throw e; }
-}
-
-async function updateWeightLog(id, weight, measuredAtIso, note) {
-  try {
-    const rows = await sbPatch("body_weight_logs?id=eq." + encodeURIComponent(id), {
-      weight,
-      measured_at: measuredAtIso,
-      note: note || ""
-    });
-    if (!rows || !rows.length) throw new Error("No row returned after update");
-    const updated = mapWeightLog(rows[0]);
-    const idx = state.weightLogs.findIndex(l => l.id === id);
-    if (idx >= 0) state.weightLogs[idx] = updated;
-    state.weightLogs = getWeightLogsAsc();
-    showToast("השקילה עודכנה ✓");
-    return updated;
-  } catch(e) {
-    console.error("Weight update failed:", e);
-    showToast("שגיאה בעדכון שקילה ⚠️");
-    throw e;
-  }
-}
-
-async function saveWeightGoal(startWeight, goalWeight) {
-  try {
-    await sbDelete("weight_goal?id=neq.00000000-0000-0000-0000-000000000000");
-    const row = await sbPost("weight_goal", { start_weight: startWeight, goal_weight: goalWeight });
-    state.weightGoal = row[0];
-  } catch(e) { console.error("Weight goal save failed:", e); showToast("שגיאה בשמירת יעד"); throw e; }
-}
-
-async function deleteWeightLog(id) {
-  try {
-    await sbDelete("body_weight_logs?id=eq." + id);
-    state.weightLogs = state.weightLogs.filter(l => l.id !== id);
-    if (!state.weightLogs.length) {
-      state.weightGoal = { start_weight: null, goal_weight: null };
-    }
-    render();
-  } catch(e) { console.error("Weight delete failed:", e); showToast("שגיאה במחיקה"); }
-}
-
-function getLatestWeight() {
-  const logs = getWeightLogsAsc();
-  if (!logs.length) return null;
-  return logs[logs.length - 1];
-}
-
-function getPrevWeight() {
-  const logs = getWeightLogsAsc();
-  if (logs.length < 2) return null;
-  return logs[logs.length - 2];
-}
-
-function daysSinceWeight() {
-  const latest = getLatestWeight();
-  if (!latest) return null;
-  const today = new Date(); today.setHours(0,0,0,0);
-  const latestDay = new Date(latest.measured_at); latestDay.setHours(0,0,0,0);
-  return Math.round((today - latestDay) / (1000 * 60 * 60 * 24));
-}
-
 function buildInp(type, step, placeholder, fontSize) {
   const inp = document.createElement("input");
   inp.type = type; inp.step = step; inp.placeholder = placeholder;
@@ -321,6 +172,7 @@ function buildWrap(mb) {
 
 function showGoalModal() {
   const wGoal = state.weightGoal || {};
+  const selectedGoalMode = (typeof getWeightGoalMode === "function") ? getWeightGoalMode(wGoal) : "maintain";
   document.getElementById("goal-modal")?.remove();
 
   const overlay = document.createElement("div");
@@ -345,6 +197,14 @@ function showGoalModal() {
       <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">יעד משקל (ק״ג)</label>
       <input id="goal-target-inp" type="number" inputmode="decimal" step="0.1" placeholder="לדוגמה 78.0" value="${wGoal.goal_weight ?? ""}" style="width:100%;box-sizing:border-box;display:block;padding:11px 12px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;font-size:16px">
     </div>
+    <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:12px;margin-bottom:14px">
+      <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">מצב יעד</label>
+      <select id="goal-mode-inp" style="width:100%;box-sizing:border-box;display:block;padding:11px 12px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;font-size:16px">
+        <option value="cut" ${selectedGoalMode === "cut" ? "selected" : ""}>חיטוב</option>
+        <option value="maintain" ${selectedGoalMode === "maintain" ? "selected" : ""}>תחזוקה</option>
+        <option value="lean_bulk" ${selectedGoalMode === "lean_bulk" ? "selected" : ""}>מסה נקייה</option>
+      </select>
+    </div>
     <button id="goal-save-btn" class="btn-primary" style="margin-bottom:8px">שמור יעד</button>
     <button id="goal-cancel-btn" style="width:100%;padding:12px;background:var(--surface);border:1px solid var(--border-med);color:var(--text-secondary);border-radius:10px;font-family:inherit;cursor:pointer">ביטול</button>
   `;
@@ -357,12 +217,13 @@ function showGoalModal() {
   sheet.querySelector("#goal-save-btn").addEventListener("click", async () => {
     const startVal = parseFloat(sheet.querySelector("#goal-start-inp").value);
     const goalVal = parseFloat(sheet.querySelector("#goal-target-inp").value);
+    const goalModeVal = sheet.querySelector("#goal-mode-inp").value || "maintain";
     if (!Number.isFinite(startVal) || !Number.isFinite(goalVal) || startVal <= 0 || goalVal <= 0) {
       showToast("הזן משקל התחלתי ויעד תקינים");
       return;
     }
     try {
-      await saveWeightGoal(startVal, goalVal);
+      await saveWeightGoal(startVal, goalVal, goalModeVal);
       overlay.remove();
       render();
       showToast("היעד נשמר ✓");
@@ -446,7 +307,8 @@ async function saveSettingsToSupabase() {
       weekly_goal: state.settings.weeklyGoal,
       goal_history: state.settings.goalHistory || []
     });
-  } catch(e) { console.error("Settings save failed:", e); }
+    clearSyncError();
+  } catch(e) { console.error("Settings save failed:", e); setSyncError("שמירת הגדרות לענן נכשלה"); showToast("שמירת הגדרות לענן נכשלה ⚠️"); }
 }
 
 async function loadSettingsFromSupabase() {
@@ -458,40 +320,111 @@ async function loadSettingsFromSupabase() {
       state.settings.goalHistory = r.goal_history || [];
       localStorage.setItem(STORAGE_SETTINGS, JSON.stringify(state.settings));
     }
-  } catch(e) { console.error("Settings load failed:", e); }
+    setDataSource("settings", "supabase");
+  } catch(e) { console.error("Settings load failed:", e); setSyncError("טעינת הגדרות מהענן נכשלה"); }
+  if ((state.syncStatus?.dataSource?.settings) !== "supabase") {
+    setDataSource("settings", "local");
+  }
 }
 
 
 async function saveWorkoutsToSupabase() {
   try {
-    await sbDelete("workout_plans?id=neq.00000000-0000-0000-0000-000000000000");
-    const rows = state.workouts.map((w, i) => ({
-      plan_id: w.id,
-      name: w.name,
-      exercises: w.exercises,
-      sort_order: i
-    }));
-    if (rows.length) await sbPost("workout_plans", rows);
+    const userId = requireUserIdOrThrow("saveWorkoutsToSupabase");
+    const rows = buildWorkoutPlanRows(state.workouts, userId);
+    if (!rows.length) {
+      if (!ALLOW_EMPTY_WORKOUT_SYNC) {
+        setSyncError("נחסמה מחיקה גורפת של תוכניות בענן (ALLOW_EMPTY_WORKOUT_SYNC=false)");
+        showToast("המחיקה בענן נחסמה להגנה על הנתונים ⚠️");
+        return;
+      }
+    } else {
+      const upsertHeaders = { ...SB_HEADERS, Prefer: "return=representation,resolution=merge-duplicates" };
+      const upsertRes = await fetch(SUPABASE_URL + "/rest/v1/workout_plans?on_conflict=user_id,plan_id", {
+        method: "POST",
+        headers: upsertHeaders,
+        body: JSON.stringify(rows)
+      });
+      if (!upsertRes.ok) throw new Error(await upsertRes.text());
+    }
+
+    const remoteRows = await sbGet("workout_plans?select=plan_id,user_id");
+    const localIds = new Set(rows.map(r => String(r.plan_id)));
+    const staleRemoteIds = (remoteRows || [])
+      .filter(r => String(r.user_id || "") === String(userId))
+      .map(r => String(r.plan_id))
+      .filter(id => id && !localIds.has(id));
+
+    if (staleRemoteIds.length) {
+      console.warn("[saveWorkoutsToSupabase] deleting stale workout plans:", staleRemoteIds);
+      for (const staleId of staleRemoteIds) {
+        await sbDelete("workout_plans?user_id=eq." + encodeURIComponent(userId) + "&plan_id=eq." + encodeURIComponent(staleId));
+      }
+    }
     showToast("התוכנית נשמרה ✓");
-  } catch(e) { console.error("Workout plan save failed:", e); showToast("שגיאה בשמירת התוכנית ⚠️"); }
+    clearSyncError();
+  } catch(e) { console.error("Workout plan save failed:", e); setSyncError("שמירת תוכנית לענן נכשלה"); showToast("שגיאה בשמירת התוכנית ⚠️"); }
 }
 
 async function loadWorkoutsFromSupabase() {
-  try {
-    const rows = await sbGet("workout_plans?select=*&order=sort_order.asc");
-    if (rows && rows.length) {
-      // תמיד החלף את כל ה-state — אל תצרף
-      state.workouts = rows.map(r => ({ id: r.plan_id, name: r.name, exercises: r.exercises }));
-      localStorage.setItem(STORAGE_WORKOUTS, JSON.stringify(state.workouts));
-    } else {
-      // Supabase ריק — נקה גם localStorage כדי למנוע ברירות מחדל ישנות
-      state.workouts = [];
-      localStorage.removeItem(STORAGE_WORKOUTS);
+  const fetchWorkoutRows = async (path, diagLabel) => {
+    const res = await fetch(SUPABASE_URL + "/rest/v1/" + path, { headers: SB_HEADERS });
+    const rawText = await res.text();
+    dlog("[loadWorkoutsFromSupabase]", diagLabel, "status:", res.status, "body:", rawText);
+    if (!res.ok) throw new Error(`${diagLabel} failed (${res.status}): ${rawText}`);
+    if (!rawText) return [];
+    try {
+      return JSON.parse(rawText);
+    } catch (parseErr) {
+      throw new Error(`${diagLabel} parse failed: ${parseErr.message}`);
     }
-  } catch(e) { console.error("Workout plan load failed:", e); }
+  };
+
+  try {
+    let rows;
+    let fallbackReason = "";
+    try {
+      rows = await fetchWorkoutRows("workout_plans?select=*&order=sort_order.asc", "ordered_fetch");
+    } catch (orderedErr) {
+      const orderedMsg = String(orderedErr?.message || orderedErr);
+      if (orderedMsg.includes("sort_order")) {
+        fallbackReason = "sort_order_missing_or_invalid";
+        console.warn("[loadWorkoutsFromSupabase] ordered query failed, retrying without order:", orderedMsg);
+        rows = await fetchWorkoutRows("workout_plans?select=*", "unordered_fetch");
+      } else {
+        throw orderedErr;
+      }
+    }
+
+    const rowsArray = Array.isArray(rows) ? rows : (rows ? [rows] : []);
+    dlog("[loadWorkoutsFromSupabase] parsed rows:", rowsArray.length, "fallbackReason:", fallbackReason || "none");
+    if (rowsArray.length) {
+      // תמיד החלף את כל ה-state — אל תצרף
+      const normalized = mapWorkoutPlansFromRows(rowsArray);
+
+      if (normalized.length) {
+        state.workouts = normalized;
+        localStorage.setItem(STORAGE_WORKOUTS, JSON.stringify(state.workouts));
+        setDataSource("workouts", "supabase");
+      } else {
+        // הגיעו rows אבל בלי מזהה תקין — אל תדרוס state קיים
+        if (!state.workouts?.length) state.workouts = JSON.parse(JSON.stringify(DEFAULT_WORKOUTS));
+        setDataSource("workouts", "local");
+        setSyncError("תוכניות בענן בפורמט לא תקין — מוצגות תוכניות מקומיות");
+      }
+    } else {
+      // Supabase ריק — השאר נתונים מקומיים קיימים כדי לא להעלים את רשימת האימונים
+      if (!state.workouts?.length) {
+        state.workouts = JSON.parse(JSON.stringify(DEFAULT_WORKOUTS));
+      }
+      setDataSource("workouts", "local");
+      setSyncError("לא נמצאו תוכניות בענן — מוצגות תוכניות מקומיות");
+    }
+  } catch(e) { console.error("Workout plan load failed (fetch/parse/normalize):", e); setSyncError("טעינת תוכנית מהענן נכשלה"); }
+  if ((state.syncStatus?.dataSource?.workouts) !== "supabase") {
+    setDataSource("workouts", "local");
+  }
 }
-function getWorkout(id) { return state.workouts.find(w => w.id === id); }
-function getLastSession(id) { return [...state.sessions].reverse().find(s => s.workoutId === id) || null; }
 
 
 function getCategoryIcon(catId) {
@@ -503,14 +436,6 @@ function getCategoryLabel(catId) {
 function getExCategory(w, name) {
   const ex = w.exercises.find(e => (typeof e==="string"?e:e.name) === name);
   return ex?.category || null;
-}
-
-function getNextWorkout() {
-  if (!state.sessions.length) return state.workouts[0] || null;
-  const last = state.sessions[state.sessions.length - 1];
-  const lastIdx = state.workouts.findIndex(w => w.id === last.workoutId);
-  if (lastIdx === -1) return state.workouts[0] || null;
-  return state.workouts[(lastIdx + 1) % state.workouts.length];
 }
 
 function saveInProgress() {
@@ -571,11 +496,16 @@ function navigate(screen) {
 
 function render() {
   const el = document.getElementById("main-content");
-  if (state.screen === "dashboard") el.innerHTML = renderDashboard();
-  else if (state.screen === "home") el.innerHTML = state.workoutId ? renderWorkout() : renderChoose();
-  else if (state.screen === "history") el.innerHTML = renderHistory();
-  else if (state.screen === "library") el.innerHTML = renderLibraryScreen();
-  else el.innerHTML = renderManage();
+  let screenHtml = "";
+  if (state.screen === "dashboard") screenHtml = renderDashboard();
+  else if (state.screen === "home") screenHtml = state.workoutId ? renderWorkout() : renderChoose();
+  else if (state.screen === "history") screenHtml = renderHistory();
+  else if (state.screen === "library") screenHtml = renderLibraryScreen();
+  else {
+    dlog("[library-add] render() -> manage screen");
+    screenHtml = renderManage();
+  }
+  el.innerHTML = renderSyncNotice() + screenHtml;
   if (window.lucide) lucide.createIcons();
   bindDelButtons();
   bindDragDrop();
@@ -886,7 +816,8 @@ function finishWorkout() {
     saveSessionToSupabase(session).then(() => {
       showToast("נשמר ✓");
     }).catch(() => {
-      showToast("שגיאה בשמירה — נסה שוב ⚠️");
+      showToast("האימון נשמר מקומית בלבד — סנכרון לענן נכשל ⚠️");
+      render();
     });
     haptic("success");
     navigate("dashboard");
@@ -1289,12 +1220,16 @@ function renderHistory() {
     const customRangeInvalid = isCustomRange && customFrom && customTo && new Date(`${customFrom}T00:00:00`) > new Date(`${customTo}T00:00:00`);
     const hasFilteredData = filtered.length > 0;
     const withAvg = getWeightMovingAverage(filtered, avgWindowDays);
+    const weeklyTrendSeries = getWeightMovingAverage(filtered, 7);
     const chartBase = !isCustomRange && range >= 180 ? aggregateWeightByWeek(filtered) : filtered;
     const chartAvgWindow = !isCustomRange && range >= 180 ? Math.max(2, Math.round(avgWindowDays / 7)) : avgWindowDays;
     const chartSeries = getWeightMovingAverage(chartBase, chartAvgWindow);
     const latest = hasFilteredData ? filtered[filtered.length - 1] : null;
+    const latestOverall = allLogs[allLogs.length - 1] || null;
     const first = hasFilteredData ? filtered[0] : null;
-    const delta = hasFilteredData ? (latest.weight - first.weight) : 0;
+    const delta = hasFilteredData
+      ? ((weeklyTrendSeries[weeklyTrendSeries.length - 1]?.movingAvg ?? latest.weight) - (weeklyTrendSeries[0]?.movingAvg ?? first.weight))
+      : 0;
     const avg7 = hasFilteredData ? (withAvg[withAvg.length - 1]?.movingAvg ?? latest.weight) : 0;
     const summaryCards = `
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:10px">
@@ -1347,11 +1282,21 @@ function renderHistory() {
         </div>
       </div>`;
     }).join("");
+    const weightGoalValues = getWeightGoalValues(state.weightGoal);
+    const hasGoalWeight = Number.isFinite(weightGoalValues.target) && weightGoalValues.target > 0;
+    const goalGap = (hasGoalWeight && latestOverall) ? Math.abs(Number(latestOverall.weight) - Number(weightGoalValues.target)) : null;
+    const goalGapText = goalGap !== null ? `${goalGap.toFixed(1)} ק״ג` : "";
+    const goalSummaryText = !hasGoalWeight
+      ? "לא הוגדר יעד משקל"
+      : goalGap !== null && goalGap <= 0.3
+      ? `יעד: ${Number(weightGoalValues.target).toFixed(1)} ק״ג | קרוב ליעד`
+      : `יעד: ${Number(weightGoalValues.target).toFixed(1)} ק״ג | פער נוכחי: ${goalGapText}`;
     return `<div style="padding:14px 14px 0">${tabs}
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:10px">${rangeButtons}${customRangeBtn}</div>
       ${customRangeControls}
       ${summaryCards}
       ${hasFilteredData ? renderWeightChart(chartSeries, { rangeDays: isCustomRange ? customRangeDays : range, denseHint: isCustomRange ? customRangeDays >= 90 : range >= 90 }) : `<div class="card" style="padding:18px;text-align:center;color:var(--text-hint);font-size:13px">אין נתוני משקל בטווח התאריכים שנבחר</div>`}
+      <div style="margin-top:8px;font-size:11px;color:var(--text-hint)">${goalSummaryText}</div>
       <div style="display:flex;justify-content:flex-start;margin-top:10px">
         <button onclick="openWeightEntryModal()" class="btn-primary" style="width:auto;padding:8px 14px;font-size:12px">הוסף</button>
         ${showRangeCopy ? `<button onclick="copyWeightRangeSummary()" style="width:auto;padding:8px 12px;font-size:12px;margin-right:8px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-family:inherit;font-weight:600">העתק סיכום</button>` : ""}
@@ -1691,7 +1636,140 @@ function toggleHistorySession(id) {
   render();
 }
 
+function getNotificationStatusText() {
+  if (!("Notification" in window)) return "התראות לא פעילות";
+  if (Notification.permission === "denied") return "ההרשאה נדחתה";
+  if (Notification.permission === "default") return "ממתין להרשאה";
+  if (Notification.permission === "granted" && state.pushSubscriptionActive) return "התראות פעילות";
+  return "התראות לא פעילות";
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+}
+
+function detectPlatform() {
+  const ua = (navigator.userAgent || "").toLowerCase();
+  if (/iphone|ipad|ipod/.test(ua)) return "ios";
+  if (/android/.test(ua)) return "android";
+  return "desktop";
+}
+
+async function syncPushSubscriptionState() {
+  try {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+    state.pushSubscriptionActive = !!subscription;
+  } catch (_) {
+    state.pushSubscriptionActive = false;
+  }
+}
+
+async function savePushSubscriptionToSupabase(subscription) {
+  const userId = requireUserIdOrThrow("savePushSubscriptionToSupabase");
+  const keys = subscription.toJSON().keys || {};
+  const nowIso = new Date().toISOString();
+  const payload = [{
+    user_id: userId,
+    endpoint: subscription.endpoint,
+    p256dh: keys.p256dh || "",
+    auth: keys.auth || "",
+    user_agent: navigator.userAgent || null,
+    platform: detectPlatform(),
+    is_active: true,
+    updated_at: nowIso,
+    last_seen_at: nowIso
+  }];
+  const headers = { ...SB_HEADERS, Prefer: "return=representation,resolution=merge-duplicates" };
+  const res = await fetch(SUPABASE_URL + "/rest/v1/push_subscriptions?on_conflict=endpoint", {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+async function enablePushNotifications() {
+  if (state.notificationBusy) return;
+  state.notificationBusy = true;
+  render();
+  try {
+    if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+      showToast("התראות לא נתמכות בדפדפן זה");
+      return;
+    }
+
+    let permission = Notification.permission;
+    if (permission === "default") {
+      permission = await Notification.requestPermission();
+    }
+    if (permission !== "granted") {
+      render();
+      return;
+    }
+
+    if (!VAPID_PUBLIC_KEY) {
+      showToast("חסר VAPID_PUBLIC_KEY");
+      return;
+    }
+
+    const registration = await navigator.serviceWorker.ready;
+    const existing = await registration.pushManager.getSubscription();
+    const subscription = existing || await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+    });
+
+    await savePushSubscriptionToSupabase(subscription);
+    state.pushSubscriptionActive = true;
+    showToast("התראות הופעלו ✓");
+  } catch (e) {
+    console.error("Enable push failed:", e);
+    showToast("שגיאה בהפעלת התראות ⚠️");
+  } finally {
+    state.notificationBusy = false;
+    render();
+  }
+}
+
+async function sendTestPushNotification() {
+  if (state.notificationTestBusy) return;
+  state.notificationTestBusy = true;
+  render();
+  try {
+    const userId = requireUserIdOrThrow("sendTestPushNotification");
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+    if (!subscription?.endpoint) throw new Error("No current device subscription");
+
+   const res = await fetch("https://jezibgdemidhebbcpdch.supabase.co/functions/v1/send-test-push", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_KEY
+      },
+      body: JSON.stringify({ user_id: userId, endpoint: subscription.endpoint })
+    });
+    if (!res.ok) throw new Error(await res.text());
+    showToast("התראת בדיקה נשלחה ✓");
+  } catch (e) {
+    console.error("Test push failed:", e);
+    showToast("שליחת התראת בדיקה נכשלה ⚠️");
+  } finally {
+    state.notificationTestBusy = false;
+    render();
+  }
+}
+
 function renderManage() {
+  const weightGoalValues = getWeightGoalValues(state.weightGoal);
+  const weightGoalMode = (typeof getWeightGoalMode === "function") ? getWeightGoalMode(state.weightGoal) : "maintain";
+  const weightGoalModeLabel = weightGoalMode === "cut" ? "חיטוב" : (weightGoalMode === "lean_bulk" ? "מסה נקייה" : "תחזוקה");
   const workoutSections = state.workouts.map(w => {
     const isOpen = state.manageOpenId === w.id;
     const isEditing = state.editingNameId === w.id;
@@ -1800,13 +1878,25 @@ function renderManage() {
         <span style="font-weight:700;font-size:14px;color:var(--text-primary)">עדכון יעד משקל ומשקל התחלתי</span>
       </div>
       <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;line-height:1.5">
-        ${(state.weightGoal?.start_weight && state.weightGoal?.goal_weight)
-          ? `<span style="display:inline-flex;gap:4px;align-items:center;direction:ltr;unicode-bidi:isolate"><span>התחלתי: ${Number(state.weightGoal.start_weight).toFixed(1)}</span><span aria-hidden="true">→</span><span>יעד: ${Number(state.weightGoal.goal_weight).toFixed(1)} ק״ג</span></span>`
+        ${hasWeightGoal(state.weightGoal)
+          ? `<span style="display:inline-flex;gap:4px;align-items:center;direction:ltr;unicode-bidi:isolate"><span>התחלתי: ${weightGoalValues.start.toFixed(1)}</span><span aria-hidden="true">→</span><span>יעד: ${weightGoalValues.target.toFixed(1)} ק״ג</span></span><br><span style="font-size:11px;color:var(--text-hint)">מצב יעד: ${weightGoalModeLabel}</span>`
           : "לא הוגדר יעד משקל עדיין"}
       </div>
       <button onclick="showGoalModal()" style="width:100%;padding:10px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-size:13px;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">
-        <i data-lucide="pencil" style="width:15px;height:15px"></i> ${state.weightGoal?.start_weight && state.weightGoal?.goal_weight ? "ערוך יעד משקל" : "הוסף יעד משקל"}
+        <i data-lucide="pencil" style="width:15px;height:15px"></i> ${hasWeightGoal(state.weightGoal) ? "ערוך יעד משקל" : "הוסף יעד משקל"}
       </button>
+    </div>
+
+    <div class="card" style="padding:14px 16px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px">
+        <i data-lucide="bell" style="width:15px;height:15px;color:var(--text-secondary)"></i>
+        <span style="font-weight:700;font-size:14px;color:var(--text-primary)">התראות</span>
+      </div>
+      <div style="font-size:12px;color:var(--text-hint);margin-bottom:10px" id="push-status-text">${getNotificationStatusText()}</div>
+      <div style="display:grid;grid-template-columns:1fr;gap:8px">
+        <button onclick="enablePushNotifications()" ${state.notificationBusy ? "disabled" : ""} style="width:100%;padding:10px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-size:13px;font-family:inherit">הפעל התראות</button>
+        <button onclick="sendTestPushNotification()" ${state.notificationTestBusy ? "disabled" : ""} style="width:100%;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer;font-size:13px;font-family:inherit">שלח התראת בדיקה</button>
+      </div>
     </div>
 
     <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px;padding:0 2px">
@@ -1901,13 +1991,13 @@ function saveWorkoutName(id) {
 function addWorkout() {
   const inp=document.getElementById("new-workout-name"); const name=sanitizeText(inp?inp.value:"", 80);
   if(!name) return;
-  state.workouts.push({id:"w_"+Date.now(), name, exercises:[]});
-  state.manageOpenId=state.workouts[state.workouts.length-1].id;
+  const newWorkout = addWorkoutToState(name);
+  state.manageOpenId=newWorkout.id;
   state.editingNameId=null; saveWorkouts(); render();
 }
 function deleteWorkout(id) {
   if(!confirm("למחוק את האימון לצמיתות?")) return;
-  state.workouts=state.workouts.filter(w=>w.id!==id);
+  removeWorkoutFromState(id);
   if(state.manageOpenId===id) state.manageOpenId=null;
   saveWorkouts(); render();
 }
@@ -1918,8 +2008,7 @@ function addExercise(workoutId) {
   const catEl=document.getElementById("new-cat-"+workoutId);
   const category=catEl?catEl.value||null:null;
   if(!val) return; const w=getWorkout(workoutId);
-  if(w){
-    w.exercises.push({name:val, rest, category});
+  if(addExerciseToWorkoutState(w, val, rest, category)){
     saveWorkouts(); render();
     addToLibrary(val, category);
   }
@@ -1929,28 +2018,21 @@ function removeExercise(workoutId,i) {
   if(!w) return;
   if(w.exercises.length === 1) {
     if(confirm("אם תמחק תרגיל זה, האימון יישאר ריק. האם למחוק את האימון לגמרי?")) {
-      state.workouts = state.workouts.filter(x => x.id !== workoutId);
+      removeWorkoutFromState(workoutId);
       if(state.manageOpenId === workoutId) state.manageOpenId = null;
       saveWorkouts(); render();
     }
     return;
   }
-  w.exercises.splice(i,1); saveWorkouts(); render();
+  removeExerciseFromWorkoutState(w, i); saveWorkouts(); render();
 }
 function updateExRest(workoutId,i,val) {
   const w=getWorkout(workoutId);
-  if(w && w.exercises[i]){ w.exercises[i].rest=parseInt(val)||60; saveWorkouts(); }
+  if(updateExerciseRestInWorkoutState(w, i, val)){ saveWorkouts(); }
 }
 function updateExField(workoutId,i,field,val) {
   const w=getWorkout(workoutId);
-  if(!w || !w.exercises[i]) return;
-  if(field==="rest") w.exercises[i].rest=parseInt(val)||60;
-  else if(field==="name") {
-    const clean = sanitizeText(val, 80);
-    if(clean) w.exercises[i].name=clean;
-  }
-  else if(field==="category") w.exercises[i].category=val||null;
-  saveWorkouts();
+  if(updateExerciseFieldInWorkoutState(w, i, field, val)) saveWorkouts();
 }
 
 function exportCSV() {
@@ -2135,7 +2217,8 @@ function showExerciseGraph(exName) {
 }
 
 
-function openWorkoutExtraPicker() {
+function openWorkoutExtraPicker(resetTarget = true) {
+  if (resetTarget) state.libraryPickerTargetWorkoutId = null;
   document.getElementById("ex-picker-modal")?.remove();
   const overlay = document.createElement("div");
   overlay.id = "ex-picker-modal";
@@ -2202,12 +2285,41 @@ function openWorkoutExtraPicker() {
   bindExtraItems(sheet.querySelector("#ex-extra-list"));
 }
 
+function openExercisePicker(workoutId) {
+  dlog("[library-add] openExercisePicker called with workoutId:", workoutId);
+  state.libraryPickerTargetWorkoutId = workoutId;
+  dlog("[library-add] stored target workout id:", state.libraryPickerTargetWorkoutId);
+  openWorkoutExtraPicker(false);
+}
+window.openExercisePicker = openExercisePicker;
+
 function bindExtraItems(container) {
   container.querySelectorAll(".ex-pick-item").forEach(item => {
     item.addEventListener("click", () => {
       const name = item.dataset.name;
       const category = item.dataset.cat || null;
+      dlog("[library-add] exercise selected:", { name, category, itemDataset: { ...item.dataset } });
       document.getElementById("ex-picker-modal")?.remove();
+      const targetWorkoutId = state.libraryPickerTargetWorkoutId || null;
+      dlog("[library-add] target workout id at selection:", targetWorkoutId);
+      if (targetWorkoutId) {
+        const workout = getWorkout(targetWorkoutId);
+        dlog("[library-add] workout found before mutation:", workout ? { id: workout.id, name: workout.name, exercisesCount: (workout.exercises || []).length } : null);
+        if (workout) {
+          const beforeLen = workout.exercises.length;
+          const exists = workout.exercises.some(ex => (typeof ex === "string" ? ex : ex.name) === name);
+          if (!exists) workout.exercises.push({ name, rest: 60, category });
+          const afterLen = workout.exercises.length;
+          dlog("[library-add] exercises length before/after:", { beforeLen, afterLen, exists });
+          saveWorkouts();
+          state.manageOpenId = targetWorkoutId;
+        }
+        state.libraryPickerTargetWorkoutId = null;
+        dlog("[library-add] final workouts snapshot before render:", state.workouts.map(w => ({ id: w.id, name: w.name, exercisesCount: (w.exercises || []).length })));
+        dlog("[library-add] calling render after insertion path");
+        render();
+        return;
+      }
       if (!state.workoutExtras) state.workoutExtras = [];
       if (!state.workoutExtras.includes(name)) state.workoutExtras.push(name);
       if (!state.exercises[name]) {
@@ -2297,6 +2409,8 @@ if (failed.length) {
   console.error("Some data failed to load:", failed);
   showToast("חלק מהנתונים לא נטענו ⚠️");
 }
+  runRuntimeDataAudit();
+  await syncPushSubscriptionState();
   if (loader) {
     loader.style.opacity = "0";
     setTimeout(() => loader.remove(), 350);
@@ -2307,9 +2421,12 @@ if (failed.length) {
   <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js')
-        .then(registration => {
+      navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
+        .then(async registration => {
           console.log('ServiceWorker registration successful:', registration.scope);
+          registration.update().catch(() => {});
+          await syncPushSubscriptionState();
+          render();
         })
         .catch(err => {
           console.log('ServiceWorker registration failed:', err);

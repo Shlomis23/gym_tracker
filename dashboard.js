@@ -48,7 +48,12 @@ function getThisWeekCount() {
 function getPRs() {
   const prs = {};
   state.sessions.forEach(session => {
-    Object.entries(session.exercises||{}).forEach(([name, sets]) => {
+    const sessionExercises = (session && typeof session.exercises === "object" && session.exercises) ? session.exercises : {};
+    Object.entries(sessionExercises).forEach(([name, sets]) => {
+      if (!Array.isArray(sets)) {
+        console.warn("[getPRs] Invalid sets shape for exercise:", name, sets);
+        return;
+      }
       sets.forEach(s => {
         if (s.weight > (prs[name]?.weight || 0)) {
           // חפש קטגוריה — קודם בתוכניות הפעילות, אחר כך במאגר
@@ -133,6 +138,52 @@ function getDaysSinceLastWorkout() {
   const lastDay = new Date(last.date); lastDay.setHours(0,0,0,0);
   const days = Math.round((today - lastDay) / (1000 * 60 * 60 * 24));
   return { days, session: last };
+}
+
+function getWeightTrendStatus(goalMode, avgDelta, lowDelta, has14DaySpan) {
+  const toneColorMap = {
+    success: "var(--green)",
+    warning: "var(--orange)",
+    danger: "var(--red)",
+    neutral: "var(--text-secondary)"
+  };
+  if (!has14DaySpan || avgDelta === null || lowDelta === null) {
+    return {
+      tone: "neutral",
+      colorToken: toneColorMap.neutral,
+      message: "אין עדיין מספיק נתונים להשוואת 14 ימים"
+    };
+  }
+
+  const mode = goalMode || "maintain";
+  if (mode === "cut") {
+    if (avgDelta <= -0.2) {
+      return { tone: "success", colorToken: toneColorMap.success, message: "מגמה טובה — המשך כך" };
+    }
+    if (avgDelta < 0.1) {
+      return { tone: "warning", colorToken: toneColorMap.warning, message: "יש עצירה קלה — שווה לדייק השבוע" };
+    }
+    return { tone: "danger", colorToken: toneColorMap.danger, message: "יש סטייה מהמגמה — כדאי לבדוק את השבוע" };
+  }
+
+  if (mode === "lean_bulk") {
+    if (avgDelta > 0.5 && lowDelta > 0.3) {
+      return { tone: "danger", colorToken: toneColorMap.danger, message: "העלייה מהירה מדי — שווה לדייק כדי לשמור על מסה נקייה" };
+    }
+    if (avgDelta >= 0.2 && avgDelta <= 0.4) {
+      return { tone: "success", colorToken: toneColorMap.success, message: "עלייה בקצב נכון — ממשיכים כך" };
+    }
+    return { tone: "warning", colorToken: toneColorMap.warning, message: "העלייה איטית — אולי צריך לחזק מעט את התזונה" };
+  }
+
+  // maintain
+  if (avgDelta > -0.2 && avgDelta < 0.2) {
+    return { tone: "success", colorToken: toneColorMap.success, message: "יציב — בדיוק הכיוון הרצוי" };
+  }
+  if (Math.abs(avgDelta) < 0.5 || Math.abs(lowDelta) < 0.3) {
+    return { tone: "warning", colorToken: toneColorMap.warning, message: "יש סטייה קלה — שווה לשים לב לאיזון" };
+  }
+  return { tone: "danger", colorToken: toneColorMap.danger, message: "המשקל יוצא מהטווח — כדאי להתכנס" };
 }
 
 function renderDashboard() {
@@ -335,82 +386,80 @@ if (inProgress) {
       <button onclick="event.stopPropagation();showWeightModal()" style="background:${emptyBtnBg};border:none;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px;color:${emptyBtnColor};font-family:inherit;font-weight:600">${emptyBtnLabel}</button>
     </div>`;
   } else if (latest) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const startOfCurrentWeek = new Date(today);
-    startOfCurrentWeek.setDate(today.getDate() - today.getDay()); // Sunday
-    const startOfPrevWeek = new Date(startOfCurrentWeek);
-    startOfPrevWeek.setDate(startOfCurrentWeek.getDate() - 7);
-    const endOfPrevWeek = new Date(startOfCurrentWeek);
-    endOfPrevWeek.setMilliseconds(-1); // Saturday 23:59:59.999
+    const goalMode = (typeof getWeightGoalMode === "function") ? getWeightGoalMode(state.weightGoal) : "maintain";
+    const goalModeLabel = goalMode === "cut" ? "חיטוב" : (goalMode === "lean_bulk" ? "מסה נקייה" : "תחזוקה");
 
-    const prevWeekLogs = weightLogsAsc.filter(log => {
-      const dt = new Date(log.measured_at);
-      return dt >= startOfPrevWeek && dt <= endOfPrevWeek;
-    });
-    const prevWeekAvg = prevWeekLogs.length
-      ? prevWeekLogs.reduce((sum, log) => sum + Number(log.weight), 0) / prevWeekLogs.length
-      : null;
+    const latestDay = new Date(latest.measured_at);
+    latestDay.setHours(0, 0, 0, 0);
+    const firstDay = weightLogsAsc.length ? new Date(weightLogsAsc[0].measured_at) : null;
+    if (firstDay) firstDay.setHours(0, 0, 0, 0);
+    const requiredStartDay = new Date(latestDay);
+    requiredStartDay.setDate(requiredStartDay.getDate() - 13);
+    const has14DaySpan = !!(firstDay && firstDay <= requiredStartDay);
 
-    const diff = prevWeekAvg !== null ? (latest.weight - prevWeekAvg) : null;
-    const diffColor = diff === null ? "var(--text-hint)" : diff < 0 ? "var(--green)" : diff > 0 ? "var(--red)" : "var(--text-hint)";
-    const diffArrow = diff === null ? "" : diff < 0
-      ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>`
-      : diff > 0
-      ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`
-      : "";
-    const diffText = diff === null ? "" : `${diff > 0 ? "+" : ""}${diff.toFixed(1)} ק״ג מול ממוצע שבוע שעבר`;
+    const buildRange = (startOffset, endOffset) => {
+      const from = new Date(latestDay);
+      const to = new Date(latestDay);
+      from.setDate(from.getDate() - startOffset);
+      to.setDate(to.getDate() - endOffset);
+      const logs = weightLogsAsc.filter(log => {
+        const dt = new Date(log.measured_at);
+        dt.setHours(0, 0, 0, 0);
+        return dt >= from && dt <= to;
+      });
+      const avg = logs.length ? (logs.reduce((sum, log) => sum + Number(log.weight), 0) / logs.length) : null;
+      const low = logs.length ? Math.min(...logs.map(log => Number(log.weight))) : null;
+      return { avg, low };
+    };
+
+    const currentRange = has14DaySpan ? buildRange(6, 0) : { avg: null, low: null };
+    const prevRange = has14DaySpan ? buildRange(13, 7) : { avg: null, low: null };
+    const avgDelta = (currentRange.avg !== null && prevRange.avg !== null) ? (currentRange.avg - prevRange.avg) : null;
+    const lowDelta = (currentRange.low !== null && prevRange.low !== null) ? (currentRange.low - prevRange.low) : null;
+
+    const trendStatus = getWeightTrendStatus(goalMode, avgDelta, lowDelta, has14DaySpan);
+    const fmtWeightOrDash = v => Number.isFinite(v) ? `${Number(v).toFixed(1)} ק״ג` : "—";
+    const avgDeltaSummary = avgDelta === null
+      ? "אין עדיין מספיק נתונים למגמה"
+      : avgDelta <= -0.1
+      ? `⬇ ירידה של ${Math.abs(avgDelta).toFixed(1)} ק״ג`
+      : avgDelta >= 0.1
+      ? `⬆ עלייה של ${Math.abs(avgDelta).toFixed(1)} ק״ג`
+      : "ללא שינוי משמעותי";
     const cardBorder = needsUpdate ? "var(--orange)" : "var(--border)";
     const cardBg = needsUpdate ? "var(--orange-bg)" : "var(--card)";
     const dailyBtn = hasTodayWeight
       ? `<button onclick="event.preventDefault();event.stopPropagation();return false;" style="display:flex;align-items:center;gap:5px;background:var(--green);border:none;border-radius:8px;padding:6px 12px;cursor:default;font-size:12px;color:#fff;font-family:inherit;font-weight:600;opacity:0.95;pointer-events:none" disabled>שקילה יומית נרשמה</button>`
       : `<button onclick="showWeightModal()" style="display:flex;align-items:center;gap:5px;background:${shouldPromptDaily ? "var(--orange)" : "var(--surface)"};border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;color:${shouldPromptDaily ? "#fff" : "var(--text-secondary)"};font-family:inherit;font-weight:600">הזן משקל</button>`;
 
-    const weightGoalData = state.weightGoal || {};
-    const startGoal = Number(weightGoalData.start_weight);
-    const targetGoal = Number(weightGoalData.goal_weight);
-    const hasGoal = Number.isFinite(startGoal) && Number.isFinite(targetGoal) && startGoal > 0 && targetGoal > 0 && startGoal !== targetGoal;
-    const dist = hasGoal ? Math.abs(startGoal - targetGoal) : 0;
-    const progressRaw = hasGoal ? Math.abs(startGoal - latest.weight) / dist : 0;
-    const progressPct = hasGoal ? Math.max(0, Math.min(100, Math.round(progressRaw * 100))) : 0;
-    const goalDirectionDown = hasGoal && targetGoal < startGoal;
-    const remaining = hasGoal ? (goalDirectionDown ? latest.weight - targetGoal : targetGoal - latest.weight) : null;
-    const done = hasGoal && remaining <= 0;
-    const goalStatus = !hasGoal
-      ? "הגדר יעד כדי לעקוב אחרי התקדמות"
-      : done
-      ? "היעד הושג — אלוף!"
-      : `נשארו עוד ${remaining.toFixed(1)} ק״ג ליעד`;
-    const goalSection = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-      <div style="margin-bottom:7px">
-        <div style="font-size:12px;color:var(--text-secondary);font-weight:600">יעד משקל</div>
-        <div style="font-size:11px;color:var(--text-hint);margin-top:2px">${hasGoal ? `<span style="display:inline-flex;gap:4px;align-items:center;direction:rtl;unicode-bidi:isolate"><span>משקל התחלתי: ${startGoal.toFixed(1)}</span><span aria-hidden="true">←</span><span>משקל יעד: ${targetGoal.toFixed(1)} ק״ג</span></span>` : "ללא יעד מוגדר"}</div>
-      </div>
-      <div style="height:8px;background:var(--surface);border-radius:999px;overflow:hidden;margin-bottom:7px">
-        <div style="width:${progressPct}%;height:100%;background:${done ? "var(--green)" : "var(--accent)"};transition:width .25s ease"></div>
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:11px;color:${done ? "var(--green)" : "var(--text-secondary)"}">${goalStatus}</span>
-        <span style="font-size:11px;color:var(--text-hint)">${hasGoal ? progressPct + "%" : "--"}</span>
-      </div>
-    </div>`;
-
     weightCard = `<div class="anim-card" style="background:${cardBg};border:1px solid ${cardBorder};border-radius:14px;padding:14px 16px;margin-bottom:16px;animation-delay:1.0s">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
         <div>
-          <div class="stat-label">משקל נוכחי</div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <div class="stat-label">משקל נוכחי</div>
+            <span style="font-size:10px;color:var(--text-secondary);background:var(--surface);border:1px solid var(--border-med);padding:2px 7px;border-radius:999px">${goalModeLabel}</span>
+          </div>
           <div style="display:flex;align-items:baseline;gap:5px;margin-top:3px">
             <span style="font-size:32px;font-weight:700;color:var(--text-primary);line-height:1">${latest.weight}</span>
             <span style="font-size:14px;color:var(--text-hint)">ק״ג</span>
           </div>
-          ${diff !== null ? `<div style="display:flex;align-items:center;gap:4px;margin-top:4px">${diffArrow}<span style="font-size:12px;color:${diffColor};font-weight:600">${diffText}</span></div>` : ""}
+          <div style="font-size:12px;color:${trendStatus.colorToken};font-weight:600;margin-top:6px">${trendStatus.message}</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px">
+          <div style="font-size:11px;color:var(--text-hint)">ממוצע 7 ימים</div>
+          <div style="font-size:14px;font-weight:700;color:var(--text-primary);margin-top:2px">${fmtWeightOrDash(currentRange.avg)}</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px">
+          <div style="font-size:11px;color:var(--text-hint)">שינוי מול שבוע קודם</div>
+          <div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-top:2px">${avgDeltaSummary}</div>
         </div>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center">
         <span style="font-size:11px;color:var(--text-hint)">${hasTodayWeight ? "השקילה היומית הוזנה להיום" : (needsUpdate ? "לא נשקלת השבוע" : "עודכן לפני " + dSinceW + " ימים (" + formatWeightDate(latest) + ")")}</span>
         ${dailyBtn}
       </div>
-      ${goalSection}
     </div>`;
   }
   // ─────────────────────────────────────────────────────────────────

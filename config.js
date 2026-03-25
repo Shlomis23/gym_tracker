@@ -9,6 +9,8 @@ const SB_HEADERS = {
 };
 
 const STORAGE_SESSIONS = "gym_sessions_v2";
+const VAPID_PUBLIC_KEY = "BAk4jCgjSer-vn0fVooPl7DNzED3Ijsh6qEkHU0t_ZNbeq8sJWkSQUws_vm5KmxvqwG9MjZ-b1L48NMjPjQsuBM";
+
 const STORAGE_WORKOUTS = "gym_workouts_v4";
 const STORAGE_SETTINGS = "gym_settings_v1";
 
@@ -40,6 +42,7 @@ Object.assign(window, {
   SUPABASE_KEY,
   SB_HEADERS,
   STORAGE_SESSIONS,
+  VAPID_PUBLIC_KEY,
   STORAGE_WORKOUTS,
   STORAGE_SETTINGS,
   DEFAULT_WORKOUTS,

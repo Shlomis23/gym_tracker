@@ -37,11 +37,17 @@ let state = {
   screen: "dashboard", workoutId: null, openExercise: null, exercises: {},
   sessions: [], workouts: loadWorkouts(), settings: loadSettings(),
   manageOpenId: null, editingNameId: null, selectedWorkoutId: null, expandedSessions: new Set(),
-  weightLogs: [], weightGoal: { start_weight: null, goal_weight: null }, historyTab: "workouts",
+  weightLogs: [], weightGoal: { start_weight: null, goal_weight: null, goal_mode: "maintain" }, historyTab: "workouts",
+  userId: null,
+  syncStatus: {
+    lastError: null,
+    dataSource: { sessions: "unknown", workouts: "unknown", settings: "unknown", weight: "unknown" }
+  },
   weightRangeDays: 7, weightRangeMode: "preset", weightCustomRange: { from: "", to: "" },
   workoutNote: "", monthViewYear: null, monthViewMonth: null, pendingGoal: null,
   editingExKey: null, exerciseLibrary: [], workoutExtras: [], dashboardAnimatedOnce: false,
-  historyWorkoutFilterMode: "all", historyWorkoutId: "all", historyExerciseQuery: ""
+  historyWorkoutFilterMode: "all", historyWorkoutId: "all", historyExerciseQuery: "",
+  pushSubscriptionActive: false, notificationBusy: false, notificationTestBusy: false
 };
 
 window.state = state;
