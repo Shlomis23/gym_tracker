@@ -172,6 +172,7 @@ function buildWrap(mb) {
 
 function showGoalModal() {
   const wGoal = state.weightGoal || {};
+  const selectedGoalMode = (typeof getWeightGoalMode === "function") ? getWeightGoalMode(wGoal) : "maintain";
   document.getElementById("goal-modal")?.remove();
 
   const overlay = document.createElement("div");
@@ -196,6 +197,14 @@ function showGoalModal() {
       <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">יעד משקל (ק״ג)</label>
       <input id="goal-target-inp" type="number" inputmode="decimal" step="0.1" placeholder="לדוגמה 78.0" value="${wGoal.goal_weight ?? ""}" style="width:100%;box-sizing:border-box;display:block;padding:11px 12px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;font-size:16px">
     </div>
+    <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:12px;margin-bottom:14px">
+      <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">מצב יעד</label>
+      <select id="goal-mode-inp" style="width:100%;box-sizing:border-box;display:block;padding:11px 12px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;font-size:16px">
+        <option value="cut" ${selectedGoalMode === "cut" ? "selected" : ""}>חיטוב</option>
+        <option value="maintain" ${selectedGoalMode === "maintain" ? "selected" : ""}>תחזוקה</option>
+        <option value="lean_bulk" ${selectedGoalMode === "lean_bulk" ? "selected" : ""}>מסה נקייה</option>
+      </select>
+    </div>
     <button id="goal-save-btn" class="btn-primary" style="margin-bottom:8px">שמור יעד</button>
     <button id="goal-cancel-btn" style="width:100%;padding:12px;background:var(--surface);border:1px solid var(--border-med);color:var(--text-secondary);border-radius:10px;font-family:inherit;cursor:pointer">ביטול</button>
   `;
@@ -208,12 +217,13 @@ function showGoalModal() {
   sheet.querySelector("#goal-save-btn").addEventListener("click", async () => {
     const startVal = parseFloat(sheet.querySelector("#goal-start-inp").value);
     const goalVal = parseFloat(sheet.querySelector("#goal-target-inp").value);
+    const goalModeVal = sheet.querySelector("#goal-mode-inp").value || "maintain";
     if (!Number.isFinite(startVal) || !Number.isFinite(goalVal) || startVal <= 0 || goalVal <= 0) {
       showToast("הזן משקל התחלתי ויעד תקינים");
       return;
     }
     try {
-      await saveWeightGoal(startVal, goalVal);
+      await saveWeightGoal(startVal, goalVal, goalModeVal);
       overlay.remove();
       render();
       showToast("היעד נשמר ✓");
@@ -1210,12 +1220,16 @@ function renderHistory() {
     const customRangeInvalid = isCustomRange && customFrom && customTo && new Date(`${customFrom}T00:00:00`) > new Date(`${customTo}T00:00:00`);
     const hasFilteredData = filtered.length > 0;
     const withAvg = getWeightMovingAverage(filtered, avgWindowDays);
+    const weeklyTrendSeries = getWeightMovingAverage(filtered, 7);
     const chartBase = !isCustomRange && range >= 180 ? aggregateWeightByWeek(filtered) : filtered;
     const chartAvgWindow = !isCustomRange && range >= 180 ? Math.max(2, Math.round(avgWindowDays / 7)) : avgWindowDays;
     const chartSeries = getWeightMovingAverage(chartBase, chartAvgWindow);
     const latest = hasFilteredData ? filtered[filtered.length - 1] : null;
+    const latestOverall = allLogs[allLogs.length - 1] || null;
     const first = hasFilteredData ? filtered[0] : null;
-    const delta = hasFilteredData ? (latest.weight - first.weight) : 0;
+    const delta = hasFilteredData
+      ? ((weeklyTrendSeries[weeklyTrendSeries.length - 1]?.movingAvg ?? latest.weight) - (weeklyTrendSeries[0]?.movingAvg ?? first.weight))
+      : 0;
     const avg7 = hasFilteredData ? (withAvg[withAvg.length - 1]?.movingAvg ?? latest.weight) : 0;
     const summaryCards = `
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:10px">
@@ -1268,11 +1282,21 @@ function renderHistory() {
         </div>
       </div>`;
     }).join("");
+    const weightGoalValues = getWeightGoalValues(state.weightGoal);
+    const hasGoalWeight = Number.isFinite(weightGoalValues.target) && weightGoalValues.target > 0;
+    const goalGap = (hasGoalWeight && latestOverall) ? Math.abs(Number(latestOverall.weight) - Number(weightGoalValues.target)) : null;
+    const goalGapText = goalGap !== null ? `${goalGap.toFixed(1)} ק״ג` : "";
+    const goalSummaryText = !hasGoalWeight
+      ? "לא הוגדר יעד משקל"
+      : goalGap !== null && goalGap <= 0.3
+      ? `יעד: ${Number(weightGoalValues.target).toFixed(1)} ק״ג | קרוב ליעד`
+      : `יעד: ${Number(weightGoalValues.target).toFixed(1)} ק״ג | פער נוכחי: ${goalGapText}`;
     return `<div style="padding:14px 14px 0">${tabs}
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:10px">${rangeButtons}${customRangeBtn}</div>
       ${customRangeControls}
       ${summaryCards}
       ${hasFilteredData ? renderWeightChart(chartSeries, { rangeDays: isCustomRange ? customRangeDays : range, denseHint: isCustomRange ? customRangeDays >= 90 : range >= 90 }) : `<div class="card" style="padding:18px;text-align:center;color:var(--text-hint);font-size:13px">אין נתוני משקל בטווח התאריכים שנבחר</div>`}
+      <div style="margin-top:8px;font-size:11px;color:var(--text-hint)">${goalSummaryText}</div>
       <div style="display:flex;justify-content:flex-start;margin-top:10px">
         <button onclick="openWeightEntryModal()" class="btn-primary" style="width:auto;padding:8px 14px;font-size:12px">הוסף</button>
         ${showRangeCopy ? `<button onclick="copyWeightRangeSummary()" style="width:auto;padding:8px 12px;font-size:12px;margin-right:8px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-family:inherit;font-weight:600">העתק סיכום</button>` : ""}
@@ -1614,6 +1638,8 @@ function toggleHistorySession(id) {
 
 function renderManage() {
   const weightGoalValues = getWeightGoalValues(state.weightGoal);
+  const weightGoalMode = (typeof getWeightGoalMode === "function") ? getWeightGoalMode(state.weightGoal) : "maintain";
+  const weightGoalModeLabel = weightGoalMode === "cut" ? "חיטוב" : (weightGoalMode === "lean_bulk" ? "מסה נקייה" : "תחזוקה");
   const workoutSections = state.workouts.map(w => {
     const isOpen = state.manageOpenId === w.id;
     const isEditing = state.editingNameId === w.id;
@@ -1723,7 +1749,7 @@ function renderManage() {
       </div>
       <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;line-height:1.5">
         ${hasWeightGoal(state.weightGoal)
-          ? `<span style="display:inline-flex;gap:4px;align-items:center;direction:ltr;unicode-bidi:isolate"><span>התחלתי: ${weightGoalValues.start.toFixed(1)}</span><span aria-hidden="true">→</span><span>יעד: ${weightGoalValues.target.toFixed(1)} ק״ג</span></span>`
+          ? `<span style="display:inline-flex;gap:4px;align-items:center;direction:ltr;unicode-bidi:isolate"><span>התחלתי: ${weightGoalValues.start.toFixed(1)}</span><span aria-hidden="true">→</span><span>יעד: ${weightGoalValues.target.toFixed(1)} ק״ג</span></span><br><span style="font-size:11px;color:var(--text-hint)">מצב יעד: ${weightGoalModeLabel}</span>`
           : "לא הוגדר יעד משקל עדיין"}
       </div>
       <button onclick="showGoalModal()" style="width:100%;padding:10px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-size:13px;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">
