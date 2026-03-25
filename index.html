@@ -1224,6 +1224,7 @@ function renderHistory() {
     const chartAvgWindow = !isCustomRange && range >= 180 ? Math.max(2, Math.round(avgWindowDays / 7)) : avgWindowDays;
     const chartSeries = getWeightMovingAverage(chartBase, chartAvgWindow);
     const latest = hasFilteredData ? filtered[filtered.length - 1] : null;
+    const latestOverall = allLogs[allLogs.length - 1] || null;
     const first = hasFilteredData ? filtered[0] : null;
     const delta = hasFilteredData ? (latest.weight - first.weight) : 0;
     const avg7 = hasFilteredData ? (withAvg[withAvg.length - 1]?.movingAvg ?? latest.weight) : 0;
@@ -1278,11 +1279,21 @@ function renderHistory() {
         </div>
       </div>`;
     }).join("");
+    const weightGoalValues = getWeightGoalValues(state.weightGoal);
+    const hasGoalWeight = Number.isFinite(weightGoalValues.target) && weightGoalValues.target > 0;
+    const goalGap = (hasGoalWeight && latestOverall) ? Math.abs(Number(latestOverall.weight) - Number(weightGoalValues.target)) : null;
+    const goalGapText = goalGap !== null ? `${goalGap.toFixed(1)} ק״ג` : "";
+    const goalSummaryText = !hasGoalWeight
+      ? "לא הוגדר יעד משקל"
+      : goalGap !== null && goalGap <= 0.3
+      ? `יעד: ${Number(weightGoalValues.target).toFixed(1)} ק״ג | קרוב ליעד`
+      : `יעד: ${Number(weightGoalValues.target).toFixed(1)} ק״ג | פער נוכחי: ${goalGapText}`;
     return `<div style="padding:14px 14px 0">${tabs}
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:10px">${rangeButtons}${customRangeBtn}</div>
       ${customRangeControls}
       ${summaryCards}
       ${hasFilteredData ? renderWeightChart(chartSeries, { rangeDays: isCustomRange ? customRangeDays : range, denseHint: isCustomRange ? customRangeDays >= 90 : range >= 90 }) : `<div class="card" style="padding:18px;text-align:center;color:var(--text-hint);font-size:13px">אין נתוני משקל בטווח התאריכים שנבחר</div>`}
+      <div style="margin-top:8px;font-size:11px;color:var(--text-hint)">${goalSummaryText}</div>
       <div style="display:flex;justify-content:flex-start;margin-top:10px">
         <button onclick="openWeightEntryModal()" class="btn-primary" style="width:auto;padding:8px 14px;font-size:12px">הוסף</button>
         ${showRangeCopy ? `<button onclick="copyWeightRangeSummary()" style="width:auto;padding:8px 12px;font-size:12px;margin-right:8px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-family:inherit;font-weight:600">העתק סיכום</button>` : ""}

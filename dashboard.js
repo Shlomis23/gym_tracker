@@ -158,38 +158,32 @@ function getWeightTrendStatus(goalMode, avgDelta, lowDelta, has14DaySpan) {
   const mode = goalMode || "maintain";
   if (mode === "cut") {
     if (avgDelta <= -0.2) {
-      return { tone: "success", colorToken: toneColorMap.success, message: "קצב הירידה נראה טוב — ממשיכים כך" };
+      return { tone: "success", colorToken: toneColorMap.success, message: "מגמה טובה — המשך כך" };
     }
     if (avgDelta < 0.1) {
-      return { tone: "warning", colorToken: toneColorMap.warning, message: "אין שינוי משמעותי — שווה להמשיך עוד כמה ימים או לחדד קצת" };
+      return { tone: "warning", colorToken: toneColorMap.warning, message: "יש עצירה קלה — שווה לדייק השבוע" };
     }
-    return { tone: "danger", colorToken: toneColorMap.danger, message: "יש עלייה קלה — שווה לבדוק איך היה השבוע ולחדד אם צריך" };
+    return { tone: "danger", colorToken: toneColorMap.danger, message: "יש סטייה מהמגמה — כדאי לבדוק את השבוע" };
   }
 
   if (mode === "lean_bulk") {
     if (avgDelta > 0.5 && lowDelta > 0.3) {
-      return { tone: "danger", colorToken: toneColorMap.danger, message: "העלייה מהירה יחסית — שווה להוריד מעט קלוריות" };
+      return { tone: "danger", colorToken: toneColorMap.danger, message: "העלייה מהירה מדי — שווה לדייק כדי לשמור על מסה נקייה" };
     }
     if (avgDelta >= 0.2 && avgDelta <= 0.4) {
-      return { tone: "success", colorToken: toneColorMap.success, message: "קצב העלייה נראה טוב — ממשיכים כך" };
+      return { tone: "success", colorToken: toneColorMap.success, message: "עלייה בקצב נכון — ממשיכים כך" };
     }
-    if (avgDelta < 0.1) {
-      return { tone: "warning", colorToken: toneColorMap.warning, message: "אין כמעט שינוי — אולי שווה להוסיף קצת קלוריות" };
-    }
-    return { tone: "neutral", colorToken: toneColorMap.neutral, message: "יש עלייה מתונה — נראה תקין, נמשיך לעקוב" };
+    return { tone: "warning", colorToken: toneColorMap.warning, message: "העלייה איטית — אולי צריך לחזק מעט את התזונה" };
   }
 
   // maintain
-  if ((Math.abs(avgDelta) >= 0.5) && (Math.abs(lowDelta) >= 0.3)) {
-    return { tone: "danger", colorToken: toneColorMap.danger, message: "יש שינוי משמעותי — כנראה לא באזור תחזוקה כרגע" };
-  }
   if (avgDelta > -0.2 && avgDelta < 0.2) {
-    return { tone: "success", colorToken: toneColorMap.success, message: "המשקל יציב — אתה בדיוק באזור התחזוקה" };
+    return { tone: "success", colorToken: toneColorMap.success, message: "יציב — בדיוק הכיוון הרצוי" };
   }
-  if (avgDelta <= -0.2) {
-    return { tone: "warning", colorToken: toneColorMap.warning, message: "יש ירידה קלה — ייתכן שאתה קצת מתחת לתחזוקה" };
+  if (Math.abs(avgDelta) < 0.5 || Math.abs(lowDelta) < 0.3) {
+    return { tone: "warning", colorToken: toneColorMap.warning, message: "יש סטייה קלה — שווה לשים לב לאיזון" };
   }
-  return { tone: "warning", colorToken: toneColorMap.warning, message: "יש עלייה קלה — ייתכן שאתה קצת מעל התחזוקה" };
+  return { tone: "danger", colorToken: toneColorMap.danger, message: "המשקל יוצא מהטווח — כדאי להתכנס" };
 }
 
 function renderDashboard() {
@@ -425,47 +419,18 @@ if (inProgress) {
 
     const trendStatus = getWeightTrendStatus(goalMode, avgDelta, lowDelta, has14DaySpan);
     const fmtWeightOrDash = v => Number.isFinite(v) ? `${Number(v).toFixed(1)} ק״ג` : "—";
+    const avgDeltaSummary = avgDelta === null
+      ? "אין עדיין מספיק נתונים למגמה"
+      : avgDelta <= -0.1
+      ? `⬇ ירידה של ${Math.abs(avgDelta).toFixed(1)} ק״ג`
+      : avgDelta >= 0.1
+      ? `⬆ עלייה של ${Math.abs(avgDelta).toFixed(1)} ק״ג`
+      : "ללא שינוי משמעותי";
     const cardBorder = needsUpdate ? "var(--orange)" : "var(--border)";
     const cardBg = needsUpdate ? "var(--orange-bg)" : "var(--card)";
     const dailyBtn = hasTodayWeight
       ? `<button onclick="event.preventDefault();event.stopPropagation();return false;" style="display:flex;align-items:center;gap:5px;background:var(--green);border:none;border-radius:8px;padding:6px 12px;cursor:default;font-size:12px;color:#fff;font-family:inherit;font-weight:600;opacity:0.95;pointer-events:none" disabled>שקילה יומית נרשמה</button>`
       : `<button onclick="showWeightModal()" style="display:flex;align-items:center;gap:5px;background:${shouldPromptDaily ? "var(--orange)" : "var(--surface)"};border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;color:${shouldPromptDaily ? "#fff" : "var(--text-secondary)"};font-family:inherit;font-weight:600">הזן משקל</button>`;
-
-    const weightGoalData = state.weightGoal || {};
-    const parsedGoal = (typeof getWeightGoalValues === "function")
-      ? getWeightGoalValues(weightGoalData)
-      : {
-        start: Number(weightGoalData.start_weight),
-        target: Number(weightGoalData.goal_weight),
-        hasGoal: Number.isFinite(Number(weightGoalData.start_weight)) && Number.isFinite(Number(weightGoalData.goal_weight))
-      };
-    const startGoal = parsedGoal.start;
-    const targetGoal = parsedGoal.target;
-    const hasGoal = parsedGoal.hasGoal && startGoal > 0 && targetGoal > 0 && startGoal !== targetGoal;
-    const dist = hasGoal ? Math.abs(startGoal - targetGoal) : 0;
-    const progressRaw = hasGoal ? Math.abs(startGoal - latest.weight) / dist : 0;
-    const progressPct = hasGoal ? Math.max(0, Math.min(100, Math.round(progressRaw * 100))) : 0;
-    const goalDirectionDown = hasGoal && targetGoal < startGoal;
-    const remaining = hasGoal ? (goalDirectionDown ? latest.weight - targetGoal : targetGoal - latest.weight) : null;
-    const done = hasGoal && remaining <= 0;
-    const goalStatus = !hasGoal
-      ? "הגדר יעד כדי לעקוב אחרי התקדמות"
-      : done
-      ? "היעד הושג — אלוף!"
-      : `נשארו עוד ${remaining.toFixed(1)} ק״ג ליעד`;
-    const goalSection = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-      <div style="margin-bottom:7px">
-        <div style="font-size:12px;color:var(--text-secondary);font-weight:600">יעד משקל</div>
-        <div style="font-size:11px;color:var(--text-hint);margin-top:2px">${hasGoal ? `<span style="display:inline-flex;gap:4px;align-items:center;direction:rtl;unicode-bidi:isolate"><span>משקל התחלתי: ${startGoal.toFixed(1)}</span><span aria-hidden="true">←</span><span>משקל יעד: ${targetGoal.toFixed(1)} ק״ג</span></span>` : "ללא יעד מוגדר"}</div>
-      </div>
-      <div style="height:8px;background:var(--surface);border-radius:999px;overflow:hidden;margin-bottom:7px">
-        <div style="width:${progressPct}%;height:100%;background:${done ? "var(--green)" : "var(--accent)"};transition:width .25s ease"></div>
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:11px;color:${done ? "var(--green)" : "var(--text-secondary)"}">${goalStatus}</span>
-        <span style="font-size:11px;color:var(--text-hint)">${hasGoal ? progressPct + "%" : "--"}</span>
-      </div>
-    </div>`;
 
     weightCard = `<div class="anim-card" style="background:${cardBg};border:1px solid ${cardBorder};border-radius:14px;padding:14px 16px;margin-bottom:16px;animation-delay:1.0s">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
@@ -481,29 +446,20 @@ if (inProgress) {
           <div style="font-size:12px;color:${trendStatus.colorToken};font-weight:600;margin-top:6px">${trendStatus.message}</div>
         </div>
       </div>
-      ${has14DaySpan ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px">
           <div style="font-size:11px;color:var(--text-hint)">ממוצע 7 ימים</div>
           <div style="font-size:14px;font-weight:700;color:var(--text-primary);margin-top:2px">${fmtWeightOrDash(currentRange.avg)}</div>
         </div>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px">
-          <div style="font-size:11px;color:var(--text-hint)">7 הימים שלפני</div>
-          <div style="font-size:14px;font-weight:700;color:var(--text-primary);margin-top:2px">${fmtWeightOrDash(prevRange.avg)}</div>
+          <div style="font-size:11px;color:var(--text-hint)">שינוי מול שבוע קודם</div>
+          <div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-top:2px">${avgDeltaSummary}</div>
         </div>
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px">
-          <div style="font-size:11px;color:var(--text-hint)">משקל שפל 7 ימים</div>
-          <div style="font-size:14px;font-weight:700;color:var(--text-primary);margin-top:2px">${fmtWeightOrDash(currentRange.low)}</div>
-        </div>
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px">
-          <div style="font-size:11px;color:var(--text-hint)">שפל 7 הימים שלפני</div>
-          <div style="font-size:14px;font-weight:700;color:var(--text-primary);margin-top:2px">${fmtWeightOrDash(prevRange.low)}</div>
-        </div>
-      </div>` : ""}
+      </div>
       <div style="display:flex;justify-content:space-between;align-items:center">
         <span style="font-size:11px;color:var(--text-hint)">${hasTodayWeight ? "השקילה היומית הוזנה להיום" : (needsUpdate ? "לא נשקלת השבוע" : "עודכן לפני " + dSinceW + " ימים (" + formatWeightDate(latest) + ")")}</span>
         ${dailyBtn}
       </div>
-      ${goalSection}
     </div>`;
   }
   // ─────────────────────────────────────────────────────────────────
