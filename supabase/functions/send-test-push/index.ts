@@ -23,8 +23,8 @@ Deno.serve(async req => {
   }
 
   try {
-    const { user_id } = await req.json();
-    if (!user_id) return jsonResponse(400, { error: "Missing user_id" });
+    const { user_id, endpoint } = await req.json();
+    if (!user_id || !endpoint) return jsonResponse(400, { error: "Missing user_id or endpoint" });
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -43,13 +43,12 @@ Deno.serve(async req => {
       .from("push_subscriptions")
       .select("id, endpoint, p256dh, auth")
       .eq("user_id", user_id)
+      .eq("endpoint", endpoint)
       .eq("is_active", true)
-      .order("last_seen_at", { ascending: false })
-      .limit(1)
       .maybeSingle();
 
     if (error) return jsonResponse(500, { error: error.message });
-    if (!subscription) return jsonResponse(404, { error: "No active subscription found" });
+    if (!subscription) return jsonResponse(404, { error: "No active subscription found for this device" });
 
     const payload = JSON.stringify({ title: "GymBuddy", body: "זוהי התראת בדיקה", url: "/" });
 

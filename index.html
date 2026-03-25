@@ -1743,13 +1743,17 @@ async function sendTestPushNotification() {
   render();
   try {
     const userId = requireUserIdOrThrow("sendTestPushNotification");
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+    if (!subscription?.endpoint) throw new Error("No current device subscription");
+
     const res = await fetch(SUPABASE_URL + "/functions/v1/send-test-push", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         apikey: SUPABASE_KEY
       },
-      body: JSON.stringify({ user_id: userId })
+      body: JSON.stringify({ user_id: userId, endpoint: subscription.endpoint })
     });
     if (!res.ok) throw new Error(await res.text());
     showToast("התראת בדיקה נשלחה ✓");
