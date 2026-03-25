@@ -1220,13 +1220,16 @@ function renderHistory() {
     const customRangeInvalid = isCustomRange && customFrom && customTo && new Date(`${customFrom}T00:00:00`) > new Date(`${customTo}T00:00:00`);
     const hasFilteredData = filtered.length > 0;
     const withAvg = getWeightMovingAverage(filtered, avgWindowDays);
+    const weeklyTrendSeries = getWeightMovingAverage(filtered, 7);
     const chartBase = !isCustomRange && range >= 180 ? aggregateWeightByWeek(filtered) : filtered;
     const chartAvgWindow = !isCustomRange && range >= 180 ? Math.max(2, Math.round(avgWindowDays / 7)) : avgWindowDays;
     const chartSeries = getWeightMovingAverage(chartBase, chartAvgWindow);
     const latest = hasFilteredData ? filtered[filtered.length - 1] : null;
     const latestOverall = allLogs[allLogs.length - 1] || null;
     const first = hasFilteredData ? filtered[0] : null;
-    const delta = hasFilteredData ? (latest.weight - first.weight) : 0;
+    const delta = hasFilteredData
+      ? ((weeklyTrendSeries[weeklyTrendSeries.length - 1]?.movingAvg ?? latest.weight) - (weeklyTrendSeries[0]?.movingAvg ?? first.weight))
+      : 0;
     const avg7 = hasFilteredData ? (withAvg[withAvg.length - 1]?.movingAvg ?? latest.weight) : 0;
     const summaryCards = `
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:10px">
