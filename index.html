@@ -1747,7 +1747,7 @@ async function sendTestPushNotification() {
     const subscription = await registration.pushManager.getSubscription();
     if (!subscription?.endpoint) throw new Error("No current device subscription");
 
-    const res = await fetch(https://jezibgdemidhebbcpdch.supabase.co/functions/v1/send-test-push), {
+   const res = await fetch("https://jezibgdemidhebbcpdch.supabase.co/functions/v1/send-test-push", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
