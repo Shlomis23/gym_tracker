@@ -140,6 +140,58 @@ function getDaysSinceLastWorkout() {
   return { days, session: last };
 }
 
+function getWeightTrendStatus(goalMode, avgDelta, lowDelta, has14DaySpan) {
+  const toneColorMap = {
+    success: "var(--green)",
+    warning: "var(--orange)",
+    danger: "var(--red)",
+    neutral: "var(--text-secondary)"
+  };
+  if (!has14DaySpan || avgDelta === null || lowDelta === null) {
+    return {
+      tone: "neutral",
+      colorToken: toneColorMap.neutral,
+      message: "אין עדיין מספיק נתונים להשוואת 14 ימים"
+    };
+  }
+
+  const mode = goalMode || "maintain";
+  if (mode === "cut") {
+    if (avgDelta <= -0.2) {
+      return { tone: "success", colorToken: toneColorMap.success, message: "קצב הירידה נראה טוב — ממשיכים כך" };
+    }
+    if (avgDelta < 0.1) {
+      return { tone: "warning", colorToken: toneColorMap.warning, message: "אין שינוי משמעותי — שווה להמשיך עוד כמה ימים או לחדד קצת" };
+    }
+    return { tone: "danger", colorToken: toneColorMap.danger, message: "יש עלייה קלה — שווה לבדוק איך היה השבוע ולחדד אם צריך" };
+  }
+
+  if (mode === "lean_bulk") {
+    if (avgDelta > 0.5 && lowDelta > 0.3) {
+      return { tone: "danger", colorToken: toneColorMap.danger, message: "העלייה מהירה יחסית — שווה להוריד מעט קלוריות" };
+    }
+    if (avgDelta >= 0.2 && avgDelta <= 0.4) {
+      return { tone: "success", colorToken: toneColorMap.success, message: "קצב העלייה נראה טוב — ממשיכים כך" };
+    }
+    if (avgDelta < 0.1) {
+      return { tone: "warning", colorToken: toneColorMap.warning, message: "אין כמעט שינוי — אולי שווה להוסיף קצת קלוריות" };
+    }
+    return { tone: "neutral", colorToken: toneColorMap.neutral, message: "יש עלייה מתונה — נראה תקין, נמשיך לעקוב" };
+  }
+
+  // maintain
+  if ((Math.abs(avgDelta) >= 0.5) && (Math.abs(lowDelta) >= 0.3)) {
+    return { tone: "danger", colorToken: toneColorMap.danger, message: "יש שינוי משמעותי — כנראה לא באזור תחזוקה כרגע" };
+  }
+  if (avgDelta > -0.2 && avgDelta < 0.2) {
+    return { tone: "success", colorToken: toneColorMap.success, message: "המשקל יציב — אתה בדיוק באזור התחזוקה" };
+  }
+  if (avgDelta <= -0.2) {
+    return { tone: "warning", colorToken: toneColorMap.warning, message: "יש ירידה קלה — ייתכן שאתה קצת מתחת לתחזוקה" };
+  }
+  return { tone: "warning", colorToken: toneColorMap.warning, message: "יש עלייה קלה — ייתכן שאתה קצת מעל התחזוקה" };
+}
+
 function renderDashboard() {
   const next = getNextWorkout();
   const streak = getWeekStreak();
@@ -340,31 +392,39 @@ if (inProgress) {
       <button onclick="event.stopPropagation();showWeightModal()" style="background:${emptyBtnBg};border:none;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:12px;color:${emptyBtnColor};font-family:inherit;font-weight:600">${emptyBtnLabel}</button>
     </div>`;
   } else if (latest) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const startOfCurrentWeek = new Date(today);
-    startOfCurrentWeek.setDate(today.getDate() - today.getDay()); // Sunday
-    const startOfPrevWeek = new Date(startOfCurrentWeek);
-    startOfPrevWeek.setDate(startOfCurrentWeek.getDate() - 7);
-    const endOfPrevWeek = new Date(startOfCurrentWeek);
-    endOfPrevWeek.setMilliseconds(-1); // Saturday 23:59:59.999
+    const goalMode = (typeof getWeightGoalMode === "function") ? getWeightGoalMode(state.weightGoal) : "maintain";
+    const goalModeLabel = goalMode === "cut" ? "חיטוב" : (goalMode === "lean_bulk" ? "מסה נקייה" : "תחזוקה");
 
-    const prevWeekLogs = weightLogsAsc.filter(log => {
-      const dt = new Date(log.measured_at);
-      return dt >= startOfPrevWeek && dt <= endOfPrevWeek;
-    });
-    const prevWeekAvg = prevWeekLogs.length
-      ? prevWeekLogs.reduce((sum, log) => sum + Number(log.weight), 0) / prevWeekLogs.length
-      : null;
+    const latestDay = new Date(latest.measured_at);
+    latestDay.setHours(0, 0, 0, 0);
+    const firstDay = weightLogsAsc.length ? new Date(weightLogsAsc[0].measured_at) : null;
+    if (firstDay) firstDay.setHours(0, 0, 0, 0);
+    const requiredStartDay = new Date(latestDay);
+    requiredStartDay.setDate(requiredStartDay.getDate() - 13);
+    const has14DaySpan = !!(firstDay && firstDay <= requiredStartDay);
 
-    const diff = prevWeekAvg !== null ? (latest.weight - prevWeekAvg) : null;
-    const diffColor = diff === null ? "var(--text-hint)" : diff < 0 ? "var(--green)" : diff > 0 ? "var(--red)" : "var(--text-hint)";
-    const diffArrow = diff === null ? "" : diff < 0
-      ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>`
-      : diff > 0
-      ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`
-      : "";
-    const diffText = diff === null ? "" : `${diff > 0 ? "+" : ""}${diff.toFixed(1)} ק״ג מול ממוצע שבוע שעבר`;
+    const buildRange = (startOffset, endOffset) => {
+      const from = new Date(latestDay);
+      const to = new Date(latestDay);
+      from.setDate(from.getDate() - startOffset);
+      to.setDate(to.getDate() - endOffset);
+      const logs = weightLogsAsc.filter(log => {
+        const dt = new Date(log.measured_at);
+        dt.setHours(0, 0, 0, 0);
+        return dt >= from && dt <= to;
+      });
+      const avg = logs.length ? (logs.reduce((sum, log) => sum + Number(log.weight), 0) / logs.length) : null;
+      const low = logs.length ? Math.min(...logs.map(log => Number(log.weight))) : null;
+      return { avg, low };
+    };
+
+    const currentRange = has14DaySpan ? buildRange(6, 0) : { avg: null, low: null };
+    const prevRange = has14DaySpan ? buildRange(13, 7) : { avg: null, low: null };
+    const avgDelta = (currentRange.avg !== null && prevRange.avg !== null) ? (currentRange.avg - prevRange.avg) : null;
+    const lowDelta = (currentRange.low !== null && prevRange.low !== null) ? (currentRange.low - prevRange.low) : null;
+
+    const trendStatus = getWeightTrendStatus(goalMode, avgDelta, lowDelta, has14DaySpan);
+    const fmtWeightOrDash = v => Number.isFinite(v) ? `${Number(v).toFixed(1)} ק״ג` : "—";
     const cardBorder = needsUpdate ? "var(--orange)" : "var(--border)";
     const cardBg = needsUpdate ? "var(--orange-bg)" : "var(--card)";
     const dailyBtn = hasTodayWeight
@@ -410,14 +470,35 @@ if (inProgress) {
     weightCard = `<div class="anim-card" style="background:${cardBg};border:1px solid ${cardBorder};border-radius:14px;padding:14px 16px;margin-bottom:16px;animation-delay:1.0s">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
         <div>
-          <div class="stat-label">משקל נוכחי</div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <div class="stat-label">משקל נוכחי</div>
+            <span style="font-size:10px;color:var(--text-secondary);background:var(--surface);border:1px solid var(--border-med);padding:2px 7px;border-radius:999px">${goalModeLabel}</span>
+          </div>
           <div style="display:flex;align-items:baseline;gap:5px;margin-top:3px">
             <span style="font-size:32px;font-weight:700;color:var(--text-primary);line-height:1">${latest.weight}</span>
             <span style="font-size:14px;color:var(--text-hint)">ק״ג</span>
           </div>
-          ${diff !== null ? `<div style="display:flex;align-items:center;gap:4px;margin-top:4px">${diffArrow}<span style="font-size:12px;color:${diffColor};font-weight:600">${diffText}</span></div>` : ""}
+          <div style="font-size:12px;color:${trendStatus.colorToken};font-weight:600;margin-top:6px">${trendStatus.message}</div>
         </div>
       </div>
+      ${has14DaySpan ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px">
+          <div style="font-size:11px;color:var(--text-hint)">ממוצע 7 ימים</div>
+          <div style="font-size:14px;font-weight:700;color:var(--text-primary);margin-top:2px">${fmtWeightOrDash(currentRange.avg)}</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px">
+          <div style="font-size:11px;color:var(--text-hint)">7 הימים שלפני</div>
+          <div style="font-size:14px;font-weight:700;color:var(--text-primary);margin-top:2px">${fmtWeightOrDash(prevRange.avg)}</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px">
+          <div style="font-size:11px;color:var(--text-hint)">משקל שפל 7 ימים</div>
+          <div style="font-size:14px;font-weight:700;color:var(--text-primary);margin-top:2px">${fmtWeightOrDash(currentRange.low)}</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px">
+          <div style="font-size:11px;color:var(--text-hint)">שפל 7 הימים שלפני</div>
+          <div style="font-size:14px;font-weight:700;color:var(--text-primary);margin-top:2px">${fmtWeightOrDash(prevRange.low)}</div>
+        </div>
+      </div>` : ""}
       <div style="display:flex;justify-content:space-between;align-items:center">
         <span style="font-size:11px;color:var(--text-hint)">${hasTodayWeight ? "השקילה היומית הוזנה להיום" : (needsUpdate ? "לא נשקלת השבוע" : "עודכן לפני " + dSinceW + " ימים (" + formatWeightDate(latest) + ")")}</span>
         ${dailyBtn}
