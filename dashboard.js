@@ -376,7 +376,7 @@ if (inProgress) {
       if (goalMode === "cut") {
         if (avgDelta <= -0.2) trendText = "קצב הירידה תקין — אפשר להמשיך כך";
         else if (avgDelta < 0.1) trendText = "אין כמעט ירידה — אפשר להמשיך כך או לחדד מעט קלוריות/פעילות";
-        else trendText = "יש עלייה במגמה — כדאי לבדוק צריכה, היענות או נוזלים";
+        else trendText = "הייתה עלייה — בוא נבדוק שזה לא נהיה מגמה";
       } else if (goalMode === "lean_bulk") {
         if (avgDelta >= 0.2 && avgDelta <= 0.4) trendText = "קצב העלייה תקין — אפשר להמשיך כך";
         else if (avgDelta < 0.1) trendText = "אין כמעט עלייה — אפשר להעלות מעט קלוריות לפי המטרה";
