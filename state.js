@@ -37,7 +37,7 @@ let state = {
   screen: "dashboard", workoutId: null, openExercise: null, exercises: {},
   sessions: [], workouts: loadWorkouts(), settings: loadSettings(),
   manageOpenId: null, editingNameId: null, selectedWorkoutId: null, expandedSessions: new Set(),
-  weightLogs: [], weightGoal: { start_weight: null, goal_weight: null }, historyTab: "workouts",
+  weightLogs: [], weightGoal: { start_weight: null, goal_weight: null, goal_mode: "maintain" }, historyTab: "workouts",
   userId: null,
   syncStatus: {
     lastError: null,

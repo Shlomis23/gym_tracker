@@ -3,7 +3,7 @@ const STORAGE_WEIGHT_GOAL = "gym_weight_goal_v1";
 
 function saveWeightCache() {
   localStorage.setItem(STORAGE_WEIGHT_LOGS, JSON.stringify(state.weightLogs || []));
-  localStorage.setItem(STORAGE_WEIGHT_GOAL, JSON.stringify(state.weightGoal || { start_weight: null, goal_weight: null }));
+  localStorage.setItem(STORAGE_WEIGHT_GOAL, JSON.stringify(state.weightGoal || { start_weight: null, goal_weight: null, goal_mode: "maintain" }));
 }
 
 function loadWeightCache() {
@@ -41,7 +41,8 @@ async function loadWeightData() {
     const normalizedGoals = goalRows.map(g => ({
       ...g,
       start_weight: g.start_weight ?? g.startWeight ?? g.starting_weight ?? null,
-      goal_weight: g.goal_weight ?? g.goalWeight ?? g.target_weight ?? null
+      goal_weight: g.goal_weight ?? g.goalWeight ?? g.target_weight ?? null,
+      goal_mode: getWeightGoalMode(g)
     }));
     const validGoal = normalizedGoals.find(g => getWeightGoalValues(g).hasGoal);
     if (validGoal) state.weightGoal = validGoal;
@@ -54,7 +55,7 @@ async function loadWeightData() {
     state.weightLogs = (cached.logs || []).map(mapWeightLog);
     state.weightLogs = getWeightLogsAsc();
     if (cached.goal && typeof cached.goal === "object") {
-      state.weightGoal = cached.goal;
+      state.weightGoal = { ...cached.goal, goal_mode: getWeightGoalMode(cached.goal) };
     }
     setDataSource("weight", "local");
     setSyncError("טעינת נתוני משקל מהענן נכשלה");
@@ -119,13 +120,18 @@ async function updateWeightLog(id, weight, measuredAtIso, note) {
   }
 }
 
-async function saveWeightGoal(startWeight, goalWeight) {
+async function saveWeightGoal(startWeight, goalWeight, goalMode) {
   try {
     const userId = ensureUserId();
     await sbDelete("weight_goal?user_id=eq." + encodeURIComponent(userId));
-    const row = await sbPost("weight_goal", { user_id: userId, start_weight: startWeight, goal_weight: goalWeight });
+    const row = await sbPost("weight_goal", {
+      user_id: userId,
+      start_weight: startWeight,
+      goal_weight: goalWeight,
+      goal_mode: getWeightGoalMode({ goal_mode: goalMode })
+    });
     if (!Array.isArray(row) || !row.length) throw new Error("Invalid weight_goal write response");
-    state.weightGoal = row[0];
+    state.weightGoal = { ...row[0], goal_mode: getWeightGoalMode(row[0]) };
     saveWeightCache();
     clearSyncError();
   } catch (e) {
@@ -140,7 +146,7 @@ async function deleteWeightLog(id) {
     await sbDelete("body_weight_logs?id=eq." + id);
     state.weightLogs = state.weightLogs.filter(l => l.id !== id);
     if (!state.weightLogs.length) {
-      state.weightGoal = { start_weight: null, goal_weight: null };
+      state.weightGoal = { start_weight: null, goal_weight: null, goal_mode: "maintain" };
     }
     saveWeightCache();
     render();

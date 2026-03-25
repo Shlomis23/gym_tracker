@@ -172,6 +172,7 @@ function buildWrap(mb) {
 
 function showGoalModal() {
   const wGoal = state.weightGoal || {};
+  const selectedGoalMode = (typeof getWeightGoalMode === "function") ? getWeightGoalMode(wGoal) : "maintain";
   document.getElementById("goal-modal")?.remove();
 
   const overlay = document.createElement("div");
@@ -196,6 +197,14 @@ function showGoalModal() {
       <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">יעד משקל (ק״ג)</label>
       <input id="goal-target-inp" type="number" inputmode="decimal" step="0.1" placeholder="לדוגמה 78.0" value="${wGoal.goal_weight ?? ""}" style="width:100%;box-sizing:border-box;display:block;padding:11px 12px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;font-size:16px">
     </div>
+    <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:12px;margin-bottom:14px">
+      <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">מצב יעד</label>
+      <select id="goal-mode-inp" style="width:100%;box-sizing:border-box;display:block;padding:11px 12px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;font-size:16px">
+        <option value="cut" ${selectedGoalMode === "cut" ? "selected" : ""}>חיטוב</option>
+        <option value="maintain" ${selectedGoalMode === "maintain" ? "selected" : ""}>תחזוקה</option>
+        <option value="lean_bulk" ${selectedGoalMode === "lean_bulk" ? "selected" : ""}>מסה נקייה</option>
+      </select>
+    </div>
     <button id="goal-save-btn" class="btn-primary" style="margin-bottom:8px">שמור יעד</button>
     <button id="goal-cancel-btn" style="width:100%;padding:12px;background:var(--surface);border:1px solid var(--border-med);color:var(--text-secondary);border-radius:10px;font-family:inherit;cursor:pointer">ביטול</button>
   `;
@@ -208,12 +217,13 @@ function showGoalModal() {
   sheet.querySelector("#goal-save-btn").addEventListener("click", async () => {
     const startVal = parseFloat(sheet.querySelector("#goal-start-inp").value);
     const goalVal = parseFloat(sheet.querySelector("#goal-target-inp").value);
+    const goalModeVal = sheet.querySelector("#goal-mode-inp").value || "maintain";
     if (!Number.isFinite(startVal) || !Number.isFinite(goalVal) || startVal <= 0 || goalVal <= 0) {
       showToast("הזן משקל התחלתי ויעד תקינים");
       return;
     }
     try {
-      await saveWeightGoal(startVal, goalVal);
+      await saveWeightGoal(startVal, goalVal, goalModeVal);
       overlay.remove();
       render();
       showToast("היעד נשמר ✓");
@@ -1614,6 +1624,8 @@ function toggleHistorySession(id) {
 
 function renderManage() {
   const weightGoalValues = getWeightGoalValues(state.weightGoal);
+  const weightGoalMode = (typeof getWeightGoalMode === "function") ? getWeightGoalMode(state.weightGoal) : "maintain";
+  const weightGoalModeLabel = weightGoalMode === "cut" ? "חיטוב" : (weightGoalMode === "lean_bulk" ? "מסה נקייה" : "תחזוקה");
   const workoutSections = state.workouts.map(w => {
     const isOpen = state.manageOpenId === w.id;
     const isEditing = state.editingNameId === w.id;
@@ -1723,7 +1735,7 @@ function renderManage() {
       </div>
       <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;line-height:1.5">
         ${hasWeightGoal(state.weightGoal)
-          ? `<span style="display:inline-flex;gap:4px;align-items:center;direction:ltr;unicode-bidi:isolate"><span>התחלתי: ${weightGoalValues.start.toFixed(1)}</span><span aria-hidden="true">→</span><span>יעד: ${weightGoalValues.target.toFixed(1)} ק״ג</span></span>`
+          ? `<span style="display:inline-flex;gap:4px;align-items:center;direction:ltr;unicode-bidi:isolate"><span>התחלתי: ${weightGoalValues.start.toFixed(1)}</span><span aria-hidden="true">→</span><span>יעד: ${weightGoalValues.target.toFixed(1)} ק״ג</span></span><br><span style="font-size:11px;color:var(--text-hint)">מצב יעד: ${weightGoalModeLabel}</span>`
           : "לא הוגדר יעד משקל עדיין"}
       </div>
       <button onclick="showGoalModal()" style="width:100%;padding:10px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-size:13px;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">

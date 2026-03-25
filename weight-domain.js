@@ -36,6 +36,21 @@ function getWeightGoalValues(goal) {
   return { start, target, hasGoal: Number.isFinite(start) && Number.isFinite(target) };
 }
 
+function getWeightGoalMode(goal) {
+  const g = goal || state.weightGoal || {};
+  const rawMode = String(
+    g.goal_mode
+    ?? g.goalMode
+    ?? g.mode
+    ?? g?.goal?.goal_mode
+    ?? g?.goal?.goalMode
+    ?? "maintain"
+  ).trim().toLowerCase();
+  if (rawMode === "cut") return "cut";
+  if (rawMode === "lean_bulk" || rawMode === "leanbulk") return "lean_bulk";
+  return "maintain";
+}
+
 function hasWeightGoal(goal) {
   return getWeightGoalValues(goal).hasGoal;
 }
