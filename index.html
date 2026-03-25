@@ -1636,6 +1636,129 @@ function toggleHistorySession(id) {
   render();
 }
 
+function getNotificationStatusText() {
+  if (!("Notification" in window)) return "התראות לא פעילות";
+  if (Notification.permission === "denied") return "ההרשאה נדחתה";
+  if (Notification.permission === "default") return "ממתין להרשאה";
+  if (Notification.permission === "granted" && state.pushSubscriptionActive) return "התראות פעילות";
+  return "התראות לא פעילות";
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+}
+
+function detectPlatform() {
+  const ua = (navigator.userAgent || "").toLowerCase();
+  if (/iphone|ipad|ipod/.test(ua)) return "ios";
+  if (/android/.test(ua)) return "android";
+  return "desktop";
+}
+
+async function syncPushSubscriptionState() {
+  try {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+    state.pushSubscriptionActive = !!subscription;
+  } catch (_) {
+    state.pushSubscriptionActive = false;
+  }
+}
+
+async function savePushSubscriptionToSupabase(subscription) {
+  const userId = requireUserIdOrThrow("savePushSubscriptionToSupabase");
+  const keys = subscription.toJSON().keys || {};
+  const nowIso = new Date().toISOString();
+  const payload = [{
+    user_id: userId,
+    endpoint: subscription.endpoint,
+    p256dh: keys.p256dh || "",
+    auth: keys.auth || "",
+    user_agent: navigator.userAgent || null,
+    platform: detectPlatform(),
+    is_active: true,
+    updated_at: nowIso,
+    last_seen_at: nowIso
+  }];
+  const headers = { ...SB_HEADERS, Prefer: "return=representation,resolution=merge-duplicates" };
+  const res = await fetch(SUPABASE_URL + "/rest/v1/push_subscriptions?on_conflict=endpoint", {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+async function enablePushNotifications() {
+  if (state.notificationBusy) return;
+  state.notificationBusy = true;
+  render();
+  try {
+    if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+      showToast("התראות לא נתמכות בדפדפן זה");
+      return;
+    }
+
+    let permission = Notification.permission;
+    if (permission === "default") {
+      permission = await Notification.requestPermission();
+    }
+    if (permission !== "granted") {
+      render();
+      return;
+    }
+
+    if (!VAPID_PUBLIC_KEY) {
+      showToast("חסר VAPID_PUBLIC_KEY");
+      return;
+    }
+
+    const registration = await navigator.serviceWorker.ready;
+    const existing = await registration.pushManager.getSubscription();
+    const subscription = existing || await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+    });
+
+    await savePushSubscriptionToSupabase(subscription);
+    state.pushSubscriptionActive = true;
+    showToast("התראות הופעלו ✓");
+  } catch (e) {
+    console.error("Enable push failed:", e);
+    showToast("שגיאה בהפעלת התראות ⚠️");
+  } finally {
+    state.notificationBusy = false;
+    render();
+  }
+}
+
+async function sendTestPushNotification() {
+  if (state.notificationTestBusy) return;
+  state.notificationTestBusy = true;
+  render();
+  try {
+    const userId = requireUserIdOrThrow("sendTestPushNotification");
+    const res = await fetch(SUPABASE_URL + "/functions/v1/send-test-push", {
+      method: "POST",
+      headers: SB_HEADERS,
+      body: JSON.stringify({ user_id: userId })
+    });
+    if (!res.ok) throw new Error(await res.text());
+    showToast("התראת בדיקה נשלחה ✓");
+  } catch (e) {
+    console.error("Test push failed:", e);
+    showToast("שליחת התראת בדיקה נכשלה ⚠️");
+  } finally {
+    state.notificationTestBusy = false;
+    render();
+  }
+}
+
 function renderManage() {
   const weightGoalValues = getWeightGoalValues(state.weightGoal);
   const weightGoalMode = (typeof getWeightGoalMode === "function") ? getWeightGoalMode(state.weightGoal) : "maintain";
@@ -1755,6 +1878,18 @@ function renderManage() {
       <button onclick="showGoalModal()" style="width:100%;padding:10px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-size:13px;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">
         <i data-lucide="pencil" style="width:15px;height:15px"></i> ${hasWeightGoal(state.weightGoal) ? "ערוך יעד משקל" : "הוסף יעד משקל"}
       </button>
+    </div>
+
+    <div class="card" style="padding:14px 16px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px">
+        <i data-lucide="bell" style="width:15px;height:15px;color:var(--text-secondary)"></i>
+        <span style="font-weight:700;font-size:14px;color:var(--text-primary)">התראות</span>
+      </div>
+      <div style="font-size:12px;color:var(--text-hint);margin-bottom:10px" id="push-status-text">${getNotificationStatusText()}</div>
+      <div style="display:grid;grid-template-columns:1fr;gap:8px">
+        <button onclick="enablePushNotifications()" ${state.notificationBusy ? "disabled" : ""} style="width:100%;padding:10px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-size:13px;font-family:inherit">הפעל התראות</button>
+        <button onclick="sendTestPushNotification()" ${state.notificationTestBusy ? "disabled" : ""} style="width:100%;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer;font-size:13px;font-family:inherit">שלח התראת בדיקה</button>
+      </div>
     </div>
 
     <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px;padding:0 2px">
@@ -2268,6 +2403,7 @@ if (failed.length) {
   showToast("חלק מהנתונים לא נטענו ⚠️");
 }
   runRuntimeDataAudit();
+  await syncPushSubscriptionState();
   if (loader) {
     loader.style.opacity = "0";
     setTimeout(() => loader.remove(), 350);
@@ -2279,9 +2415,11 @@ if (failed.length) {
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
-        .then(registration => {
+        .then(async registration => {
           console.log('ServiceWorker registration successful:', registration.scope);
           registration.update().catch(() => {});
+          await syncPushSubscriptionState();
+          render();
         })
         .catch(err => {
           console.log('ServiceWorker registration failed:', err);

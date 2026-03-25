@@ -96,3 +96,46 @@ self.addEventListener('fetch', event => {
     })
   );
 });
+
+self.addEventListener('push', event => {
+  event.waitUntil((async () => {
+    let payload = {};
+    try {
+      payload = event.data ? event.data.json() : {};
+    } catch (_) {
+      payload = {};
+    }
+
+    const title = payload.title || 'GymBuddy';
+    const body = payload.body || 'יש לך עדכון חדש באפליקציה';
+    const url = payload.url || '/';
+
+    await self.registration.showNotification(title, {
+      body,
+      data: { url },
+      icon: './icon-192x192.png',
+      badge: './icon-192x192.png'
+    });
+  })());
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const targetUrl = event.notification?.data?.url || '/';
+
+  event.waitUntil((async () => {
+    const allClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of allClients) {
+      if ('focus' in client) {
+        await client.focus();
+        if ('navigate' in client) {
+          await client.navigate(targetUrl);
+        }
+        return;
+      }
+    }
+    if (clients.openWindow) {
+      await clients.openWindow(targetUrl);
+    }
+  })());
+});
