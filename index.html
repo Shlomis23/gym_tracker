@@ -64,15 +64,15 @@
 <script src="./utils.js"></script>
 <script src="./library.js"></script>
 <script src="./dashboard.js"></script>
+<script src="./api.js"></script>
+<script src="./sync-status.js"></script>
+<script src="./workouts-domain.js"></script>
+<script src="./workouts-data.js"></script>
+<script src="./weight-domain.js"></script>
+<script src="./weight-data.js"></script>
 <script>
 // ── Supabase ─────────────────────────────────────────────────────
-const APP_BUILD = "2026-03-23-audit-2";
-const DEBUG = localStorage.getItem("gym_debug") === "1";
 const ALLOW_EMPTY_WORKOUT_SYNC = false;
-const dlog = (...args) => { if (DEBUG) console.debug(...args); };
-const dinfo = (...args) => { if (DEBUG) console.info(...args); };
-dinfo("[GymBuddy] build:", APP_BUILD, "supabase:", SUPABASE_URL);
-window.__GYMBUDDY_BUILD__ = APP_BUILD;
 const STORAGE_USER_ID = "gym_user_id_v1";
 
 function ensureUserId() {
@@ -96,52 +96,6 @@ function requireUserIdOrThrow(contextLabel) {
   return userId;
 }
 
-function setDataSource(key, source) {
-  if (!state.syncStatus) return;
-  state.syncStatus.dataSource[key] = source;
-}
-function setSyncError(message) {
-  if (!state.syncStatus) return;
-  state.syncStatus.lastError = message;
-}
-function clearSyncError() {
-  if (!state.syncStatus) return;
-  state.syncStatus.lastError = null;
-}
-function renderSyncNotice() {
-  const status = state.syncStatus || {};
-  const localSources = Object.entries(status.dataSource || {})
-    .filter(([, src]) => src === "local")
-    .map(([k]) => k);
-  const fallbackLine = localSources.length
-    ? `<div style="font-size:11px;color:var(--orange)">מציג נתונים מקומיים: ${localSources.join(", ")}</div>`
-    : "";
-  const errorLine = status.lastError
-    ? `<div style="font-size:11px;color:var(--red);margin-top:${fallbackLine ? "4px" : "0"}">${escapeHtml(status.lastError)}</div>`
-    : "";
-  if (!fallbackLine && !errorLine) return "";
-  return `<div style="margin:10px 14px 0;padding:8px 10px;border-radius:10px;background:var(--surface);border:1px solid var(--border-med)">${fallbackLine}${errorLine}</div>`;
-}
-
-async function sbGet(path) {
-  const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, { headers: SB_HEADERS });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
-}
-async function sbPost(path, body) {
-  const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, { method:"POST", headers: SB_HEADERS, body: JSON.stringify(body) });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
-}
-async function sbPatch(path, body) {
-  const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, { method:"PATCH", headers: SB_HEADERS, body: JSON.stringify(body) });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
-}
-async function sbDelete(path) {
-  const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, { method:"DELETE", headers: SB_HEADERS });
-  if (!r.ok) throw new Error(await r.text());
-}
 // ─────────────────────────────────────────────────────────────────
 
 function getGoalForWeek(weekStartIso) {
@@ -155,266 +109,6 @@ try { state.sessions = JSON.parse(localStorage.getItem(STORAGE_SESSIONS) || "[]"
 
 function saveSessions() { localStorage.setItem(STORAGE_SESSIONS, JSON.stringify(state.sessions)); }
 
-async function saveSessionToSupabase(session) {
-  try {
-    const userId = requireUserIdOrThrow("saveSessionToSupabase");
-    const rows = await sbPost("workout_sessions", {
-      user_id: userId,
-      local_id: session.id,
-      workout_id: session.workoutId,
-      workout_name: getWorkout(session.workoutId)?.name || session.workoutId,
-      date: session.date,
-      note: session.note || ""
-    });
-    if (!Array.isArray(rows) || !rows.length || !rows[0]?.id) {
-      throw new Error("Invalid workout_sessions write response");
-    }
-    const sessionRow = rows[0];
-    const sets = [];
-    Object.entries(session.exercises || {}).forEach(([exName, exSets]) => {
-      exSets.forEach(s => {
-        if (s.weight > 0 || s.reps > 0) {
-          sets.push({ user_id: userId, session_id: sessionRow.id, exercise_name: exName, set_number: s.num, weight: s.weight, reps: s.reps, failed: !!s.failed });
-        }
-      });
-    });
-    if (sets.length) await sbPost("session_exercises", sets);
-    clearSyncError();
-  } catch(e) {
-    console.error("Supabase save failed:", e);
-    setSyncError("האימון נשמר מקומית בלבד (סנכרון לענן נכשל)");
-    throw e;
-  }
-}
-
-async function loadSessionsFromSupabase() {
-  try {
-    const sessionQuery = "workout_sessions?select=*,sets:session_exercises(*),session_exercises(*)&order=date.asc";
-    const rowsWithEmbed = await sbGet(sessionQuery);
-    dlog("[loadSessionsFromSupabase] workout_sessions (embedded sets) raw response:", rowsWithEmbed);
-
-    const rows = Array.isArray(rowsWithEmbed) ? rowsWithEmbed : [];
-    let exerciseRows = [];
-    try {
-      exerciseRows = await sbGet("session_exercises?select=*");
-    } catch (exerciseLoadErr) {
-      if (DEBUG) console.warn("Supabase session_exercises standalone fetch failed, using embedded relation only:", exerciseLoadErr);
-    }
-    dlog("[loadSessionsFromSupabase] workout_sessions raw response:", rows);
-    dlog("[loadSessionsFromSupabase] session_exercises raw response:", exerciseRows);
-
-    const setsBySessionId = new Map();
-    const getSetSessionKey = s => String(
-      s.session_id ??
-      s.workout_session_id ??
-      s.workout_session ??
-      s.session_local_id ??
-      s.local_session_id ??
-      ""
-    );
-
-    (exerciseRows || []).forEach(s => {
-      const key = getSetSessionKey(s);
-      if (!key) return;
-      if (!setsBySessionId.has(key)) setsBySessionId.set(key, []);
-      setsBySessionId.get(key).push(s);
-    });
-
-    const sessionIdSet = new Set(rows.map(r => String(r.id ?? "")).filter(Boolean));
-    const sessionLocalIdSet = new Set(rows.map(r => String(r.local_id ?? "")).filter(Boolean));
-    const unmatchedSessionExerciseRows = (exerciseRows || []).filter(s => {
-      const sid = getSetSessionKey(s);
-      if (!sid) return false;
-      return !sessionIdSet.has(sid) && !sessionLocalIdSet.has(sid);
-    });
-    if (unmatchedSessionExerciseRows.length) {
-      console.warn("[loadSessionsFromSupabase] Found session_exercises rows with non-matching FK (session_id/workout_session_id):", unmatchedSessionExerciseRows);
-    }
-
-    const hasUserIdFilter = /user_id=eq\./.test(sessionQuery);
-    dlog("[loadSessionsFromSupabase] user_id filter in query:", hasUserIdFilter);
-
-    const normalizeSet = s => ({
-      num: Number(s.set_number ?? s.set_no ?? s.set_index ?? s.num ?? 0),
-      weight: Number(s.weight ?? 0),
-      reps: Number(s.reps ?? 0),
-      failed: !!s.failed,
-      minutes: Number(s.minutes ?? 0)
-    });
-
-    state.sessions = rows.map(row => {
-      const exercises = {};
-      const rowKeys = [row.id, row.local_id].filter(Boolean).map(v => String(v));
-      const standaloneSets = rowKeys.flatMap(k => setsBySessionId.get(k) || []);
-      const rowSets = [
-        ...(Array.isArray(row.sets) ? row.sets : []),
-        ...(Array.isArray(row.session_exercises) ? row.session_exercises : []),
-        ...standaloneSets
-      ];
-      const uniqueSetMap = new Map();
-      rowSets.forEach(s => {
-        const dedupeKey = String(s.id ?? `${getSetSessionKey(s)}|${s.exercise_name ?? s.exercise?.name ?? s.exercise ?? s.name ?? ""}|${s.set_number ?? s.set_no ?? s.set_index ?? s.num ?? ""}|${s.weight ?? ""}|${s.reps ?? ""}|${s.minutes ?? ""}`);
-        if (!uniqueSetMap.has(dedupeKey)) uniqueSetMap.set(dedupeKey, s);
-      });
-
-      [...uniqueSetMap.values()].forEach(rawSet => {
-        const exName = rawSet.exercise_name ?? rawSet.exercise?.name ?? rawSet.exercise ?? rawSet.name;
-        if (!exName) return;
-        if (!exercises[exName]) exercises[exName] = [];
-        exercises[exName].push(normalizeSet(rawSet));
-      });
-      Object.values(exercises).forEach(arr => arr.sort((a,b) => a.num - b.num));
-      return { id: row.local_id || row.id, workoutId: row.workout_id, workoutName: row.workout_name || "", date: row.date, exercises, note: row.note || "" };
-    });
-    const sessionsWithoutExercises = state.sessions.filter(s => !Object.keys(s.exercises || {}).length).length;
-    if (state.sessions.length && sessionsWithoutExercises === state.sessions.length) {
-      console.warn("[loadSessionsFromSupabase] Sessions loaded but no exercise rows were mapped.");
-    }
-    localStorage.setItem(STORAGE_SESSIONS, JSON.stringify(state.sessions));
-    setDataSource("sessions", "supabase");
-  } catch(e) {
-    console.error("Supabase load failed, using localStorage:", e);
-    try { state.sessions = JSON.parse(localStorage.getItem(STORAGE_SESSIONS) || "[]"); } catch {}
-    setDataSource("sessions", "local");
-    setSyncError("טעינת אימונים מהענן נכשלה — מוצגים נתונים מקומיים");
-  }
-}
-
-async function runRuntimeDataAudit() {
-  if (!DEBUG) return;
-  try {
-    const [sessionsWithEmbed, standaloneSets, goals] = await Promise.all([
-      sbGet("workout_sessions?select=*,sets:session_exercises(*)&order=date.asc"),
-      sbGet("session_exercises?select=*"),
-      sbGet("weight_goal?select=*&order=updated_at.desc&limit=1")
-    ]);
-
-    const sessionRows = Array.isArray(sessionsWithEmbed) ? sessionsWithEmbed : [];
-    const hasSetsProp = sessionRows.some(r => Object.prototype.hasOwnProperty.call(r, "sets"));
-    const embeddedSetCount = sessionRows.reduce((n, r) => n + (Array.isArray(r.sets) ? r.sets.length : 0), 0);
-    const setRows = Array.isArray(standaloneSets) ? standaloneSets : [];
-
-    const sessionKeys = new Set(
-      sessionRows
-        .flatMap(r => [r.id, r.local_id])
-        .filter(Boolean)
-        .map(v => String(v))
-    );
-    const matchedStandalone = setRows.filter(s => {
-      const key = String(
-        s.session_id ??
-        s.workout_session_id ??
-        s.workout_session ??
-        s.session_local_id ??
-        s.local_session_id ??
-        ""
-      );
-      return key && sessionKeys.has(key);
-    }).length;
-    const orphanStandalone = setRows.length - matchedStandalone;
-
-    const goalRows = Array.isArray(goals) ? goals : (goals ? [goals] : []);
-    const goalParsed = goalRows[0] ? getWeightGoalValues(goalRows[0]) : { hasGoal: false, start: NaN, target: NaN };
-
-    console.info("[runtime-audit]", {
-      build: APP_BUILD,
-      supabaseUrl: SUPABASE_URL,
-      sessionsCount: sessionRows.length,
-      hasSetsProp,
-      embeddedSetCount,
-      standaloneSetCount: setRows.length,
-      matchedStandalone,
-      orphanStandalone,
-      weightGoalRows: goalRows.length,
-      weightGoalParsed: goalParsed,
-      prsFromStateCount: Object.keys(getPRs?.() || {}).length
-    });
-  } catch (err) {
-    console.warn("[runtime-audit] failed:", err);
-  }
-}
-
-async function deleteSessionFromSupabase(localId) {
-  try {
-    await sbDelete("workout_sessions?local_id=eq." + encodeURIComponent(localId));
-  } catch(e) {
-    console.error("Supabase delete failed:", e);
-  }
-}
-
-async function loadWeightData() {
-  try {
-    const logs = await sbGet("body_weight_logs?select=*&order=measured_at.asc");
-    dlog("[loadWeightData] body_weight_logs raw response:", logs);
-    const knownUserId = (logs || []).find(l => l.user_id)?.user_id;
-    if (knownUserId) {
-      state.userId = knownUserId;
-      localStorage.setItem(STORAGE_USER_ID, knownUserId);
-    } else {
-      ensureUserId();
-    }
-    state.weightLogs = (logs || []).map(mapWeightLog);
-    const goalsRaw = await sbGet("weight_goal?select=*&order=updated_at.desc&limit=1");
-    dlog("[loadWeightData] weight_goal raw response:", goalsRaw);
-    const goalRows = Array.isArray(goalsRaw) ? goalsRaw : (goalsRaw ? [goalsRaw] : []);
-    const goalUserId = goalRows.find(g => g.user_id)?.user_id;
-    if (!state.userId && goalUserId) {
-      state.userId = goalUserId;
-      localStorage.setItem(STORAGE_USER_ID, goalUserId);
-    }
-    const normalizedGoals = goalRows.map(g => ({
-      ...g,
-      start_weight: g.start_weight ?? g.startWeight ?? g.starting_weight ?? null,
-      goal_weight: g.goal_weight ?? g.goalWeight ?? g.target_weight ?? null
-    }));
-    const validGoal = normalizedGoals.find(g => getWeightGoalValues(g).hasGoal);
-    if (validGoal) state.weightGoal = validGoal;
-    else if (goalRows.length) console.warn("[loadWeightData] weight_goal row exists but could not be parsed:", goalRows[0]);
-    setDataSource("weight", "supabase");
-  } catch(e) { console.error("Weight load failed:", e); setDataSource("weight", "local"); setSyncError("טעינת נתוני משקל מהענן נכשלה"); }
-}
-
-function mapWeightLog(log) {
-  return {
-    id: log.id,
-    user_id: log.user_id || null,
-    weight: Number(log.weight),
-    measured_at: log.measured_at || log.date || new Date().toISOString(),
-    measured_date: log.measured_date || (log.date ? log.date.slice(0, 10) : new Date().toISOString().slice(0,10)),
-    note: log.note || ""
-  };
-}
-
-function getWeightLogsAsc() {
-  return [...state.weightLogs]
-    .map(mapWeightLog)
-    .sort((a, b) => new Date(a.measured_at) - new Date(b.measured_at));
-}
-
-function formatWeightDate(log) {
-  return formatDate(log.measured_at || log.date);
-}
-
-function getWeightGoalValues(goal) {
-  const g = goal || state.weightGoal || {};
-  const pickNumber = keys => {
-    for (const key of keys) {
-      const raw = g[key] ?? g?.goal?.[key] ?? null;
-      if (raw === null || raw === undefined || raw === "") continue;
-      const num = Number(String(raw).replace(",", "."));
-      if (Number.isFinite(num)) return num;
-    }
-    return NaN;
-  };
-
-  const start = pickNumber(["start_weight", "startWeight", "starting_weight", "start", "initial_weight"]);
-  const target = pickNumber(["goal_weight", "goalWeight", "target_weight", "target", "goal"]);
-  return { start, target, hasGoal: Number.isFinite(start) && Number.isFinite(target) };
-}
-
-function hasWeightGoal(goal) {
-  return getWeightGoalValues(goal).hasGoal;
-}
 
 function isoDateFromLocal(dateLike) {
   const dt = new Date(dateLike);
@@ -459,100 +153,6 @@ function readIsoDateFromSelector(container, prefix) {
   const maxDays = new Date(year, month, 0).getDate();
   const normalizedDay = Math.min(day, maxDays);
   return `${year}-${String(month).padStart(2, "0")}-${String(normalizedDay).padStart(2, "0")}`;
-}
-
-async function saveWeightLog(weight, measuredAtIso, note) {
-  try {
-    const userId = ensureUserId();
-    const measuredAt = measuredAtIso || new Date().toISOString();
-    const path = "body_weight_logs?on_conflict=user_id,measured_date";
-    const headers = { ...SB_HEADERS, Prefer: "return=representation,resolution=merge-duplicates" };
-    const payload = [{
-      user_id: userId,
-      weight,
-      measured_at: measuredAt,
-      note: note || ""
-    }];
-    const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload)
-    });
-    if (!r.ok) throw new Error(await r.text());
-    const rows = await r.json();
-    if (!Array.isArray(rows) || !rows.length) throw new Error("Invalid body_weight_logs write response");
-    const saved = mapWeightLog(rows[0]);
-    const idx = state.weightLogs.findIndex(l => l.id === saved.id);
-    if (idx >= 0) state.weightLogs[idx] = saved;
-    else state.weightLogs.push(saved);
-    state.weightLogs = getWeightLogsAsc();
-    clearSyncError();
-    showToast("המשקל נשמר ✓");
-    return saved;
-  } catch(e) { console.error("Weight save failed:", e); showToast("שגיאה בשמירת משקל ⚠️"); throw e; }
-}
-
-async function updateWeightLog(id, weight, measuredAtIso, note) {
-  try {
-    const rows = await sbPatch("body_weight_logs?id=eq." + encodeURIComponent(id), {
-      weight,
-      measured_at: measuredAtIso,
-      note: note || ""
-    });
-    if (!rows || !rows.length) throw new Error("No row returned after update");
-    const updated = mapWeightLog(rows[0]);
-    const idx = state.weightLogs.findIndex(l => l.id === id);
-    if (idx >= 0) state.weightLogs[idx] = updated;
-    state.weightLogs = getWeightLogsAsc();
-    showToast("השקילה עודכנה ✓");
-    return updated;
-  } catch(e) {
-    console.error("Weight update failed:", e);
-    showToast("שגיאה בעדכון שקילה ⚠️");
-    throw e;
-  }
-}
-
-async function saveWeightGoal(startWeight, goalWeight) {
-  try {
-    const userId = ensureUserId();
-    await sbDelete("weight_goal?user_id=eq." + encodeURIComponent(userId));
-    const row = await sbPost("weight_goal", { user_id: userId, start_weight: startWeight, goal_weight: goalWeight });
-    if (!Array.isArray(row) || !row.length) throw new Error("Invalid weight_goal write response");
-    state.weightGoal = row[0];
-    clearSyncError();
-  } catch(e) { console.error("Weight goal save failed:", e); showToast("שגיאה בשמירת יעד"); throw e; }
-}
-
-async function deleteWeightLog(id) {
-  try {
-    await sbDelete("body_weight_logs?id=eq." + id);
-    state.weightLogs = state.weightLogs.filter(l => l.id !== id);
-    if (!state.weightLogs.length) {
-      state.weightGoal = { start_weight: null, goal_weight: null };
-    }
-    render();
-  } catch(e) { console.error("Weight delete failed:", e); showToast("שגיאה במחיקה"); }
-}
-
-function getLatestWeight() {
-  const logs = getWeightLogsAsc();
-  if (!logs.length) return null;
-  return logs[logs.length - 1];
-}
-
-function getPrevWeight() {
-  const logs = getWeightLogsAsc();
-  if (logs.length < 2) return null;
-  return logs[logs.length - 2];
-}
-
-function daysSinceWeight() {
-  const latest = getLatestWeight();
-  if (!latest) return null;
-  const today = new Date(); today.setHours(0,0,0,0);
-  const latestDay = new Date(latest.measured_at); latestDay.setHours(0,0,0,0);
-  return Math.round((today - latestDay) / (1000 * 60 * 60 * 24));
 }
 
 function buildInp(type, step, placeholder, fontSize) {
@@ -721,13 +321,7 @@ async function loadSettingsFromSupabase() {
 async function saveWorkoutsToSupabase() {
   try {
     const userId = requireUserIdOrThrow("saveWorkoutsToSupabase");
-    const rows = state.workouts.map((w, i) => ({
-      user_id: userId,
-      plan_id: w.id,
-      name: w.name,
-      exercises: w.exercises,
-      sort_order: i
-    }));
+    const rows = buildWorkoutPlanRows(state.workouts, userId);
     if (!rows.length) {
       if (!ALLOW_EMPTY_WORKOUT_SYNC) {
         setSyncError("נחסמה מחיקה גורפת של תוכניות בענן (ALLOW_EMPTY_WORKOUT_SYNC=false)");
@@ -796,16 +390,7 @@ async function loadWorkoutsFromSupabase() {
     dlog("[loadWorkoutsFromSupabase] parsed rows:", rowsArray.length, "fallbackReason:", fallbackReason || "none");
     if (rowsArray.length) {
       // תמיד החלף את כל ה-state — אל תצרף
-      const normalized = rowsArray.map((r, idx) => {
-        const id = r.plan_id ?? r.id ?? r.workout_id ?? null;
-        if (!id) return null;
-        const rawName = (r.name ?? r.workout_name ?? "").toString().trim();
-        return {
-          id: String(id),
-          name: rawName || `אימון ${idx + 1}`,
-          exercises: Array.isArray(r.exercises) ? r.exercises : []
-        };
-      }).filter(Boolean);
+      const normalized = mapWorkoutPlansFromRows(rowsArray);
 
       if (normalized.length) {
         state.workouts = normalized;
@@ -830,8 +415,6 @@ async function loadWorkoutsFromSupabase() {
     setDataSource("workouts", "local");
   }
 }
-function getWorkout(id) { return state.workouts.find(w => w.id === id); }
-function getLastSession(id) { return [...state.sessions].reverse().find(s => s.workoutId === id) || null; }
 
 
 function getCategoryIcon(catId) {
@@ -843,14 +426,6 @@ function getCategoryLabel(catId) {
 function getExCategory(w, name) {
   const ex = w.exercises.find(e => (typeof e==="string"?e:e.name) === name);
   return ex?.category || null;
-}
-
-function getNextWorkout() {
-  if (!state.sessions.length) return state.workouts[0] || null;
-  const last = state.sessions[state.sessions.length - 1];
-  const lastIdx = state.workouts.findIndex(w => w.id === last.workoutId);
-  if (lastIdx === -1) return state.workouts[0] || null;
-  return state.workouts[(lastIdx + 1) % state.workouts.length];
 }
 
 function saveInProgress() {
@@ -2248,13 +1823,13 @@ function saveWorkoutName(id) {
 function addWorkout() {
   const inp=document.getElementById("new-workout-name"); const name=sanitizeText(inp?inp.value:"", 80);
   if(!name) return;
-  state.workouts.push({id:"w_"+Date.now(), name, exercises:[]});
-  state.manageOpenId=state.workouts[state.workouts.length-1].id;
+  const newWorkout = addWorkoutToState(name);
+  state.manageOpenId=newWorkout.id;
   state.editingNameId=null; saveWorkouts(); render();
 }
 function deleteWorkout(id) {
   if(!confirm("למחוק את האימון לצמיתות?")) return;
-  state.workouts=state.workouts.filter(w=>w.id!==id);
+  removeWorkoutFromState(id);
   if(state.manageOpenId===id) state.manageOpenId=null;
   saveWorkouts(); render();
 }
@@ -2265,8 +1840,7 @@ function addExercise(workoutId) {
   const catEl=document.getElementById("new-cat-"+workoutId);
   const category=catEl?catEl.value||null:null;
   if(!val) return; const w=getWorkout(workoutId);
-  if(w){
-    w.exercises.push({name:val, rest, category});
+  if(addExerciseToWorkoutState(w, val, rest, category)){
     saveWorkouts(); render();
     addToLibrary(val, category);
   }
@@ -2276,28 +1850,21 @@ function removeExercise(workoutId,i) {
   if(!w) return;
   if(w.exercises.length === 1) {
     if(confirm("אם תמחק תרגיל זה, האימון יישאר ריק. האם למחוק את האימון לגמרי?")) {
-      state.workouts = state.workouts.filter(x => x.id !== workoutId);
+      removeWorkoutFromState(workoutId);
       if(state.manageOpenId === workoutId) state.manageOpenId = null;
       saveWorkouts(); render();
     }
     return;
   }
-  w.exercises.splice(i,1); saveWorkouts(); render();
+  removeExerciseFromWorkoutState(w, i); saveWorkouts(); render();
 }
 function updateExRest(workoutId,i,val) {
   const w=getWorkout(workoutId);
-  if(w && w.exercises[i]){ w.exercises[i].rest=parseInt(val)||60; saveWorkouts(); }
+  if(updateExerciseRestInWorkoutState(w, i, val)){ saveWorkouts(); }
 }
 function updateExField(workoutId,i,field,val) {
   const w=getWorkout(workoutId);
-  if(!w || !w.exercises[i]) return;
-  if(field==="rest") w.exercises[i].rest=parseInt(val)||60;
-  else if(field==="name") {
-    const clean = sanitizeText(val, 80);
-    if(clean) w.exercises[i].name=clean;
-  }
-  else if(field==="category") w.exercises[i].category=val||null;
-  saveWorkouts();
+  if(updateExerciseFieldInWorkoutState(w, i, field, val)) saveWorkouts();
 }
 
 function exportCSV() {
