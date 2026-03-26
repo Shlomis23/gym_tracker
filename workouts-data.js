@@ -1,6 +1,132 @@
+async function getHistoricalPrMaxByExercise(userId, exerciseNames) {
+  if (!Array.isArray(exerciseNames) || !exerciseNames.length) return {};
+  const quoted = exerciseNames
+    .map(name => String(name || "").replace(/"/g, "\\\""))
+    .filter(Boolean)
+    .map(name => `"${name}"`);
+  if (!quoted.length) return {};
+
+  const rows = await sbGet(
+    "session_exercises?select=exercise_name,weight&user_id=eq."
+      + encodeURIComponent(userId)
+      + "&exercise_name=in.("
+      + encodeURIComponent(quoted.join(","))
+      + ")"
+  );
+
+  const maxByExercise = {};
+  (rows || []).forEach(row => {
+    const exerciseName = row?.exercise_name;
+    const weight = Number(row?.weight || 0);
+    if (!exerciseName || !Number.isFinite(weight) || weight <= 0) return;
+    maxByExercise[exerciseName] = Math.max(maxByExercise[exerciseName] || 0, weight);
+  });
+  return maxByExercise;
+}
+
+function getSessionExerciseMaxMap(session) {
+  const maxByExercise = {};
+  Object.entries(session?.exercises || {}).forEach(([exerciseName, sets]) => {
+    const maxWeight = (Array.isArray(sets) ? sets : []).reduce((max, setRow) => {
+      const weight = Number(setRow?.weight || 0);
+      return Number.isFinite(weight) && weight > max ? weight : max;
+    }, 0);
+    if (maxWeight > 0) maxByExercise[exerciseName] = maxWeight;
+  });
+  return maxByExercise;
+}
+
+function getWorkoutGapReminderIso(sessionDateIso) {
+  const target = new Date(sessionDateIso);
+  target.setUTCDate(target.getUTCDate() + 3);
+  const dateParts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jerusalem",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(target).reduce((acc, part) => {
+    if (part.type !== "literal") acc[part.type] = part.value;
+    return acc;
+  }, {});
+
+  const y = Number(dateParts.year);
+  const m = Number(dateParts.month);
+  const d = Number(dateParts.day);
+  const roughUtc = new Date(Date.UTC(y, m - 1, d, 16, 0, 0));
+  const tzPart = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Jerusalem",
+    timeZoneName: "shortOffset",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).formatToParts(roughUtc).find(part => part.type === "timeZoneName")?.value || "GMT+0";
+  const offsetMatch = tzPart.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
+  const sign = offsetMatch?.[1] === "-" ? -1 : 1;
+  const offsetHours = Number(offsetMatch?.[2] || 0);
+  const offsetMinutes = Number(offsetMatch?.[3] || 0);
+  const totalOffsetMinutes = sign * ((offsetHours * 60) + offsetMinutes);
+
+  const utcMs = Date.UTC(y, m - 1, d, 16, 0, 0) - (totalOffsetMinutes * 60 * 1000);
+  return new Date(utcMs).toISOString();
+}
+
+async function scheduleAutomatedNotificationsForSession({ userId, sessionRow, session, hasNewPr }) {
+  const nowIso = new Date().toISOString();
+
+  await sbPatch(
+    "notification_queue?user_id=eq."
+      + encodeURIComponent(userId)
+      + "&type=eq.workout_gap_reminder&status=eq.pending",
+    {
+      status: "cancelled",
+      cancelled_at: nowIso,
+      updated_at: nowIso
+    }
+  );
+
+  const workoutGapDedupeKey = `workout_gap_reminder:${userId}:${sessionRow.id}`;
+  await sbPost("notification_queue?on_conflict=dedupe_key", [{
+    user_id: userId,
+    type: "workout_gap_reminder",
+    title: "GymBuddy",
+    body: "עברו כבר 3 ימים מהאימון האחרון — זמן לחזור למסלול",
+    scheduled_for: getWorkoutGapReminderIso(session.date),
+    dedupe_key: workoutGapDedupeKey,
+    payload_json: {
+      triggering_session_id: sessionRow.id,
+      triggering_session_date: session.date
+    },
+    status: "pending"
+  }]);
+
+  if (!hasNewPr) return;
+
+  const prDedupeKey = `pr_celebration:${userId}:${sessionRow.id}`;
+  await sbPost("notification_queue?on_conflict=dedupe_key", [{
+    user_id: userId,
+    type: "pr_celebration",
+    title: "GymBuddy",
+    body: "שיא אישי חדש באימון האחרון — יש התקדמות אמיתית",
+    scheduled_for: new Date(Date.now() + (60 * 60 * 1000)).toISOString(),
+    dedupe_key: prDedupeKey,
+    payload_json: {
+      triggering_session_id: sessionRow.id,
+      triggering_session_date: session.date
+    },
+    status: "pending"
+  }]);
+}
+
 async function saveSessionToSupabase(session) {
   try {
     const userId = requireUserIdOrThrow("saveSessionToSupabase");
+    const sessionExerciseMax = getSessionExerciseMaxMap(session);
+    const historicalPrMaxByExercise = await getHistoricalPrMaxByExercise(userId, Object.keys(sessionExerciseMax));
+    const hasNewPr = Object.entries(sessionExerciseMax).some(([exerciseName, sessionMax]) => {
+      const previousMax = Number(historicalPrMaxByExercise[exerciseName] || 0);
+      return Number(sessionMax) > previousMax;
+    });
+
     const rows = await sbPost("workout_sessions", {
       user_id: userId,
       local_id: session.id,
@@ -30,6 +156,9 @@ async function saveSessionToSupabase(session) {
       });
     });
     if (sets.length) await sbPost("session_exercises", sets);
+
+    await scheduleAutomatedNotificationsForSession({ userId, sessionRow, session, hasNewPr });
+
     clearSyncError();
   } catch (e) {
     console.error("Supabase save failed:", e);

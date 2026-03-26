@@ -1,2 +1,8 @@
 [functions.send-test-push]
 verify_jwt = false
+
+[functions.enqueue-weight-reminders]
+verify_jwt = false
+
+[functions.send-due-notifications]
+verify_jwt = false
