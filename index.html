@@ -75,6 +75,8 @@
 const ALLOW_EMPTY_WORKOUT_SYNC = false;
 const STORAGE_USER_ID = "gym_user_id_v1";
 const STORAGE_IN_PROGRESS = "gym_in_progress_v1";
+const IN_PROGRESS_DRAFT_VERSION = 2;
+const IN_PROGRESS_TTL_DAYS = 14;
 
 function ensureUserId() {
   if (state.userId) return state.userId;
@@ -441,18 +443,20 @@ function getExCategory(w, name) {
 
 function saveInProgress() {
   if (state.workoutId) {
+    const nowIso = new Date().toISOString();
     const draft = {
       workoutId: state.workoutId,
       exercises: state.exercises,
       openExercise: state.openExercise,
       workoutExtras: state.workoutExtras || [],
       workoutNote: state.workoutNote || "",
-      updatedAt: new Date().toISOString(),
-      appVersion: "v1"
+      updatedAt: nowIso,
+      appVersion: IN_PROGRESS_DRAFT_VERSION
     };
     const encoded = JSON.stringify(draft);
     sessionStorage.setItem("gym_in_progress", encoded);
     localStorage.setItem(STORAGE_IN_PROGRESS, encoded);
+    state.inProgressUpdatedAt = nowIso;
   } else {
     clearInProgressDraft();
   }
@@ -461,6 +465,7 @@ function saveInProgress() {
 function clearInProgressDraft() {
   sessionStorage.removeItem("gym_in_progress");
   localStorage.removeItem(STORAGE_IN_PROGRESS);
+  state.inProgressUpdatedAt = null;
 }
 
 function readInProgressDraft() {
@@ -469,25 +474,107 @@ function readInProgressDraft() {
   return sessionStorage.getItem("gym_in_progress");
 }
 
-function loadInProgress() {
+function getDraftAgeMinutes(updatedAtIso) {
+  if (!updatedAtIso) return null;
+  const parsed = new Date(updatedAtIso);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return Math.max(0, Math.floor((Date.now() - parsed.getTime()) / (1000 * 60)));
+}
+
+function getDraftAgeText(updatedAtIso) {
+  const ageMin = getDraftAgeMinutes(updatedAtIso);
+  if (ageMin === null) return "נשמר אוטומטית";
+  if (ageMin < 1) return "נשמר עכשיו";
+  if (ageMin < 60) return `נשמר לפני ${ageMin} דק׳`;
+  const hours = Math.floor(ageMin / 60);
+  if (hours < 24) return `נשמר לפני ${hours} שעות`;
+  const days = Math.floor(hours / 24);
+  return `נשמר לפני ${days} ימים`;
+}
+
+function parseInProgressDraft(rawDraft) {
+  if (!rawDraft) return null;
+  let data = null;
   try {
-    const s = readInProgressDraft();
-    if (!s) return;
-    const data = JSON.parse(s);
-    if (data.workoutId && getWorkout(data.workoutId)) {
-      state.workoutId = data.workoutId;
-      state.exercises = data.exercises;
-      state.openExercise = data.openExercise;
-      state.workoutExtras = data.workoutExtras || [];
-      state.workoutNote = data.workoutNote || "";
-      if (localStorage.getItem(STORAGE_IN_PROGRESS) !== s) {
-        localStorage.setItem(STORAGE_IN_PROGRESS, s);
-      }
-      if (sessionStorage.getItem("gym_in_progress") !== s) {
-        sessionStorage.setItem("gym_in_progress", s);
-      }
+    data = JSON.parse(rawDraft);
+  } catch {
+    clearInProgressDraft();
+    return null;
+  }
+  if (!data || !data.workoutId || !getWorkout(data.workoutId)) return null;
+
+  const ageMin = getDraftAgeMinutes(data.updatedAt);
+  const ttlMin = IN_PROGRESS_TTL_DAYS * 24 * 60;
+  if (ageMin !== null && ageMin > ttlMin) {
+    clearInProgressDraft();
+    return null;
+  }
+
+  if (data.appVersion !== undefined && ![1, "v1", IN_PROGRESS_DRAFT_VERSION].includes(data.appVersion)) {
+    clearInProgressDraft();
+    return null;
+  }
+  return data;
+}
+
+function applyInProgressDraft(data) {
+  if (!data) return false;
+  state.workoutId = data.workoutId;
+  state.exercises = data.exercises || {};
+  state.openExercise = data.openExercise || null;
+  state.workoutExtras = data.workoutExtras || [];
+  state.workoutNote = data.workoutNote || "";
+  state.inProgressUpdatedAt = data.updatedAt || null;
+  return true;
+}
+
+function loadInProgress(options = {}) {
+  const promptUser = !!options.promptUser;
+  try {
+    const rawDraft = readInProgressDraft();
+    const data = parseInProgressDraft(rawDraft);
+    if (!data) return false;
+    if (localStorage.getItem(STORAGE_IN_PROGRESS) !== rawDraft) {
+      localStorage.setItem(STORAGE_IN_PROGRESS, rawDraft);
     }
+    if (sessionStorage.getItem("gym_in_progress") !== rawDraft) {
+      sessionStorage.setItem("gym_in_progress", rawDraft);
+    }
+
+    if (promptUser) {
+      state.pendingResumeDraft = data;
+      return true;
+    }
+    return applyInProgressDraft(data);
   } catch {}
+  return false;
+}
+
+function promptResumeDraftIfNeeded() {
+  const pending = state.pendingResumeDraft;
+  if (!pending) return;
+  state.pendingResumeDraft = null;
+  const workoutName = getWorkout(pending.workoutId)?.name || "האימון הקודם";
+  const ageText = getDraftAgeText(pending.updatedAt);
+  showConfirmSheet(
+    "להמשיך אימון קודם?",
+    `${workoutName} · ${ageText}`,
+    "המשך אימון",
+    "התחל חדש",
+    () => {
+      if (applyInProgressDraft(pending)) navigate("home");
+    },
+    () => {
+      clearInProgressDraft();
+      state.workoutId = null;
+      state.exercises = {};
+      state.openExercise = null;
+      state.workoutExtras = [];
+      state.workoutNote = "";
+      render();
+    },
+    false
+  );
 }
 
 function navigate(screen) {
@@ -764,6 +851,7 @@ function renderWorkout() {
       <i data-lucide="zap" style="width:13px;height:13px;color:var(--orange)"></i>
       <span>נפח כולל: <strong style="color:var(--text-primary)">${formatVolume(calcSessionVolume(state.exercises))}</strong></span>
     </div>
+    <div style="margin:0 0 8px;font-size:11px;color:var(--text-hint);text-align:center">${getDraftAgeText(state.inProgressUpdatedAt)}</div>
     <textarea id="workout-note-inp"
       placeholder="הערה לאימון (אופציונלי)..."
       oninput="state.workoutNote=this.value;saveInProgress()"
@@ -2436,14 +2524,14 @@ if (failed.length) {
   showToast("חלק מהנתונים לא נטענו ⚠️");
 }
   runRuntimeDataAudit();
-  loadInProgress();
-  if (state.workoutId) state.screen = "home";
+  loadInProgress({ promptUser: true });
   await syncPushSubscriptionState();
   if (loader) {
     loader.style.opacity = "0";
     setTimeout(() => loader.remove(), 350);
   }
   render();
+  promptResumeDraftIfNeeded();
 });
 
 document.addEventListener("visibilitychange", () => {
