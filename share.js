@@ -129,17 +129,18 @@ async function openShareSheet() {
       " · " + expiresAt.toLocaleDateString("he-IL", { day: "numeric", month: "numeric" });
     const url = `${location.origin}${location.pathname}?share=${row.token}`;
 
-    sheet.querySelector("#share-loading").outerHTML = `
+    const loadingEl = sheet.querySelector("#share-loading");
+    loadingEl.innerHTML = `
       <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:14px;padding:14px;margin-bottom:16px">
         <div style="font-size:11px;color:var(--text-hint);margin-bottom:6px">קישור לצפייה בלבד</div>
-        <div id="share-url" style="font-size:12px;color:var(--text-primary);word-break:break-all;line-height:1.5">${url}</div>
+        <div style="font-size:12px;color:var(--text-primary);word-break:break-all;line-height:1.5">${url}</div>
         <div style="font-size:11px;color:var(--text-hint);margin-top:8px">פג תוקף: ${expiresStr}</div>
       </div>
       <button id="share-copy-btn" style="width:100%;padding:14px;background:var(--accent);color:#fff;border:none;border-radius:14px;cursor:pointer;font-size:15px;font-weight:700;font-family:inherit;margin-bottom:10px">העתק קישור</button>
       <button id="share-close2" style="width:100%;padding:13px;background:var(--surface);color:var(--text-secondary);border:1.5px solid var(--border-med);border-radius:14px;font-family:inherit;font-size:14px;cursor:pointer">סגור</button>
     `;
 
-    sheet.querySelector("#share-copy-btn").addEventListener("click", async () => {
+    loadingEl.querySelector("#share-copy-btn").addEventListener("click", async () => {
       try {
         await navigator.clipboard.writeText(url);
       } catch (_) {
@@ -151,7 +152,7 @@ async function openShareSheet() {
       }
       showToast("הקישור הועתק ✓");
     });
-    sheet.querySelector("#share-close2").addEventListener("click", () => overlay.remove());
+    loadingEl.querySelector("#share-close2").addEventListener("click", () => overlay.remove());
   } catch (e) {
     console.error("Share token failed:", e);
     sheet.querySelector("#share-loading").innerHTML = `<div style="color:var(--red);font-size:13px;text-align:center;padding:16px">שגיאה ביצירת קישור ⚠️</div>`;

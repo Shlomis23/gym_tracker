@@ -245,27 +245,36 @@ function showWeightModal() {
   sheet.style.cssText = "background:var(--card);border-radius:22px 22px 0 0;padding:20px 16px 16px;width:100%;max-width:430px;box-sizing:border-box;direction:rtl;max-height:86vh;overflow:auto";
 
   sheet.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
-      <div>
-        <div style="font-size:17px;font-weight:800;color:var(--text-primary)">עדכון משקל יומי</div>
-        <div style="font-size:12px;color:var(--text-hint);margin-top:3px">שקילה אחת ביום נשמרת אוטומטית</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="font-size:18px;font-weight:800;color:var(--text-primary)">עדכון משקל יומי</div>
+      <button id="weight-close" style="width:32px;height:32px;border:none;background:var(--surface);border-radius:999px;cursor:pointer;color:var(--text-hint);font-size:20px;display:flex;align-items:center;justify-content:center">×</button>
+    </div>
+
+    <div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px">תאריך מדידה</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <button id="daily-date-today" style="padding:12px;border-radius:12px;border:2px solid var(--accent);background:var(--accent);color:#fff;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer">היום</button>
+        <button id="daily-date-other" style="padding:12px;border-radius:12px;border:2px solid var(--border-med);background:var(--surface);color:var(--text-secondary);font-family:inherit;font-size:14px;font-weight:600;cursor:pointer">תאריך אחר</button>
       </div>
-      <button id="weight-close" style="width:30px;height:30px;border:none;background:var(--surface);border-radius:999px;cursor:pointer;color:var(--text-hint);font-size:18px">×</button>
+      <input type="date" id="daily-date-inp" value="${todayIso}" max="${todayIso}"
+        style="display:none;width:100%;margin-top:10px;font-family:inherit;font-size:15px;padding:11px 12px;border:1.5px solid var(--border-med);border-radius:12px;background:var(--surface);color:var(--text-primary);box-sizing:border-box;direction:ltr;text-align:center">
     </div>
-    <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:12px;margin-bottom:10px">
-      <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">תאריך מדידה</label>
-      ${buildDateSelector("daily-date", todayIso)}
+
+    <div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px">משקל (ק״ג)</div>
+      <input id="daily-weight-inp" type="number" inputmode="decimal" step="0.1" min="1"
+        placeholder="0.0" value="${latest ? latest.weight : ""}"
+        style="width:100%;box-sizing:border-box;display:block;padding:16px;border:1.5px solid var(--border-med);border-radius:14px;background:var(--surface);font-family:inherit;font-size:28px;font-weight:700;color:var(--text-primary);outline:none;text-align:center">
     </div>
-    <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:12px;margin-bottom:10px">
-      <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">משקל נוכחי (ק״ג)</label>
-      <input id="daily-weight-inp" type="number" inputmode="decimal" step="0.1" placeholder="הכנס משקל בק״ג" value="${latest ? latest.weight : ""}" style="width:100%;box-sizing:border-box;display:block;padding:12px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;font-size:20px;font-weight:700">
+
+    <div style="margin-bottom:20px">
+      <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px">הערה <span style="font-weight:400;color:var(--text-hint)">(אופציונלי)</span></div>
+      <textarea id="daily-note-inp" rows="2" placeholder="למשל: אחרי אימון, בוקר..."
+        style="width:100%;box-sizing:border-box;display:block;padding:12px;border:1.5px solid var(--border-med);border-radius:14px;background:var(--surface);font-family:inherit;font-size:14px;color:var(--text-primary);resize:none;outline:none"></textarea>
     </div>
-    <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:12px;margin-bottom:14px">
-      <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">הערה (אופציונלי)</label>
-      <textarea id="daily-note-inp" rows="2" style="width:100%;box-sizing:border-box;display:block;padding:10px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;resize:vertical"></textarea>
-    </div>
-    <button id="daily-save-btn" class="btn-primary" style="margin-bottom:8px">שמור שקילה</button>
-    <button id="daily-cancel-btn" style="width:100%;padding:12px;background:transparent;border:none;color:var(--text-hint);font-family:inherit;cursor:pointer">סגור</button>
+
+    <button id="daily-save-btn" style="width:100%;padding:15px;background:var(--accent);color:#fff;border:none;border-radius:14px;cursor:pointer;font-size:16px;font-weight:700;font-family:inherit;margin-bottom:10px">שמור שקילה</button>
+    <button id="daily-cancel-btn" style="width:100%;padding:13px;background:var(--surface);color:var(--text-secondary);border:1.5px solid var(--border-med);border-radius:14px;font-family:inherit;font-size:14px;cursor:pointer">סגור</button>
   `;
 
   overlay.appendChild(sheet);
@@ -273,8 +282,29 @@ function showWeightModal() {
   overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
   sheet.querySelector("#weight-close").addEventListener("click", () => overlay.remove());
   sheet.querySelector("#daily-cancel-btn").addEventListener("click", () => overlay.remove());
+
+  const dDateInp = sheet.querySelector("#daily-date-inp");
+  const dTodayBtn = sheet.querySelector("#daily-date-today");
+  const dOtherBtn = sheet.querySelector("#daily-date-other");
+
+  function setDailyDateActive(selectedIso) {
+    const sel = selectedIso === todayIso;
+    dTodayBtn.style.background = sel ? "var(--accent)" : "var(--surface)";
+    dTodayBtn.style.color = sel ? "#fff" : "var(--text-secondary)";
+    dTodayBtn.style.borderColor = sel ? "var(--accent)" : "var(--border-med)";
+    dOtherBtn.style.background = !sel ? "var(--accent)" : "var(--surface)";
+    dOtherBtn.style.color = !sel ? "#fff" : "var(--text-secondary)";
+    dOtherBtn.style.borderColor = !sel ? "var(--accent)" : "var(--border-med)";
+    dOtherBtn.textContent = !sel ? formatDate(selectedIso + "T12:00:00") : "תאריך אחר";
+    dDateInp.style.display = !sel ? "block" : "none";
+  }
+
+  dTodayBtn.addEventListener("click", () => { dDateInp.value = todayIso; setDailyDateActive(todayIso); });
+  dOtherBtn.addEventListener("click", () => { dDateInp.style.display = "block"; dDateInp.focus(); });
+  dDateInp.addEventListener("change", () => setDailyDateActive(dDateInp.value));
+
   sheet.querySelector("#daily-save-btn").addEventListener("click", async () => {
-    const dateVal = readIsoDateFromSelector(sheet, "daily-date");
+    const dateVal = dDateInp.value;
     const weightVal = parseFloat(sheet.querySelector("#daily-weight-inp").value);
     const noteVal = sheet.querySelector("#daily-note-inp").value.trim();
     if (!dateVal || !Number.isFinite(weightVal) || weightVal <= 0) {
@@ -468,6 +498,7 @@ function loadInProgress() {
 }
 
 function navigate(screen) {
+  if (state.readonly && (screen === "manage" || screen === "home")) return;
   if (state.screen === "manage" && screen !== "manage") {
     // נקה pending goal אם לא נשמר
     state.pendingGoal = null;
