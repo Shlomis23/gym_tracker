@@ -378,7 +378,7 @@ if (inProgress) {
     const emptyBtnBg = shouldPromptDaily ? "var(--orange)" : "var(--accent)";
     const emptyBtnColor = "#fff";
     const emptyBtnLabel = shouldPromptDaily ? "הזן משקל" : "הזן משקל ראשון";
-    weightCard = `<div style="background:var(--surface);border:1px dashed var(--border-med);border-radius:14px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="showWeightModal()">
+    weightCard = state.readonly ? "" : `<div style="background:var(--surface);border:1px dashed var(--border-med);border-radius:14px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="showWeightModal()">
       <div>
         <div style="font-size:13px;font-weight:600;color:var(--text-secondary)">My Weight</div>
         <div style="font-size:11px;color:var(--text-hint);margin-top:2px">אין עדיין מדידות משקל שמורות</div>
@@ -428,9 +428,11 @@ if (inProgress) {
       : "ללא שינוי משמעותי";
     const cardBorder = needsUpdate ? "var(--orange)" : "var(--border)";
     const cardBg = needsUpdate ? "var(--orange-bg)" : "var(--card)";
-    const dailyBtn = hasTodayWeight
-      ? `<button onclick="event.preventDefault();event.stopPropagation();return false;" style="display:flex;align-items:center;gap:5px;background:var(--green);border:none;border-radius:8px;padding:6px 12px;cursor:default;font-size:12px;color:#fff;font-family:inherit;font-weight:600;opacity:0.95;pointer-events:none" disabled>שקילה יומית נרשמה</button>`
-      : `<button onclick="showWeightModal()" style="display:flex;align-items:center;gap:5px;background:${shouldPromptDaily ? "var(--orange)" : "var(--surface)"};border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;color:${shouldPromptDaily ? "#fff" : "var(--text-secondary)"};font-family:inherit;font-weight:600">הזן משקל</button>`;
+    const dailyBtn = state.readonly
+      ? ""
+      : hasTodayWeight
+        ? `<button onclick="event.preventDefault();event.stopPropagation();return false;" style="display:flex;align-items:center;gap:5px;background:var(--green);border:none;border-radius:8px;padding:6px 12px;cursor:default;font-size:12px;color:#fff;font-family:inherit;font-weight:600;opacity:0.95;pointer-events:none" disabled>שקילה יומית נרשמה</button>`
+        : `<button onclick="showWeightModal()" style="display:flex;align-items:center;gap:5px;background:${shouldPromptDaily ? "var(--orange)" : "var(--surface)"};border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;color:${shouldPromptDaily ? "#fff" : "var(--text-secondary)"};font-family:inherit;font-weight:600">הזן משקל</button>`;
 
     weightCard = `<div class="anim-card" style="background:${cardBg};border:1px solid ${cardBorder};border-radius:14px;padding:14px 16px;margin-bottom:16px;animation-delay:1.0s">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
