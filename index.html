@@ -2563,7 +2563,7 @@ window.addEventListener("load", async function() {
       const result = await loadSharedData(shareToken);
       if (result === "expired") {
         if (loader) loader.remove();
-        document.getElementById("app").innerHTML = `
+        document.getElementById("main-content").innerHTML = `
           <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;padding:32px;text-align:center;direction:rtl">
             <div style="font-size:48px;margin-bottom:16px">🔒</div>
             <div style="font-size:20px;font-weight:700;color:var(--text-primary);margin-bottom:8px">הקישור פג תוקף</div>
@@ -2574,7 +2574,7 @@ window.addEventListener("load", async function() {
     } catch (e) {
       console.error("Share load failed:", e);
       if (loader) loader.remove();
-      document.getElementById("app").innerHTML = `
+      document.getElementById("main-content").innerHTML = `
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;padding:32px;text-align:center;direction:rtl">
           <div style="font-size:20px;font-weight:700;color:var(--red)">שגיאה בטעינת הנתונים</div>
         </div>`;

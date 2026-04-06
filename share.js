@@ -45,7 +45,7 @@ async function loadSharedData(token) {
     sbGet(`session_exercises?select=*${userFilter}`),
     sbGet(`body_weight_logs?select=*&order=measured_at.asc${userFilter}`),
     sbGet(`weight_goal?select=*&order=updated_at.desc&limit=1${userFilter}`),
-    sbGet(`workouts?select=*${userFilter}`)
+    sbGet(`workout_plans?select=*${userFilter}`)
   ]);
 
   // בנה sessions עם תרגילים
@@ -95,12 +95,7 @@ async function loadSharedData(token) {
     };
   }
 
-  state.workouts = (workoutsRaw || []).map(w => ({
-    id: w.id,
-    name: w.name,
-    exercises: Array.isArray(w.exercises) ? w.exercises : (typeof w.exercises === "string" ? JSON.parse(w.exercises) : []),
-    daysPerWeek: w.days_per_week || 3
-  }));
+  state.workouts = mapWorkoutPlansFromRows(workoutsRaw || []);
 
   return "ok";
 }
