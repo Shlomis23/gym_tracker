@@ -1,2 +1,5 @@
 [functions.send-test-push]
 verify_jwt = false
+
+[functions.send-scheduled-push]
+verify_jwt = false
