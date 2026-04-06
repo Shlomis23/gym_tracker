@@ -492,7 +492,7 @@ if (inProgress) {
           <div style="padding:0 16px">
             ${entries.map(([name, pr]) =>
               `<div class="pr-row" onclick="showExerciseGraph(\'${name.replace(/\'/g,"\\\'")}\')">
-                <span style="color:var(--text-secondary)">${name}</span>
+                <span style="color:var(--text-secondary)">${escapeHtml(name)}</span>
                 <div style="display:flex;align-items:center;gap:8px">
                   <span style="font-weight:700;color:var(--text-primary)">${pr.weight} ק"ג</span>
                   <span style="font-size:10px;color:var(--text-hint)">${formatDateShort(pr.date)}</span>

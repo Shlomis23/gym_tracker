@@ -184,7 +184,7 @@ function renderLibraryManager() {
       <div class="card" style="padding:0;overflow:hidden">
         ${byCategory[cat].map((ex,i,arr) => `
           <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:${i<arr.length-1?"1px solid var(--border)":"none"}">
-            <span style="flex:1;font-size:13px;color:var(--text-primary)">${ex.name}</span>
+            <span style="flex:1;font-size:13px;color:var(--text-primary)">${escapeHtml(ex.name)}</span>
            <button onclick='openLibraryEdit(${JSON.stringify(ex.id)},${JSON.stringify(ex.name)},${JSON.stringify(ex.category||"")})'
               class="icon-btn"><i data-lucide="pencil" style="width:13px;height:13px"></i></button>
             <button onclick="if(confirm('למחוק מהמאגר?'))deleteFromLibrary('${ex.id}')"

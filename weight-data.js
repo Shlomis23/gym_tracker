@@ -123,13 +123,19 @@ async function updateWeightLog(id, weight, measuredAtIso, note) {
 async function saveWeightGoal(startWeight, goalWeight, goalMode) {
   try {
     const userId = ensureUserId();
-    await sbDelete("weight_goal?user_id=eq." + encodeURIComponent(userId));
-    const row = await sbPost("weight_goal", {
-      user_id: userId,
-      start_weight: startWeight,
-      goal_weight: goalWeight,
-      goal_mode: getWeightGoalMode({ goal_mode: goalMode })
+    const upsertHeaders = { ...SB_HEADERS, Prefer: "return=representation,resolution=merge-duplicates" };
+    const r = await fetch(SUPABASE_URL + "/rest/v1/weight_goal?on_conflict=user_id", {
+      method: "POST",
+      headers: upsertHeaders,
+      body: JSON.stringify({
+        user_id: userId,
+        start_weight: startWeight,
+        goal_weight: goalWeight,
+        goal_mode: getWeightGoalMode({ goal_mode: goalMode })
+      })
     });
+    if (!r.ok) throw new Error(await r.text());
+    const row = await r.json();
     if (!Array.isArray(row) || !row.length) throw new Error("Invalid weight_goal write response");
     state.weightGoal = { ...row[0], goal_mode: getWeightGoalMode(row[0]) };
     saveWeightCache();

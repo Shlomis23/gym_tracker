@@ -40,14 +40,16 @@ async function saveSessionToSupabase(session) {
 
 async function loadSessionsFromSupabase() {
   try {
-    const sessionQuery = "workout_sessions?select=*,sets:session_exercises(*),session_exercises(*)&order=date.asc";
+    const userId = (typeof ensureUserId === "function") ? ensureUserId() : (state.userId || localStorage.getItem("gym_user_id_v1") || "");
+    const userFilter = userId ? `&user_id=eq.${encodeURIComponent(userId)}` : "";
+    const sessionQuery = `workout_sessions?select=*,sets:session_exercises(*),session_exercises(*)&order=date.asc${userFilter}`;
     const rowsWithEmbed = await sbGet(sessionQuery);
     dlog("[loadSessionsFromSupabase] workout_sessions (embedded sets) raw response:", rowsWithEmbed);
 
     const rows = Array.isArray(rowsWithEmbed) ? rowsWithEmbed : [];
     let exerciseRows = [];
     try {
-      exerciseRows = await sbGet("session_exercises?select=*");
+      exerciseRows = await sbGet(`session_exercises?select=*${userFilter}`);
     } catch (exerciseLoadErr) {
       if (DEBUG) {
         console.warn("Supabase session_exercises standalone fetch failed, using embedded relation only:", exerciseLoadErr);

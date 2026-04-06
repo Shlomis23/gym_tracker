@@ -302,8 +302,9 @@ function saveSettings() {
 
 async function saveSettingsToSupabase() {
   try {
-    await sbDelete("user_settings?id=neq.00000000-0000-0000-0000-000000000000");
+    const userId = requireUserIdOrThrow("saveSettingsToSupabase");
     await sbPost("user_settings", {
+      user_id: userId,
       weekly_goal: state.settings.weeklyGoal,
       goal_history: state.settings.goalHistory || []
     });
@@ -836,6 +837,7 @@ function cancelWorkout() {
       haptic("light");
       sessionStorage.removeItem("gym_in_progress");
       state.workoutId = null; state.exercises = {}; state.openExercise = null; state.selectedWorkoutId = null;
+      state.workoutNote = "";
       navigate("home");
     },
     null,
@@ -862,8 +864,8 @@ function showConfirmSheet(title, subtitle, confirmLabel, cancelLabel, onConfirm,
   const sheet = document.createElement("div");
   sheet.style.cssText = "background:var(--card);border-radius:20px 20px 0 0;padding:24px 20px 32px;width:100%;max-width:420px;direction:rtl;animation:slideUp 0.3s cubic-bezier(0.22,1,0.36,1) both";
   sheet.innerHTML = `
-    <div style="font-size:16px;font-weight:700;color:var(--text-primary);margin-bottom:${subtitle?"6px":"16px"}">${title}</div>
-    ${subtitle ? `<div style="font-size:13px;color:var(--text-secondary);margin-bottom:18px">${subtitle}</div>` : ""}
+    <div style="font-size:16px;font-weight:700;color:var(--text-primary);margin-bottom:${subtitle?"6px":"16px"}">${escapeHtml(title)}</div>
+    ${subtitle ? `<div style="font-size:13px;color:var(--text-secondary);margin-bottom:18px">${escapeHtml(subtitle)}</div>` : ""}
     <button id="cs-confirm" style="width:100%;padding:14px;background:${isDanger?"var(--red)":"var(--accent)"};color:#fff;border:none;border-radius:12px;cursor:pointer;font-size:15px;font-weight:700;font-family:inherit;margin-bottom:10px">${confirmLabel}</button>
     ${cancelLabel ? `<button id="cs-cancel" style="width:100%;padding:14px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:12px;cursor:pointer;font-size:15px;font-family:inherit">${cancelLabel}</button>` : ""}
   `;
@@ -1794,8 +1796,8 @@ function renderManage() {
           <div style="display:flex;gap:6px;align-items:center">
             <span class="drag-handle"><i data-lucide="grip-vertical" style="width:14px;height:14px"></i></span>
             <div style="flex:1">
-              <div style="font-size:13px;font-weight:600;color:var(--text-primary)">${name}</div>
-              <div style="font-size:11px;color:var(--text-hint);margin-top:1px">${catLabel}</div>
+              <div style="font-size:13px;font-weight:600;color:var(--text-primary)">${escapeHtml(name)}</div>
+              <div style="font-size:11px;color:var(--text-hint);margin-top:1px">${escapeHtml(catLabel)}</div>
             </div>
             <i data-lucide="lock" style="width:12px;height:12px;color:var(--border-med)"></i>
           </div>
@@ -1814,7 +1816,7 @@ function renderManage() {
         style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--border)">
         <span class="drag-handle"><i data-lucide="grip-vertical" style="width:14px;height:14px"></i></span>
         <i data-lucide="${catIcon}" style="width:13px;height:13px;color:var(--text-hint);flex-shrink:0"></i>
-        <span style="flex:1;font-size:14px;color:var(--text-primary)">${name}</span>
+        <span style="flex:1;font-size:14px;color:var(--text-primary)">${escapeHtml(name)}</span>
         <span style="font-size:10px;color:var(--text-hint);background:var(--surface);padding:2px 6px;border-radius:4px;white-space:nowrap">${rest}שנ׳</span>
         <button onclick="event.stopPropagation();state.editingExKey='${w.id}:${i}';render()" class="icon-btn">
           <i data-lucide="pencil" style="width:13px;height:13px"></i>
@@ -2193,7 +2195,7 @@ function showExerciseGraph(exName) {
   sheet.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <div>
-        <div style="font-size:16px;font-weight:700;color:var(--text-primary)">${exName}</div>
+        <div style="font-size:16px;font-weight:700;color:var(--text-primary)">${escapeHtml(exName)}</div>
         <div style="font-size:12px;color:var(--text-hint);margin-top:2px">שיא: ${maxW} ק"ג · ${dataPoints.length} אימונים</div>
       </div>
       <button onclick="document.getElementById('ex-graph-modal').remove()" style="background:var(--surface);border:none;border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:18px;color:var(--text-hint);display:flex;align-items:center;justify-content:center">×</button>
@@ -2237,9 +2239,9 @@ function openWorkoutExtraPicker(resetTarget = true) {
     const catLabel = catData ? catData.label : cat;
     const catIcon = catData ? catData.icon : "more-horizontal";
     const items = byCategory[cat].map(ex => `
-      <div class="ex-pick-item" data-name="${ex.name}" data-cat="${ex.category||""}"
+      <div class="ex-pick-item" data-name="${escapeHtml(ex.name)}" data-cat="${escapeHtml(ex.category||"")}"
         style="display:flex;align-items:center;gap:10px;padding:10px 16px;cursor:pointer;border-bottom:0.5px solid var(--border)">
-        <span style="flex:1;font-size:14px;color:var(--text-primary)">${ex.name}</span>
+        <span style="flex:1;font-size:14px;color:var(--text-primary)">${escapeHtml(ex.name)}</span>
         <i data-lucide="chevron-left" style="width:14px;height:14px;color:var(--text-hint)"></i>
       </div>`).join("");
     return `<div>
@@ -2275,9 +2277,9 @@ function openWorkoutExtraPicker(resetTarget = true) {
     const list = sheet.querySelector("#ex-extra-list");
     if (!q) { list.innerHTML = listHtml; if (window.lucide) lucide.createIcons({ el: list }); bindExtraItems(list); return; }
     const filtered = state.exerciseLibrary.filter(ex => ex.name.toLowerCase().includes(q));
-    list.innerHTML = filtered.map(ex => `<div class="ex-pick-item" data-name="${ex.name}" data-cat="${ex.category||""}"
+    list.innerHTML = filtered.map(ex => `<div class="ex-pick-item" data-name="${escapeHtml(ex.name)}" data-cat="${escapeHtml(ex.category||"")}"
         style="display:flex;align-items:center;gap:10px;padding:11px 16px;cursor:pointer;border-bottom:0.5px solid var(--border)">
-        <span style="flex:1;font-size:14px;color:var(--text-primary)">${ex.name}</span>
+        <span style="flex:1;font-size:14px;color:var(--text-primary)">${escapeHtml(ex.name)}</span>
       </div>`).join("") || `<div style="padding:20px;text-align:center;color:var(--text-hint);font-size:13px">לא נמצא</div>`;
     bindExtraItems(list);
   });
