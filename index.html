@@ -783,9 +783,13 @@ function finishWorkout() {
   sheet.innerHTML = `
     <div style="font-size:16px;font-weight:700;color:var(--text-primary);margin-bottom:18px">סיום אימון</div>
     <div style="margin-bottom:16px">
-      <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px">תאריך האימון</label>
-      <input type="date" id="session-date-inp" value="${todayIso}" max="${todayIso}"
-        style="width:100%;font-family:inherit;font-size:14px;background:var(--surface);border:1px solid var(--border-med);border-radius:10px;padding:10px 12px;color:var(--text-primary);outline:none;box-sizing:border-box;direction:ltr;text-align:right">
+      <label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:8px">תאריך האימון</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <button id="fs-date-today" style="padding:12px;border-radius:12px;border:2px solid var(--green);background:var(--green);color:#fff;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer">היום</button>
+        <button id="fs-date-other" style="padding:12px;border-radius:12px;border:2px solid var(--border-med);background:var(--surface);color:var(--text-secondary);font-family:inherit;font-size:14px;font-weight:600;cursor:pointer">תאריך אחר</button>
+      </div>
+      <div id="fs-date-display" style="margin-top:8px;font-size:12px;color:var(--text-hint);text-align:center"></div>
+      <input type="date" id="session-date-inp" value="${todayIso}" max="${todayIso}" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px">
     </div>
     <button id="fs-save" style="width:100%;padding:14px;background:var(--green);color:#fff;border:none;border-radius:12px;cursor:pointer;font-size:15px;font-weight:700;font-family:inherit;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:7px">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
@@ -797,6 +801,34 @@ function finishWorkout() {
   overlay.appendChild(sheet);
   document.body.appendChild(overlay);
   overlay.addEventListener("click", e => { if(e.target===overlay) overlay.remove(); });
+
+  const dateInp = sheet.querySelector("#session-date-inp");
+  const todayBtn = sheet.querySelector("#fs-date-today");
+  const otherBtn = sheet.querySelector("#fs-date-other");
+  const dateDisplay = sheet.querySelector("#fs-date-display");
+
+  function setFsDateActive(isToday) {
+    todayBtn.style.background = isToday ? "var(--green)" : "var(--surface)";
+    todayBtn.style.color = isToday ? "#fff" : "var(--text-secondary)";
+    todayBtn.style.borderColor = isToday ? "var(--green)" : "var(--border-med)";
+    otherBtn.style.background = !isToday ? "var(--accent)" : "var(--surface)";
+    otherBtn.style.color = !isToday ? "#fff" : "var(--text-secondary)";
+    otherBtn.style.borderColor = !isToday ? "var(--accent)" : "var(--border-med)";
+    dateDisplay.textContent = !isToday && dateInp.value ? formatDate(dateInp.value + "T12:00:00") : "";
+  }
+
+  todayBtn.addEventListener("click", () => {
+    dateInp.value = todayIso;
+    setFsDateActive(true);
+  });
+
+  otherBtn.addEventListener("click", () => {
+    dateInp.showPicker ? dateInp.showPicker() : dateInp.click();
+  });
+
+  dateInp.addEventListener("change", () => {
+    setFsDateActive(dateInp.value === todayIso);
+  });
 
   sheet.querySelector("#fs-save").addEventListener("click", () => {
     const dateVal = sheet.querySelector("#session-date-inp").value;
@@ -904,6 +936,67 @@ function setCustomWeightRangeDate(field, value) {
   render();
 }
 
+async function copyWeightWeeklySummary() {
+  const allLogs = getWeightLogsAsc();
+  if (!allLogs.length) return;
+
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  const weekStart = new Date(today);
+  weekStart.setDate(weekStart.getDate() - 6);
+  weekStart.setHours(0, 0, 0, 0);
+  const prevWeekEnd = new Date(weekStart);
+  prevWeekEnd.setDate(prevWeekEnd.getDate() - 1);
+  prevWeekEnd.setHours(23, 59, 59, 999);
+  const prevWeekStart = new Date(prevWeekEnd);
+  prevWeekStart.setDate(prevWeekStart.getDate() - 6);
+  prevWeekStart.setHours(0, 0, 0, 0);
+
+  const currentLogs = allLogs.filter(l => { const d = new Date(l.measured_at); return d >= weekStart && d <= today; });
+  const prevLogs = allLogs.filter(l => { const d = new Date(l.measured_at); return d >= prevWeekStart && d <= prevWeekEnd; });
+
+  if (!currentLogs.length) { showToast("אין שקילות ב-7 ימים האחרונים"); return; }
+
+  const currentAvg = currentLogs.reduce((sum, l) => sum + Number(l.weight), 0) / currentLogs.length;
+  const prevAvg = prevLogs.length ? prevLogs.reduce((sum, l) => sum + Number(l.weight), 0) / prevLogs.length : null;
+  const delta = prevAvg !== null ? currentAvg - prevAvg : null;
+
+  const rangeLine = `${formatDateShort(currentLogs[0].measured_at)} - ${formatDateShort(currentLogs[currentLogs.length - 1].measured_at)}`;
+  const deltaLine = delta === null
+    ? "שינוי משבוע קודם: אין נתונים לשבוע הקודם"
+    : `שינוי משבוע קודם: ${delta > 0 ? "+" : ""}${delta.toFixed(1)} ק״ג`;
+
+  const lines = [
+    "*סיכום שקילות*",
+    rangeLine,
+    "",
+    ...currentLogs.map(log => {
+      const dayName = new Date(log.measured_at).toLocaleDateString("he-IL", { weekday: "short" });
+      return `${dayName}, ${formatDateShort(log.measured_at)} - ${Number(log.weight).toFixed(1)} ק״ג`;
+    }),
+    "",
+    `*ממוצע שבועי: ${currentAvg.toFixed(1)} ק״ג*`,
+    prevAvg !== null ? `ממוצע שבוע קודם: ${prevAvg.toFixed(1)} ק״ג` : "ממוצע שבוע קודם: אין נתונים",
+    deltaLine
+  ];
+
+  const text = lines.join("\n");
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (_) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+  }
+  showToast("סיכום שבועי הועתק");
+}
+
 async function copyWeightRangeSummary() {
   if (state.weightRangeMode !== "custom") return;
   const logs = getWeightRangeLogs(getWeightRangeDays());
@@ -976,10 +1069,17 @@ function getWeightRangeLogs(days) {
   return logs.filter(l => new Date(l.measured_at) >= threshold);
 }
 
-function getWeightMovingAverage(logs, windowSize) {
-  return logs.map((log, idx) => {
-    const from = Math.max(0, idx - windowSize + 1);
-    const subset = logs.slice(from, idx + 1);
+function getWeightMovingAverage(logs, windowDays) {
+  return logs.map((log) => {
+    const logDate = new Date(log.measured_at);
+    logDate.setHours(23, 59, 59, 999);
+    const windowStart = new Date(logDate);
+    windowStart.setDate(windowStart.getDate() - (windowDays - 1));
+    windowStart.setHours(0, 0, 0, 0);
+    const subset = logs.filter(l => {
+      const d = new Date(l.measured_at);
+      return d >= windowStart && d <= logDate;
+    });
     const avg = subset.reduce((sum, item) => sum + Number(item.weight), 0) / subset.length;
     return { ...log, movingAvg: Number(avg.toFixed(2)) };
   });
@@ -1007,7 +1107,7 @@ function aggregateWeightByWeek(logs) {
 
 function renderWeightChart(series, options = {}) {
   if (series.length < 2) {
-    return `<div style="height:190px;display:flex;align-items:center;justify-content:center;color:var(--text-hint);font-size:13px">צריך לפחות 2 שקילות להצגת גרף</div>`;
+    return `<div style="height:240px;display:flex;align-items:center;justify-content:center;color:var(--text-hint);font-size:13px">צריך לפחות 2 שקילות להצגת גרף</div>`;
   }
   const rangeDays = Number(options.rangeDays || 0);
   const denseThreshold = rangeDays >= 180 ? 28 : rangeDays >= 90 ? 40 : 55;
@@ -1071,7 +1171,8 @@ function renderWeightChart(series, options = {}) {
           <div style="position:absolute;top:${((height - pad) / height) * 100}%;left:6px;transform:translateY(-50%);font-size:11px;font-weight:700;color:var(--text-secondary);text-align:left">${minLabel}</div>
           <div style="position:absolute;bottom:6px;left:6px;font-size:9px;color:var(--text-hint);text-align:left">ק״ג</div>
         </div>
-        <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" style="display:block;flex:1;height:190px;background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+        <div style="flex:1;display:flex;flex-direction:column">
+        <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" style="display:block;width:100%;height:240px;background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);border:1px solid var(--border);border-radius:12px;overflow:hidden">
           <defs>
             <linearGradient id="${chartId}-avg-fill" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stop-color="#22c55e" stop-opacity="0.18"></stop>
@@ -1088,6 +1189,12 @@ function renderWeightChart(series, options = {}) {
             return `<circle data-chart-id="${chartId}" data-base-r="${baseR}" data-idx="${idx}" cx="${p.x}" cy="${p.yW}" r="${isActive ? baseR + 1.6 : baseR}" fill="${isActive ? "var(--blue)" : "var(--accent)"}" opacity="${isActive ? "1" : "0.9"}" stroke="#fff" stroke-width="1.5" style="cursor:pointer" onclick="selectWeightChartPoint('${chartId}', ${idx}, '${p.measured_at}', ${Number(p.weight).toFixed(2)}, ${Number(p.movingAvg).toFixed(2)})"><title>${formatDate(p.measured_at)} · ${Number(p.weight).toFixed(1)} ק״ג</title></circle>`;
           }).join("")}
         </svg>
+        <div style="display:flex;justify-content:space-between;padding:4px 2px 0;font-size:10px;color:var(--text-hint)">
+          <span>${formatDateShort(chartSeries[0].measured_at)}</span>
+          <span>${formatDateShort(chartSeries[Math.floor((chartSeries.length - 1) / 2)].measured_at)}</span>
+          <span>${formatDateShort(chartSeries[chartSeries.length - 1].measured_at)}</span>
+        </div>
+        </div>
       </div>
       <div style="display:flex;gap:12px;align-items:center;justify-content:flex-start;margin-top:8px;font-size:11px;color:var(--text-secondary)">
         <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:16px;height:0;border-top:2px solid var(--text-hint);opacity:${weightStrokeOpacity}"></span>משקל בפועל</span>
@@ -1128,29 +1235,37 @@ async function openWeightEntryModal(logId) {
   const overlay = document.createElement("div");
   overlay.id = "weight-entry-modal";
   overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:2100;display:flex;align-items:flex-end;justify-content:center";
+  const isToday = defaultDate === todayIso;
   overlay.innerHTML = `
-    <div style="background:var(--card);border-radius:22px 22px 0 0;padding:20px 16px 16px;width:100%;max-width:430px;box-sizing:border-box;direction:rtl;animation:slideUp 0.28s ease both;max-height:86vh;overflow:auto">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
-        <div>
-          <div style="font-size:17px;font-weight:800;color:var(--text-primary)">${editing ? "עריכת שקילה" : "הוספת שקילה"}</div>
-          <div style="font-size:12px;color:var(--text-hint);margin-top:3px">ניהול שקילה לפי תאריך</div>
+    <div style="background:var(--card);border-radius:22px 22px 0 0;padding:24px 16px 20px;width:100%;max-width:430px;box-sizing:border-box;direction:rtl;animation:slideUp 0.28s ease both;max-height:86vh;overflow:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <div style="font-size:18px;font-weight:800;color:var(--text-primary)">${editing ? "עריכת שקילה" : "הוספת שקילה"}</div>
+        <button id="weight-close" style="width:32px;height:32px;border:none;background:var(--surface);border-radius:999px;cursor:pointer;color:var(--text-hint);font-size:20px;display:flex;align-items:center;justify-content:center">×</button>
+      </div>
+
+      <div style="margin-bottom:16px">
+        <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px">תאריך מדידה</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <button id="w-date-today" style="padding:12px;border-radius:12px;border:2px solid ${isToday ? "var(--accent)" : "var(--border-med)"};background:${isToday ? "var(--accent)" : "var(--surface)"};color:${isToday ? "#fff" : "var(--text-secondary)"};font-family:inherit;font-size:14px;font-weight:700;cursor:pointer">היום</button>
+          <button id="w-date-other" style="padding:12px;border-radius:12px;border:2px solid ${!isToday ? "var(--accent)" : "var(--border-med)"};background:${!isToday ? "var(--accent)" : "var(--surface)"};color:${!isToday ? "#fff" : "var(--text-secondary)"};font-family:inherit;font-size:14px;font-weight:600;cursor:pointer">${!isToday ? formatDate(defaultDate + "T12:00:00") : "תאריך אחר"}</button>
         </div>
-        <button id="weight-close" style="width:30px;height:30px;border:none;background:var(--surface);border-radius:999px;cursor:pointer;color:var(--text-hint);font-size:18px">×</button>
+        <input type="date" id="w-date-inp" value="${defaultDate}" max="${todayIso}" style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px">
       </div>
-      <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:12px;margin-bottom:10px">
-        <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">תאריך מדידה</label>
-        ${buildDateSelector("entry-date", defaultDate)}
+
+      <div style="margin-bottom:16px">
+        <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px">משקל (ק״ג)</div>
+        <input id="weight-value-inp" type="number" inputmode="decimal" step="0.1" min="1" value="${defaultWeight}"
+          style="width:100%;box-sizing:border-box;display:block;padding:16px;border:1.5px solid var(--border-med);border-radius:14px;background:var(--surface);font-family:inherit;font-size:28px;font-weight:700;color:var(--text-primary);outline:none;text-align:center">
       </div>
-      <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:12px;margin-bottom:10px">
-        <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">משקל (ק״ג)</label>
-        <input id="weight-value-inp" type="number" inputmode="decimal" step="0.1" min="1" value="${defaultWeight}" style="width:100%;box-sizing:border-box;display:block;padding:12px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;font-size:20px;font-weight:700">
+
+      <div style="margin-bottom:20px">
+        <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:8px">הערה <span style="font-weight:400;color:var(--text-hint)">(אופציונלי)</span></div>
+        <textarea id="weight-note-inp" rows="2" placeholder="למשל: אחרי אימון, בוקר..."
+          style="width:100%;box-sizing:border-box;display:block;padding:12px;border:1.5px solid var(--border-med);border-radius:14px;background:var(--surface);font-family:inherit;font-size:14px;color:var(--text-primary);resize:none;outline:none">${escapeHtml(defaultNote)}</textarea>
       </div>
-      <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:12px;margin-bottom:14px">
-        <label style="display:block;font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px">הערה (אופציונלי)</label>
-        <textarea id="weight-note-inp" rows="2" style="width:100%;box-sizing:border-box;display:block;padding:10px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;resize:vertical">${escapeHtml(defaultNote)}</textarea>
-      </div>
-      <button id="weight-save-btn" class="btn-primary" style="margin-bottom:8px">${editing ? "שמור שינויים" : "שמור שקילה"}</button>
-      <button id="weight-cancel-btn" style="width:100%;padding:12px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;font-family:inherit;cursor:pointer">ביטול</button>
+
+      <button id="weight-save-btn" style="width:100%;padding:15px;background:var(--accent);color:#fff;border:none;border-radius:14px;cursor:pointer;font-size:16px;font-weight:700;font-family:inherit;margin-bottom:10px">${editing ? "שמור שינויים" : "שמור שקילה"}</button>
+      <button id="weight-cancel-btn" style="width:100%;padding:13px;background:var(--surface);color:var(--text-secondary);border:1.5px solid var(--border-med);border-radius:14px;font-family:inherit;font-size:14px;cursor:pointer">ביטול</button>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -1158,8 +1273,35 @@ async function openWeightEntryModal(logId) {
   overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
   overlay.querySelector("#weight-close").addEventListener("click", () => overlay.remove());
   overlay.querySelector("#weight-cancel-btn").addEventListener("click", () => overlay.remove());
+
+  const wDateInp = overlay.querySelector("#w-date-inp");
+  const wTodayBtn = overlay.querySelector("#w-date-today");
+  const wOtherBtn = overlay.querySelector("#w-date-other");
+
+  function setWDateActive(selectedIso) {
+    const sel = selectedIso === todayIso;
+    wTodayBtn.style.background = sel ? "var(--accent)" : "var(--surface)";
+    wTodayBtn.style.color = sel ? "#fff" : "var(--text-secondary)";
+    wTodayBtn.style.borderColor = sel ? "var(--accent)" : "var(--border-med)";
+    wOtherBtn.style.background = !sel ? "var(--accent)" : "var(--surface)";
+    wOtherBtn.style.color = !sel ? "#fff" : "var(--text-secondary)";
+    wOtherBtn.style.borderColor = !sel ? "var(--accent)" : "var(--border-med)";
+    wOtherBtn.textContent = !sel ? formatDate(selectedIso + "T12:00:00") : "תאריך אחר";
+  }
+
+  wTodayBtn.addEventListener("click", () => {
+    wDateInp.value = todayIso;
+    setWDateActive(todayIso);
+  });
+
+  wOtherBtn.addEventListener("click", () => {
+    wDateInp.showPicker ? wDateInp.showPicker() : wDateInp.click();
+  });
+
+  wDateInp.addEventListener("change", () => setWDateActive(wDateInp.value));
+
   overlay.querySelector("#weight-save-btn").addEventListener("click", async () => {
-    const dateVal = readIsoDateFromSelector(overlay, "entry-date");
+    const dateVal = wDateInp.value;
     const weightVal = parseFloat(overlay.querySelector("#weight-value-inp").value);
     const noteVal = overlay.querySelector("#weight-note-inp").value.trim();
     if (!dateVal || !Number.isFinite(weightVal) || weightVal <= 0) {
@@ -1218,14 +1360,19 @@ function renderHistory() {
     const customRangeDays = (customFrom && customTo)
       ? Math.max(1, Math.floor((new Date(`${customTo}T00:00:00`) - new Date(`${customFrom}T00:00:00`)) / (1000 * 60 * 60 * 24)) + 1)
       : 90;
-    const avgWindowDays = Math.max(1, isCustomRange ? customRangeDays : range);
     const customRangeInvalid = isCustomRange && customFrom && customTo && new Date(`${customFrom}T00:00:00`) > new Date(`${customTo}T00:00:00`);
     const hasFilteredData = filtered.length > 0;
-    const withAvg = getWeightMovingAverage(filtered, avgWindowDays);
-    const weeklyTrendSeries = getWeightMovingAverage(filtered, 7);
-    const chartBase = !isCustomRange && range >= 180 ? aggregateWeightByWeek(filtered) : filtered;
-    const chartAvgWindow = !isCustomRange && range >= 180 ? Math.max(2, Math.round(avgWindowDays / 7)) : avgWindowDays;
-    const chartSeries = getWeightMovingAverage(chartBase, chartAvgWindow);
+    // Compute 7-day rolling average on ALL logs so early points in a short range
+    // still benefit from history before the visible window.
+    const allLogsWithAvg = getWeightMovingAverage(allLogs, 7);
+    const filteredIds = new Set(filtered.map(l => l.id));
+    const filteredWithAvg = allLogsWithAvg.filter(l => filteredIds.has(l.id));
+    const withAvg = filteredWithAvg;
+    const weeklyTrendSeries = filteredWithAvg;
+    const chartBase = !isCustomRange && range >= 180 ? aggregateWeightByWeek(filteredWithAvg) : filteredWithAvg;
+    const chartSeries = !isCustomRange && range >= 180
+      ? getWeightMovingAverage(chartBase, Math.max(2, Math.ceil(chartBase.length / 8)))
+      : filteredWithAvg;
     const latest = hasFilteredData ? filtered[filtered.length - 1] : null;
     const latestOverall = allLogs[allLogs.length - 1] || null;
     const first = hasFilteredData ? filtered[0] : null;
@@ -1236,7 +1383,7 @@ function renderHistory() {
     const summaryCards = `
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:10px">
         <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">אחרון</div><div style="font-size:19px;font-weight:700">${hasFilteredData ? latest.weight.toFixed(1) : "-"}</div></div>
-        <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">ממוצע ${avgWindowDays} ימים</div><div style="font-size:19px;font-weight:700;color:var(--green)">${hasFilteredData ? avg7.toFixed(1) : "-"}</div></div>
+        <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">ממוצע 7 ימים</div><div style="font-size:19px;font-weight:700;color:var(--green)">${hasFilteredData ? avg7.toFixed(1) : "-"}</div></div>
         <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">שינוי בטווח</div><div style="font-size:19px;font-weight:700;color:${delta < 0 ? "var(--green)" : delta > 0 ? "var(--red)" : "var(--text-primary)"}">${hasFilteredData ? `${delta > 0 ? "+" : ""}${delta.toFixed(1)}` : "-"}</div></div>
       </div>
     `;
@@ -1274,7 +1421,7 @@ function renderHistory() {
       return `<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px">
         <div>
           <div style="font-size:18px;font-weight:700">${log.weight.toFixed(1)} <span style="font-size:12px;font-weight:500;color:var(--text-hint)">ק״ג</span></div>
-          <div style="font-size:11px;color:var(--text-hint);margin-top:2px">${formatWeightDate(log)} · ממוצע ${avgWindowDays}י: ${log.movingAvg.toFixed(1)}</div>
+          <div style="font-size:11px;color:var(--text-hint);margin-top:2px">${formatWeightDate(log)} · ממוצע 7י: ${log.movingAvg.toFixed(1)}</div>
           ${log.note ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:3px">${escapeHtml(log.note)}</div>` : ""}
         </div>
         <div style="display:flex;align-items:center;gap:8px">
@@ -1301,6 +1448,7 @@ function renderHistory() {
       <div style="margin-top:8px;font-size:11px;color:var(--text-hint)">${goalSummaryText}</div>
       <div style="display:flex;justify-content:flex-start;margin-top:10px">
         <button onclick="openWeightEntryModal()" class="btn-primary" style="width:auto;padding:8px 14px;font-size:12px">הוסף</button>
+        ${!isCustomRange && range === 7 ? `<button onclick="copyWeightWeeklySummary()" style="width:auto;padding:8px 12px;font-size:12px;margin-right:8px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-family:inherit;font-weight:600">העתק סיכום</button>` : ""}
         ${showRangeCopy ? `<button onclick="copyWeightRangeSummary()" style="width:auto;padding:8px 12px;font-size:12px;margin-right:8px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-family:inherit;font-weight:600">העתק סיכום</button>` : ""}
       </div>
       <div style="margin-top:10px;display:grid;gap:8px;padding-bottom:12px">${rows}</div>
