@@ -472,29 +472,33 @@ function getExCategory(w, name) {
 
 function saveInProgress() {
   if (state.workoutId) {
-    sessionStorage.setItem("gym_in_progress", JSON.stringify({
+    localStorage.setItem("gym_in_progress", JSON.stringify({
       workoutId: state.workoutId,
       exercises: state.exercises,
       openExercise: state.openExercise,
-      workoutExtras: state.workoutExtras || []
+      workoutExtras: state.workoutExtras || [],
+      note: state.workoutNote || ""
     }));
   } else {
-    sessionStorage.removeItem("gym_in_progress");
+    localStorage.removeItem("gym_in_progress");
   }
 }
 
 function loadInProgress() {
   try {
-    const s = sessionStorage.getItem("gym_in_progress");
-    if (!s) return;
+    const s = localStorage.getItem("gym_in_progress");
+    if (!s) return false;
     const data = JSON.parse(s);
     if (data.workoutId && getWorkout(data.workoutId)) {
       state.workoutId = data.workoutId;
       state.exercises = data.exercises;
       state.openExercise = data.openExercise;
       state.workoutExtras = data.workoutExtras || [];
+      state.workoutNote = data.note || "";
+      return true;
     }
   } catch {}
+  return false;
 }
 
 function navigate(screen) {
@@ -516,7 +520,7 @@ function navigate(screen) {
   if (state.workoutId) saveInProgress();
   state.screen = screen;
   if (screen === "home") {
-    loadInProgress();
+    loadInProgress(); // רענן מה-localStorage בכל ניווט לאימון
   }
   ["dashboard","home","history","manage","library"].forEach(s => {
     const el = document.getElementById("nav-"+s);
@@ -606,7 +610,7 @@ function renderChoose() {
 }
 
 function selectWorkout(id) {
-  const inProgress = sessionStorage.getItem("gym_in_progress");
+  const inProgress = localStorage.getItem("gym_in_progress");
   if (inProgress) {
     const data = JSON.parse(inProgress);
     if (data.workoutId && data.workoutId !== id) {
@@ -614,7 +618,7 @@ function selectWorkout(id) {
         "יש אימון בתהליך",
         `האם לבטל את ${getWorkout(data.workoutId)?.name || "האימון הקודם"} ולהתחיל ${getWorkout(id)?.name || ""}?`,
         "התחל חדש", "המשך קודם",
-        () => { sessionStorage.removeItem("gym_in_progress"); _doSelectWorkout(id); },
+        () => { localStorage.removeItem("gym_in_progress"); _doSelectWorkout(id); },
         () => { _doSelectWorkout(data.workoutId); }
       );
       return;
@@ -881,7 +885,7 @@ function finishWorkout() {
     const session = { id:"s_"+Date.now(), workoutId:state.workoutId, workoutName: getWorkout(state.workoutId)?.name || "", date:sessionDate, exercises:JSON.parse(JSON.stringify(state.exercises)), note: sanitizeText(state.workoutNote||"", 500) };
     state.sessions.push(session);
     state.sessions.sort((a,b) => new Date(a.date) - new Date(b.date));
-    sessionStorage.removeItem("gym_in_progress");
+    localStorage.removeItem("gym_in_progress");
     state.workoutNote = "";
     state.workoutId = null; state.exercises = {}; state.openExercise = null; state.selectedWorkoutId = null;
     saveSessions();
@@ -906,7 +910,7 @@ function cancelWorkout() {
     "בטל אימון", "המשך",
     () => {
       haptic("light");
-      sessionStorage.removeItem("gym_in_progress");
+      localStorage.removeItem("gym_in_progress");
       state.workoutId = null; state.exercises = {}; state.openExercise = null; state.selectedWorkoutId = null;
       state.workoutNote = "";
       navigate("home");
@@ -2636,6 +2640,14 @@ if (failed.length) {
 }
   runRuntimeDataAudit();
   await syncPushSubscriptionState();
+
+  // שחזר אימון שהיה בתהליך לפני סגירת האפליקציה
+  const hadInProgress = loadInProgress();
+  if (hadInProgress) {
+    state.screen = "home";
+    setTimeout(() => showToast("ממשיך אימון קודם 💪"), 400);
+  }
+
   if (loader) {
     loader.style.opacity = "0";
     setTimeout(() => loader.remove(), 350);
