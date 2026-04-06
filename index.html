@@ -70,6 +70,7 @@
 <script src="./workouts-data.js"></script>
 <script src="./weight-domain.js"></script>
 <script src="./weight-data.js"></script>
+<script src="./share.js"></script>
 <script>
 // ── Supabase ─────────────────────────────────────────────────────
 const ALLOW_EMPTY_WORKOUT_SYNC = false;
@@ -496,6 +497,7 @@ function navigate(screen) {
 }
 
 function render() {
+  if (state.readonly) document.body.classList.add("readonly");
   const el = document.getElementById("main-content");
   let screenHtml = "";
   if (state.screen === "dashboard") screenHtml = renderDashboard();
@@ -506,7 +508,12 @@ function render() {
     dlog("[library-add] render() -> manage screen");
     screenHtml = renderManage();
   }
-  el.innerHTML = renderSyncNotice() + screenHtml;
+  const readonlyBanner = state.readonly
+    ? `<div style="background:#1e293b;color:#94a3b8;text-align:center;font-size:12px;padding:7px 16px;direction:rtl">
+        <i data-lucide="eye" style="width:12px;height:12px;vertical-align:middle;margin-left:5px"></i>מצב צפייה בלבד
+       </div>`
+    : "";
+  el.innerHTML = readonlyBanner + renderSyncNotice() + screenHtml;
   if (window.lucide) lucide.createIcons();
   bindDelButtons();
   bindDragDrop();
@@ -2545,8 +2552,41 @@ function bindWorkoutDragDrop() {
 }
 
 window.addEventListener("load", async function() {
-  state.screen = "dashboard";
   const loader = document.getElementById("app-loader");
+
+  // ─── מצב צפייה משותפת ────────────────────────────────────────────
+  const shareToken = new URLSearchParams(location.search).get("share");
+  if (shareToken) {
+    state.screen = "dashboard";
+    state.readonly = true;
+    try {
+      const result = await loadSharedData(shareToken);
+      if (result === "expired") {
+        if (loader) loader.remove();
+        document.getElementById("app").innerHTML = `
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;padding:32px;text-align:center;direction:rtl">
+            <div style="font-size:48px;margin-bottom:16px">🔒</div>
+            <div style="font-size:20px;font-weight:700;color:var(--text-primary);margin-bottom:8px">הקישור פג תוקף</div>
+            <div style="font-size:14px;color:var(--text-hint)">בקש מבעל החשבון לשלוח קישור חדש</div>
+          </div>`;
+        return;
+      }
+    } catch (e) {
+      console.error("Share load failed:", e);
+      if (loader) loader.remove();
+      document.getElementById("app").innerHTML = `
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;padding:32px;text-align:center;direction:rtl">
+          <div style="font-size:20px;font-weight:700;color:var(--red)">שגיאה בטעינת הנתונים</div>
+        </div>`;
+      return;
+    }
+    if (loader) { loader.style.opacity = "0"; setTimeout(() => loader.remove(), 350); }
+    render();
+    return;
+  }
+  // ─────────────────────────────────────────────────────────────────
+
+  state.screen = "dashboard";
   const results = await Promise.allSettled([
   loadSessionsFromSupabase(),
   loadWeightData(),

@@ -503,6 +503,13 @@ if (inProgress) {
         </div>`;
       }).join("")}
     </div>` : ""}
+
+    <div style="display:flex;justify-content:center;padding:4px 0 8px">
+      <button onclick="openShareSheet()" style="display:flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--border-med);border-radius:12px;padding:10px 18px;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;color:var(--text-secondary)">
+        <i data-lucide="share-2" style="width:15px;height:15px"></i>
+        שתף עם מאמן
+      </button>
+    </div>
   </div>`;
 }
 

@@ -102,4 +102,19 @@ body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg);
   opacity: 1;
   transform: translateY(0) scale(1);
 }
+
+/* ── מצב צפייה בלבד ── */
+body.readonly .btn-primary,
+body.readonly .btn-success,
+body.readonly .btn-secondary,
+body.readonly .next-btn,
+body.readonly [onclick*="openWeightEntryModal"],
+body.readonly [onclick*="finishWorkout"],
+body.readonly [onclick*="cancelWorkout"],
+body.readonly [onclick*="showCancelMenu"],
+body.readonly [onclick*="openShareSheet"],
+body.readonly [onclick*="navigate('home')"],
+body.readonly [onclick*="navigate(\"home\")"],
+body.readonly [data-del-session],
+body.readonly .icon-btn { display: none !important; }
 </style>
