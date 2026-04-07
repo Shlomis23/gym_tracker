@@ -61,7 +61,8 @@
       "Bash(SUPABASE_ACCESS_TOKEN=sbp_6f2b48a6af2cc058dacdcdd387b20d89e4123ae8 npx supabase functions deploy telegram-bot --project-ref jezibgdemidhebbcpdch)",
       "Bash(SUPABASE_ACCESS_TOKEN=sbp_6f2b48a6af2cc058dacdcdd387b20d89e4123ae8 npx supabase login --no-browser)",
       "Bash(SUPABASE_ACCESS_TOKEN=sbp_6f2b48a6af2cc058dacdcdd387b20d89e4123ae8 npx supabase --version)",
-      "Bash(SUPABASE_ACCESS_TOKEN=sbp_533ddcede8d1200152178c066e055731b98587b2 npx supabase functions deploy telegram-bot --project-ref jezibgdemidhebbcpdch)"
+      "Bash(SUPABASE_ACCESS_TOKEN=sbp_533ddcede8d1200152178c066e055731b98587b2 npx supabase functions deploy telegram-bot --project-ref jezibgdemidhebbcpdch)",
+      "Bash(SUPABASE_ACCESS_TOKEN=sbp_3ae2cfbbc57b8014a2b3154215e263f93295af67 npx supabase functions deploy telegram-bot --project-ref jezibgdemidhebbcpdch)"
     ]
   }
 }

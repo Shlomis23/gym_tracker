@@ -145,22 +145,58 @@ function detectIntent(text: string): Intent {
 
 // ── Telegram API ──────────────────────────────────────────────────────────────
 
+type InlineButton = { text: string; callback_data: string };
+type InlineKeyboard = InlineButton[][];
+
 async function sendMessage(
   token: string,
   chatId: number,
   text: string,
-  parseMode: "HTML" | "Markdown" = "HTML"
+  parseMode: "HTML" | "Markdown" = "HTML",
+  keyboard?: InlineKeyboard
 ): Promise<void> {
+  const body: any = { chat_id: chatId, text, parse_mode: parseMode };
+  if (keyboard) body.reply_markup = { inline_keyboard: keyboard };
   await fetch(`${TELEGRAM_API}${token}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      parse_mode: parseMode,
-    }),
+    body: JSON.stringify(body),
   });
 }
+
+async function answerCallback(token: string, callbackQueryId: string): Promise<void> {
+  await fetch(`${TELEGRAM_API}${token}/answerCallbackQuery`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ callback_query_id: callbackQueryId }),
+  });
+}
+
+// ── Menus ─────────────────────────────────────────────────────────────────────
+
+const MAIN_MENU: InlineKeyboard = [
+  [{ text: "⚖️ משקל", callback_data: "menu_weight" }, { text: "🏋️ אימונים", callback_data: "menu_workouts" }],
+  [{ text: "📊 איך הולך לי?", callback_data: "overview" }],
+];
+
+const WEIGHT_MENU: InlineKeyboard = [
+  [{ text: "משקל נוכחי", callback_data: "weight_current" }, { text: "ממוצע שבועי", callback_data: "weight_weekly_avg" }],
+  [{ text: "שינוי החודש", callback_data: "weight_monthly_change" }, { text: "שיאי משקל", callback_data: "weight_record" }],
+  [{ text: "כמה נשאר ליעד", callback_data: "weight_goal_remaining" }, { text: "קצב להגעה ליעד", callback_data: "weight_goal_pace" }],
+  [{ text: "🔙 תפריט ראשי", callback_data: "menu_main" }],
+];
+
+const WORKOUT_MENU: InlineKeyboard = [
+  [{ text: "כמה אימונים השבוע", callback_data: "workout_this_week" }, { text: "באיזה ימים", callback_data: "workout_days_this_week" }],
+  [{ text: "כמה נשאר ליעד", callback_data: "workout_goal_remaining" }, { text: "אימון אחרון", callback_data: "workout_last" }],
+  [{ text: "רצף אימונים", callback_data: "workout_streak" }, { text: "השוואה חודשית", callback_data: "workout_monthly_compare" }],
+  [{ text: "תרגיל נפוץ ביותר", callback_data: "workout_most_common" }, { text: "שיאים שנשברו השבוע", callback_data: "workout_pr_this_week" }],
+  [{ text: "🔙 תפריט ראשי", callback_data: "menu_main" }],
+];
+
+const BACK_BUTTON = (menu: "weight" | "workouts"): InlineKeyboard => [
+  [{ text: "🔙 חזרה", callback_data: `menu_${menu}` }, { text: "🏠 תפריט ראשי", callback_data: "menu_main" }],
+];
 
 // ── Handler helpers ───────────────────────────────────────────────────────────
 
@@ -715,7 +751,7 @@ async function handleWorkoutPRThisWeek(
   if (prs.length === 0)
     return "לא שברת שיאים השבוע — המשך לדחוף! 💪";
 
-  return `🏆 שיאים שבורים השבוע:\n${prs.join("\n")}`;
+  return `🏆 שיאים שנשברו השבוע:\n${prs.join("\n")}`;
 }
 
 async function handleOverview(sb: SB, userId: string): Promise<string> {
@@ -853,6 +889,70 @@ Deno.serve(async (req) => {
     return new Response("Bad JSON", { status: 400 });
   }
 
+  const sb = createClient(supabaseUrl, serviceRoleKey);
+
+  // ── Callback query (button press) ──────────────────────────────────────────
+  if (update?.callback_query) {
+    const cq = update.callback_query;
+    const chatId: number = cq.message?.chat?.id;
+    const callbackData: string = cq.data || "";
+    await answerCallback(botToken, cq.id);
+
+    // Menu navigation — no auth needed
+    if (callbackData === "menu_main") {
+      await sendMessage(botToken, chatId, "בחר נושא:", "HTML", MAIN_MENU);
+      return new Response("ok", { status: 200 });
+    }
+    if (callbackData === "menu_weight") {
+      await sendMessage(botToken, chatId, "⚖️ <b>משקל</b> — בחר שאלה:", "HTML", WEIGHT_MENU);
+      return new Response("ok", { status: 200 });
+    }
+    if (callbackData === "menu_workouts") {
+      await sendMessage(botToken, chatId, "🏋️ <b>אימונים</b> — בחר שאלה:", "HTML", WORKOUT_MENU);
+      return new Response("ok", { status: 200 });
+    }
+
+    // Resolve user
+    const telegramId: number = cq.from?.id;
+    const { data: linkRow } = await sb.from("telegram_links").select("user_id").eq("telegram_id", telegramId).maybeSingle();
+    if (!linkRow) {
+      await sendMessage(botToken, chatId, "❌ הבוט לא מחובר לחשבון שלך.\n\nפתח את GymBuddy ← הגדרות ← קשר לבוט טלגרם.");
+      return new Response("ok", { status: 200 });
+    }
+    const userId = linkRow.user_id;
+
+    // Determine which back menu to use
+    const backMenu = callbackData.startsWith("workout") ? BACK_BUTTON("workouts") : BACK_BUTTON("weight");
+
+    let reply = "";
+    try {
+      switch (callbackData as Intent) {
+        case "weight_current":        reply = await handleWeightCurrent(sb, userId); break;
+        case "weight_weekly_avg":     reply = await handleWeightWeeklyAvg(sb, userId); break;
+        case "weight_monthly_change": reply = await handleWeightMonthlyChange(sb, userId); break;
+        case "weight_record":         reply = await handleWeightRecord(sb, userId); break;
+        case "weight_goal_remaining": reply = await handleWeightGoalRemaining(sb, userId); break;
+        case "weight_goal_pace":      reply = await handleWeightGoalPace(sb, userId); break;
+        case "workout_this_week":     reply = await handleWorkoutThisWeek(sb, userId); break;
+        case "workout_days_this_week":reply = await handleWorkoutDaysThisWeek(sb, userId); break;
+        case "workout_goal_remaining":reply = await handleWorkoutGoalRemaining(sb, userId); break;
+        case "workout_last":          reply = await handleWorkoutLast(sb, userId); break;
+        case "workout_streak":        reply = await handleWorkoutStreak(sb, userId); break;
+        case "workout_monthly_compare":reply = await handleWorkoutMonthlyCompare(sb, userId); break;
+        case "workout_most_common":   reply = await handleWorkoutMostCommon(sb, userId); break;
+        case "workout_pr_this_week":  reply = await handleWorkoutPRThisWeek(sb, userId); break;
+        case "overview":              reply = await handleOverview(sb, userId); break;
+        default: reply = "פעולה לא מוכרת";
+      }
+    } catch (err: any) {
+      reply = `⚠️ שגיאה: ${err?.message ?? err}`;
+    }
+
+    await sendMessage(botToken, chatId, reply, "HTML", backMenu);
+    return new Response("ok", { status: 200 });
+  }
+
+  // ── Regular message ────────────────────────────────────────────────────────
   const message = update?.message;
   if (!message) return new Response("ok", { status: 200 });
 
@@ -926,8 +1026,9 @@ Deno.serve(async (req) => {
       await sendMessage(
         botToken,
         chatId,
-        `✅ <b>החשבון חובר בהצלחה!</b>\n\nאני עכשיו מחובר לחשבון GymBuddy שלך.\nשלח לי שאלות כמו:\n• מה המשקל שלי?\n• כמה אימונים השבוע?\n• איך הולך לי?\n\nכתוב כל שאלה בחופשיות!`,
-        "HTML"
+        `✅ <b>החשבון חובר בהצלחה!</b>\n\nבחר נושא:`,
+        "HTML",
+        MAIN_MENU
       );
       return new Response("ok", { status: 200 });
     }
@@ -943,8 +1044,9 @@ Deno.serve(async (req) => {
       await sendMessage(
         botToken,
         chatId,
-        `👋 <b>ברוך הבא חזרה!</b>\n\nהחשבון שלך כבר מחובר.\nשאל אותי כל שאלה על האימונים והמשקל שלך!`,
-        "HTML"
+        `👋 <b>ברוך הבא!</b>\n\nבחר נושא:`,
+        "HTML",
+        MAIN_MENU
       );
     } else {
       await sendMessage(
@@ -978,75 +1080,83 @@ Deno.serve(async (req) => {
 
   const userId = linkRow.user_id;
 
+  // ── /menu command ─────────────────────────────────────────────────────────
+  if (text === "/menu") {
+    await sendMessage(botToken, chatId, "בחר נושא:", "HTML", MAIN_MENU);
+    return new Response("ok", { status: 200 });
+  }
+
   // ── Intent routing ────────────────────────────────────────────────────────
 
   const intent = detectIntent(text);
   let reply: string;
+  let replyKeyboard: InlineKeyboard | undefined;
 
   try {
     switch (intent) {
       case "weight_current":
         reply = await handleWeightCurrent(sb, userId);
-        break;
+        replyKeyboard = BACK_BUTTON("weight"); break;
       case "weight_weekly_avg":
         reply = await handleWeightWeeklyAvg(sb, userId);
-        break;
+        replyKeyboard = BACK_BUTTON("weight"); break;
       case "weight_monthly_change":
         reply = await handleWeightMonthlyChange(sb, userId);
-        break;
+        replyKeyboard = BACK_BUTTON("weight"); break;
       case "weight_record":
         reply = await handleWeightRecord(sb, userId);
-        break;
+        replyKeyboard = BACK_BUTTON("weight"); break;
       case "weight_goal_remaining":
         reply = await handleWeightGoalRemaining(sb, userId);
-        break;
+        replyKeyboard = BACK_BUTTON("weight"); break;
       case "weight_goal_pace":
         reply = await handleWeightGoalPace(sb, userId);
-        break;
+        replyKeyboard = BACK_BUTTON("weight"); break;
       case "weight_avg_range":
         reply = await handleWeightAvgRange(sb, userId, text);
-        break;
+        replyKeyboard = BACK_BUTTON("weight"); break;
       case "workout_this_week":
         reply = await handleWorkoutThisWeek(sb, userId);
-        break;
+        replyKeyboard = BACK_BUTTON("workouts"); break;
       case "workout_days_this_week":
         reply = await handleWorkoutDaysThisWeek(sb, userId);
-        break;
+        replyKeyboard = BACK_BUTTON("workouts"); break;
       case "workout_goal_remaining":
         reply = await handleWorkoutGoalRemaining(sb, userId);
-        break;
+        replyKeyboard = BACK_BUTTON("workouts"); break;
       case "workout_last":
         reply = await handleWorkoutLast(sb, userId);
-        break;
+        replyKeyboard = BACK_BUTTON("workouts"); break;
       case "workout_streak":
         reply = await handleWorkoutStreak(sb, userId);
-        break;
+        replyKeyboard = BACK_BUTTON("workouts"); break;
       case "workout_monthly_compare":
         reply = await handleWorkoutMonthlyCompare(sb, userId);
-        break;
+        replyKeyboard = BACK_BUTTON("workouts"); break;
       case "workout_most_common":
         reply = await handleWorkoutMostCommon(sb, userId);
-        break;
+        replyKeyboard = BACK_BUTTON("workouts"); break;
       case "workout_pr":
         reply = await handleWorkoutPR(sb, userId, text);
-        break;
+        replyKeyboard = BACK_BUTTON("workouts"); break;
       case "workout_pr_this_week":
         reply = await handleWorkoutPRThisWeek(sb, userId);
-        break;
+        replyKeyboard = BACK_BUTTON("workouts"); break;
       case "overview":
         reply = await handleOverview(sb, userId);
-        break;
+        replyKeyboard = [[{ text: "🏠 תפריט ראשי", callback_data: "menu_main" }]]; break;
       case "log_weight":
         reply = await handleLogWeight(sb, userId, text);
-        break;
+        replyKeyboard = [[{ text: "🏠 תפריט ראשי", callback_data: "menu_main" }]]; break;
       default:
-        reply = unknownReply();
+        reply = "בחר נושא:";
+        replyKeyboard = MAIN_MENU;
     }
   } catch (err: any) {
     console.error("Handler error:", err);
     reply = `⚠️ אירעה שגיאה. נסה שוב.\n${err?.message ?? ""}`;
   }
 
-  await sendMessage(botToken, chatId, reply, "HTML");
+  await sendMessage(botToken, chatId, reply, "HTML", replyKeyboard);
   return new Response("ok", { status: 200 });
 });
