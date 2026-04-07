@@ -143,7 +143,7 @@ async function sendWeightReminders(db: ReturnType<typeof createClient>) {
     if (await alreadySent(db, userId, "weight_reminder", today)) continue;
 
     const sent = await pushToUser(db, userSubs, {
-      title: "⚖️ GymBuddy",
+      title: "⚖️ זמן להישקל!",
       body: "בוקר טוב! אל תשכח להישקל הבוקר 🌅",
       url: "/"
     });
@@ -194,7 +194,7 @@ async function sendWorkoutReminders(db: ReturnType<typeof createClient>) {
 
     if (await alreadySent(db, userId, "workout_reminder", today)) continue;
 
-    const sent = await pushToUser(db, userSubs, { title: "💪 GymBuddy", body, url: "/" });
+    const sent = await pushToUser(db, userSubs, { title: "💪 זמן לאימון!", body, url: "/" });
     if (sent) await logSent(db, userId, "workout_reminder", today);
   }
 }
@@ -248,7 +248,7 @@ async function checkGoalCompletions(db: ReturnType<typeof createClient>) {
     if (!userSubs?.length) continue;
 
     const sent = await pushToUser(db, userSubs.map((s: any) => ({ ...s, user_id: userId })), {
-      title: "🏆 GymBuddy",
+      title: "🏆 יעד שבועי הושג!",
       body: `כל הכבוד! השלמת ${goal} אימונים השבוע — יעד השבועי הושג! 🎉`,
       url: "/"
     });
@@ -314,7 +314,7 @@ async function sendWeeklySummary(db: ReturnType<typeof createClient>) {
     }
 
     const sent = await pushToUser(db, userSubs, {
-      title: "📊 GymBuddy — סיכום שבועי",
+      title: "📊 סיכום שבועי",
       body,
       url: "/"
     });
