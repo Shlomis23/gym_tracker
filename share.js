@@ -151,7 +151,9 @@ async function openShareSheet() {
         document.execCommand("copy"); ta.remove();
       }
       showToast("הקישור הועתק ✓");
-      setTimeout(() => overlay.remove(), 800);
+      setTimeout(() => {
+        document.getElementById("share-sheet-modal")?.remove();
+      }, 800);
     });
     loadingEl.querySelector("#share-close2").addEventListener("click", () => overlay.remove());
   } catch (e) {
