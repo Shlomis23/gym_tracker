@@ -39,11 +39,12 @@ function formatFullDate(isoOrDate: string | Date): string {
   return `${day}/${month}/${year}`;
 }
 
-/** Hebrew day name from ISO date string */
+/** Hebrew day name from ISO date or timestamp string */
 function hebrewDayName(isoDate: string): string {
-  const d = new Date(isoDate + "T12:00:00Z");
-  const local = new Date(d.getTime() + ISRAEL_OFFSET_MS);
-  return HE_DAYS[local.getUTCDay()];
+  // נרמל ל-date בלבד אם קיבלנו timestamp מלא
+  const dateOnly = israelDateStr(new Date(isoDate));
+  const d = new Date(dateOnly + "T12:00:00Z");
+  return HE_DAYS[d.getUTCDay()];
 }
 
 /** Sunday of current Israel week (as ISO date string) */
@@ -116,7 +117,6 @@ function detectIntent(text: string): Intent {
   if (/ממוצע שבועי|ממוצע השבוע|ממוצע שקיל/.test(t)) return "weight_weekly_avg";
   if (/כמה ירדתי|כמה עליתי|שינוי משקל החודש/.test(t)) return "weight_monthly_change";
   if (/הכי נמוך|הכי גבוה|שיא משקל/.test(t)) return "weight_record";
-  if (/כמה נשאר ליעד|יעד משקל/.test(t)) return "weight_goal_remaining";
   if (/קצב|כמה זמן עד יעד|מתי אגיע ליעד/.test(t)) return "weight_goal_pace";
   if (/ממוצע.*ימים|ממוצע חודש|ממוצע בין/.test(t)) return "weight_avg_range";
 
@@ -126,10 +126,12 @@ function detectIntent(text: string): Intent {
   // workout_pr
   if (/שיא ב|pr ב|pr של/.test(t)) return "workout_pr";
 
-  // workout
+  // workout — goal_remaining לפני weight_goal_remaining
   if (/כמה אימונים השבוע/.test(t)) return "workout_this_week";
   if (/באיזה ימים|אילו ימים התאמנתי/.test(t)) return "workout_days_this_week";
-  if (/כמה נשאר ליעד השבועי|כמה אימונים נשארו/.test(t)) return "workout_goal_remaining";
+  if (/כמה נשאר ליעד השבועי|כמה אימונים נשארו|ליעד.*אימון/.test(t)) return "workout_goal_remaining";
+
+  if (/כמה נשאר ליעד|יעד משקל/.test(t)) return "weight_goal_remaining";
   if (/מתי אימנתי לאחרונה|אימון אחרון/.test(t)) return "workout_last";
   if (/רצף|streak|כמה ימים ברצף/.test(t)) return "workout_streak";
   if (/השווה חודשים|החודש לעומת חודש שעבר/.test(t)) return "workout_monthly_compare";
@@ -210,15 +212,16 @@ async function handleWeightCurrent(sb: SB, userId: string): Promise<string> {
 }
 
 async function handleWeightWeeklyAvg(sb: SB, userId: string): Promise<string> {
-  const weekAgo = new Date(Date.now() + ISRAEL_OFFSET_MS - 7 * 86400000)
-    .toISOString()
-    .slice(0, 10);
+  // 7 ימים אחרונים כולל היום — חישוב לפי תאריך ישראל בלי שעה
+  const todayDate = israelDateStr();
+  const weekAgoDate = israelDateStr(new Date(Date.now() - 6 * 86400000));
 
   const { data } = await sb
     .from("body_weight_logs")
     .select("weight")
     .eq("user_id", userId)
-    .gte("measured_at", weekAgo);
+    .gte("measured_date", weekAgoDate)
+    .lte("measured_date", todayDate);
 
   if (!data || data.length === 0) return "אין רישומי משקל לשבוע האחרון 📭";
   const a = avg(data.map((r) => r.weight));
@@ -291,8 +294,9 @@ async function handleWeightGoalRemaining(
   const target = goalRes.data.goal_weight;
   const current = weightRes.data.weight;
   const remaining = Math.abs(target - current);
-  const mode = goalRes.data.goal_mode === "gain" ? "לעלות" : "לרדת";
-  const done = goalRes.data.goal_mode === "gain" ? current >= target : current <= target;
+  const isGain = goalRes.data.goal_mode === "gain" || goalRes.data.goal_mode === "lean_bulk" || goalRes.data.goal_mode === "bulk";
+  const mode = isGain ? "לעלות" : "לרדת";
+  const done = isGain ? current >= target : current <= target;
 
   if (done)
     return `🎉 הגעת ליעד שלך! יעד: ${round1(target)} ק״ג, כרגע: ${round1(current)} ק״ג`;
@@ -321,7 +325,8 @@ async function handleWeightGoalPace(sb: SB, userId: string): Promise<string> {
   const logs = logsRes.data;
   const current = logs[logs.length - 1].weight;
   const target = goalRes.data.goal_weight;
-  const isLoss = goalRes.data.goal_mode !== "gain";
+  const isGainMode = goalRes.data.goal_mode === "gain" || goalRes.data.goal_mode === "lean_bulk" || goalRes.data.goal_mode === "bulk";
+  const isLoss = !isGainMode;
 
   const done = isLoss ? current <= target : current >= target;
   if (done)
@@ -432,7 +437,7 @@ async function handleWorkoutThisWeek(
     .gte("date", ws);
 
   const count = data?.length ?? 0;
-  return `🏋️ השבוע אימנת <b>${count}</b> פעמים`;
+  return `🏋️ השבוע התאמנת <b>${count}</b> פעמים`;
 }
 
 async function handleWorkoutDaysThisWeek(
@@ -448,7 +453,7 @@ async function handleWorkoutDaysThisWeek(
     .order("date", { ascending: true });
 
   if (!data || data.length === 0)
-    return "עוד לא אימנת השבוע 😴";
+    return "עוד לא התאמנת השבוע 😴";
 
   const lines = data.map(
     (r) => `• ${hebrewDayName(r.date)} (${formatShortDate(r.date)}) — ${r.workout_name || "אימון"}`
@@ -518,8 +523,8 @@ async function handleWorkoutStreak(sb: SB, userId: string): Promise<string> {
 
   if (!data || data.length === 0) return "אין אימונים עדיין 📭";
 
-  // Get unique dates
-  const dates = [...new Set(data.map((r) => r.date))].sort().reverse();
+  // נרמל timestamps ל-date strings בשעון ישראל
+  const dates = [...new Set(data.map((r) => israelDateStr(new Date(r.date))))].sort().reverse();
   const today = israelDateStr();
 
   // Calculate consecutive workout-week streak (weeks with at least 1 workout)
@@ -650,12 +655,22 @@ async function handleWorkoutPRThisWeek(
 ): Promise<string> {
   const ws = weekStart();
 
-  // Get all exercises done this week
+  // מצא session IDs של השבוע
+  const { data: weekSessions } = await sb
+    .from("workout_sessions")
+    .select("id")
+    .eq("user_id", userId)
+    .gte("date", ws);
+
+  const weekSessionIds = (weekSessions ?? []).map((s: any) => s.id);
+  if (!weekSessionIds.length) return "לא התאמנת השבוע 😴";
+
+  // Get all exercises done this week via session_id
   const { data: thisWeekData } = await sb
     .from("session_exercises")
     .select("exercise_name, weight, reps")
     .eq("user_id", userId)
-    .gte("created_at", ws)
+    .in("session_id", weekSessionIds)
     .gt("weight", 0);
 
   if (!thisWeekData || thisWeekData.length === 0)
@@ -672,14 +687,14 @@ async function handleWorkoutPRThisWeek(
     }
   }
 
-  // Get all-time maxes before this week
+  // Get all-time maxes before this week (via session_id NOT IN this week)
   const allTimePromises = Object.keys(thisWeekMaxes).map((name) =>
     sb
       .from("session_exercises")
       .select("weight")
       .eq("user_id", userId)
       .ilike("exercise_name", name)
-      .lt("created_at", ws)
+      .not("session_id", "in", `(${weekSessionIds.join(",")})`)
       .gt("weight", 0)
       .order("weight", { ascending: false })
       .limit(1)
@@ -749,10 +764,11 @@ async function handleOverview(sb: SB, userId: string): Promise<string> {
   const weeklyGoal = planRes.data?.weekly_goal ?? 4;
   const remaining = Math.max(0, weeklyGoal - workoutCount);
 
-  let lastTrainStr = "עדיין לא אימנת";
+  let lastTrainStr = "עדיין לא התאמנת";
   if (lastSession.data) {
+    const sessionDate = israelDateStr(new Date(lastSession.data.date));
     const diff = Math.round(
-      (new Date(today).getTime() - new Date(lastSession.data.date).getTime()) /
+      (new Date(today + "T00:00:00Z").getTime() - new Date(sessionDate + "T00:00:00Z").getTime()) /
         86400000
     );
     lastTrainStr =
