@@ -273,7 +273,7 @@ async function handleWeightGoalRemaining(
   const [goalRes, weightRes] = await Promise.all([
     sb
       .from("weight_goal")
-      .select("target_weight, goal_mode")
+      .select("goal_weight, goal_mode")
       .eq("user_id", userId)
       .maybeSingle(),
     sb
@@ -288,7 +288,7 @@ async function handleWeightGoalRemaining(
   if (!goalRes.data) return "לא הוגדר יעד משקל עדיין 🎯";
   if (!weightRes.data) return "לא נמצאו רישומי משקל 📭";
 
-  const target = goalRes.data.target_weight;
+  const target = goalRes.data.goal_weight;
   const current = weightRes.data.weight;
   const remaining = Math.abs(target - current);
   const mode = goalRes.data.goal_mode === "gain" ? "לעלות" : "לרדת";
@@ -304,7 +304,7 @@ async function handleWeightGoalPace(sb: SB, userId: string): Promise<string> {
   const [goalRes, logsRes] = await Promise.all([
     sb
       .from("weight_goal")
-      .select("target_weight, start_weight, goal_mode")
+      .select("goal_weight, start_weight, goal_mode")
       .eq("user_id", userId)
       .maybeSingle(),
     sb
@@ -320,7 +320,7 @@ async function handleWeightGoalPace(sb: SB, userId: string): Promise<string> {
 
   const logs = logsRes.data;
   const current = logs[logs.length - 1].weight;
-  const target = goalRes.data.target_weight;
+  const target = goalRes.data.goal_weight;
   const isLoss = goalRes.data.goal_mode !== "gain";
 
   const done = isLoss ? current <= target : current >= target;
@@ -468,16 +468,14 @@ async function handleWorkoutGoalRemaining(
       .eq("user_id", userId)
       .gte("date", ws),
     sb
-      .from("workout_plans")
-      .select("days_per_week")
+      .from("user_settings")
+      .select("weekly_goal")
       .eq("user_id", userId)
-      .order("updated_at", { ascending: false })
-      .limit(1)
       .maybeSingle(),
   ]);
 
   const done = sessionsRes.data?.length ?? 0;
-  const goal = planRes.data?.days_per_week ?? 4;
+  const goal = planRes.data?.weekly_goal ?? 4;
   const remaining = Math.max(0, goal - done);
 
   if (remaining === 0)
@@ -498,9 +496,9 @@ async function handleWorkoutLast(sb: SB, userId: string): Promise<string> {
   if (!data) return "לא נמצאו אימונים 📭";
 
   const today = israelDateStr();
-  const sessionDate = data.date;
+  const sessionDate = israelDateStr(new Date(data.date));
   const diff = Math.round(
-    (new Date(today).getTime() - new Date(sessionDate).getTime()) / 86400000
+    (new Date(today + "T00:00:00Z").getTime() - new Date(sessionDate + "T00:00:00Z").getTime()) / 86400000
   );
 
   let whenStr: string;
@@ -737,20 +735,18 @@ async function handleOverview(sb: SB, userId: string): Promise<string> {
       .maybeSingle(),
     sb
       .from("weight_goal")
-      .select("target_weight, goal_mode")
+      .select("goal_weight, goal_mode")
       .eq("user_id", userId)
       .maybeSingle(),
     sb
-      .from("workout_plans")
-      .select("days_per_week, name")
+      .from("user_settings")
+      .select("weekly_goal")
       .eq("user_id", userId)
-      .order("updated_at", { ascending: false })
-      .limit(1)
       .maybeSingle(),
   ]);
 
   const workoutCount = sessionsThisWeek.data?.length ?? 0;
-  const weeklyGoal = planRes.data?.days_per_week ?? 4;
+  const weeklyGoal = planRes.data?.weekly_goal ?? 4;
   const remaining = Math.max(0, weeklyGoal - workoutCount);
 
   let lastTrainStr = "עדיין לא אימנת";
@@ -772,7 +768,7 @@ async function handleOverview(sb: SB, userId: string): Promise<string> {
   if (latestWeight.data) {
     weightStr = `${round1(latestWeight.data.weight)} ק״ג`;
     if (goalRes.data) {
-      const target = goalRes.data.target_weight;
+      const target = goalRes.data.goal_weight;
       const current = latestWeight.data.weight;
       const diff = Math.abs(target - current);
       const done =
@@ -805,11 +801,13 @@ async function handleLogWeight(
     return "המשקל שהזנת לא נראה תקין. נסה שוב עם מספר בין 20 ל-300.";
 
   const now = new Date().toISOString();
-  const { error } = await sb.from("body_weight_logs").insert({
-    user_id: userId,
-    weight,
-    measured_at: now,
-  });
+  const measuredDate = israelDateStr(new Date());
+
+  // upsert — כדי לא לשבור unique constraint על user_id+measured_date
+  const { error } = await sb.from("body_weight_logs").upsert(
+    { user_id: userId, weight, measured_at: now, measured_date: measuredDate },
+    { onConflict: "user_id,measured_date" }
+  );
 
   if (error)
     return `שגיאה ברישום המשקל ⚠️\n${error.message}`;

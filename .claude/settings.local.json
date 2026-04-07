@@ -50,7 +50,18 @@
       "Bash(curl -s -X POST \"https://jezibgdemidhebbcpdch.supabase.co/rest/v1/telegram_link_codes\" -H \"apikey: sb_publishable_NDyz8DAcTO8kOs6JhAjTFw_uRTgb5nf\" -H \"Authorization: Bearer sb_publishable_NDyz8DAcTO8kOs6JhAjTFw_uRTgb5nf\" -H \"Content-Type: application/json\" -H \"Prefer: return=representation,resolution=merge-duplicates\" -d '{\"\"code\"\":\"\"TEST01\"\",\"\"user_id\"\":\"\"9ded5dcd-37a2-4bc1-8e96-04450cf207c3\"\"}')",
       "Bash(SUPABASE_ACCESS_TOKEN=sbp_c2641462cc2ffdf0e277b960066c4f55324a21aa npx supabase functions deploy create-telegram-code --project-ref jezibgdemidhebbcpdch)",
       "Bash(SUPABASE_ACCESS_TOKEN=sbp_6f2b48a6af2cc058dacdcdd387b20d89e4123ae8 npx supabase functions deploy create-telegram-code --project-ref jezibgdemidhebbcpdch)",
-      "Bash(curl -s -X POST \"https://jezibgdemidhebbcpdch.supabase.co/functions/v1/create-telegram-code\" -H \"Content-Type: application/json\" -H \"apikey: sb_publishable_NDyz8DAcTO8kOs6JhAjTFw_uRTgb5nf\" -d '{\"\"user_id\"\":\"\"9ded5dcd-37a2-4bc1-8e96-04450cf207c3\"\"}')"
+      "Bash(curl -s -X POST \"https://jezibgdemidhebbcpdch.supabase.co/functions/v1/create-telegram-code\" -H \"Content-Type: application/json\" -H \"apikey: sb_publishable_NDyz8DAcTO8kOs6JhAjTFw_uRTgb5nf\" -d '{\"\"user_id\"\":\"\"9ded5dcd-37a2-4bc1-8e96-04450cf207c3\"\"}')",
+      "Bash(SUPABASE_ACCESS_TOKEN=sbp_6f2b48a6af2cc058dacdcdd387b20d89e4123ae8 npx supabase functions logs telegram-bot --project-ref jezibgdemidhebbcpdch)",
+      "Bash(curl -s \"https://api.supabase.com/v1/projects/jezibgdemidhebbcpdch/functions/telegram-bot/logs?limit=50\" -H \"Authorization: Bearer sbp_6f2b48a6af2cc058dacdcdd387b20d89e4123ae8\")",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s \"https://jezibgdemidhebbcpdch.supabase.co/rest/v1/weight_goal?select=*&limit=1\" -H \"apikey: sb_publishable_NDyz8DAcTO8kOs6JhAjTFw_uRTgb5nf\" -H \"Authorization: Bearer sb_publishable_NDyz8DAcTO8kOs6JhAjTFw_uRTgb5nf\")",
+      "Bash(curl -s \"https://jezibgdemidhebbcpdch.supabase.co/rest/v1/workout_plans?select=*&limit=1\" -H \"apikey: sb_publishable_NDyz8DAcTO8kOs6JhAjTFw_uRTgb5nf\" -H \"Authorization: Bearer sb_publishable_NDyz8DAcTO8kOs6JhAjTFw_uRTgb5nf\")",
+      "Bash(curl -s \"https://jezibgdemidhebbcpdch.supabase.co/rest/v1/settings?select=*&limit=1\" -H \"apikey: sb_publishable_NDyz8DAcTO8kOs6JhAjTFw_uRTgb5nf\" -H \"Authorization: Bearer sb_publishable_NDyz8DAcTO8kOs6JhAjTFw_uRTgb5nf\")",
+      "Bash(curl -s \"https://jezibgdemidhebbcpdch.supabase.co/rest/v1/user_settings?select=*&limit=1\" -H \"apikey: sb_publishable_NDyz8DAcTO8kOs6JhAjTFw_uRTgb5nf\" -H \"Authorization: Bearer sb_publishable_NDyz8DAcTO8kOs6JhAjTFw_uRTgb5nf\")",
+      "Bash(SUPABASE_ACCESS_TOKEN=sbp_6f2b48a6af2cc058dacdcdd387b20d89e4123ae8 npx supabase functions deploy telegram-bot --project-ref jezibgdemidhebbcpdch)",
+      "Bash(SUPABASE_ACCESS_TOKEN=sbp_6f2b48a6af2cc058dacdcdd387b20d89e4123ae8 npx supabase login --no-browser)",
+      "Bash(SUPABASE_ACCESS_TOKEN=sbp_6f2b48a6af2cc058dacdcdd387b20d89e4123ae8 npx supabase --version)",
+      "Bash(SUPABASE_ACCESS_TOKEN=sbp_533ddcede8d1200152178c066e055731b98587b2 npx supabase functions deploy telegram-bot --project-ref jezibgdemidhebbcpdch)"
     ]
   }
 }
