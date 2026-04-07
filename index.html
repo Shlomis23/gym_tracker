@@ -1869,6 +1869,13 @@ async function savePushSubscriptionToSupabase(subscription) {
   const userId = requireUserIdOrThrow("savePushSubscriptionToSupabase");
   const keys = subscription.toJSON().keys || {};
   const nowIso = new Date().toISOString();
+
+  // בטל סאבסקריפשנים ישנים של אותו משתמש (endpoint שונה) — כדי שרק המכשיר הנוכחי יקבל התראות
+  await fetch(
+    `${SUPABASE_URL}/rest/v1/push_subscriptions?user_id=eq.${userId}&endpoint=neq.${encodeURIComponent(subscription.endpoint)}&is_active=eq.true`,
+    { method: "PATCH", headers: SB_HEADERS, body: JSON.stringify({ is_active: false, updated_at: nowIso }) }
+  ).catch(() => {}); // לא קריטי אם נכשל
+
   const payload = [{
     user_id: userId,
     endpoint: subscription.endpoint,

@@ -88,6 +88,33 @@ async function deactivateSub(db: ReturnType<typeof createClient>, endpoint: stri
     .eq("endpoint", endpoint);
 }
 
+// ─── Group subs by user ───────────────────────────────────────────────────────
+type Sub = { user_id: string; endpoint: string; p256dh: string; auth: string };
+
+function groupByUser(subs: Sub[]): Map<string, Sub[]> {
+  const map = new Map<string, Sub[]>();
+  for (const sub of subs) {
+    if (!map.has(sub.user_id)) map.set(sub.user_id, []);
+    map.get(sub.user_id)!.push(sub);
+  }
+  return map;
+}
+
+// שולח לכל הסאבסקריפשנים של המשתמש — מחזיר true אם לפחות אחד הצליח
+async function pushToUser(
+  db: ReturnType<typeof createClient>,
+  userSubs: Sub[],
+  payload: { title: string; body: string; url: string }
+): Promise<boolean> {
+  let anySent = false;
+  for (const sub of userSubs) {
+    const result = await push(sub, payload);
+    if (result === "ok") anySent = true;
+    else if (result === "gone") await deactivateSub(db, sub.endpoint);
+  }
+  return anySent;
+}
+
 // ─── Weight Reminder ──────────────────────────────────────────────────────────
 async function sendWeightReminders(db: ReturnType<typeof createClient>) {
   const today = israelDateStr();
@@ -106,19 +133,18 @@ async function sendWeightReminders(db: ReturnType<typeof createClient>) {
     .lte("measured_at", `${today}T23:59:59+03:00`);
 
   const weighedSet = new Set((weighed ?? []).map((r: any) => r.user_id));
+  const byUser = groupByUser(subs as Sub[]);
 
-  for (const sub of subs) {
-    if (weighedSet.has(sub.user_id)) continue;
-    if (await alreadySent(db, sub.user_id, "weight_reminder", today)) continue;
+  for (const [userId, userSubs] of byUser) {
+    if (weighedSet.has(userId)) continue;
+    if (await alreadySent(db, userId, "weight_reminder", today)) continue;
 
-    const result = await push(sub, {
+    const sent = await pushToUser(db, userSubs, {
       title: "⚖️ GymBuddy",
       body: "בוקר טוב! אל תשכח להישקל הבוקר 🌅",
       url: "/"
     });
-
-    if (result === "ok") await logSent(db, sub.user_id, "weight_reminder", today);
-    else if (result === "gone") await deactivateSub(db, sub.endpoint);
+    if (sent) await logSent(db, userId, "weight_reminder", today);
   }
 }
 
@@ -151,9 +177,10 @@ async function sendWorkoutReminders(db: ReturnType<typeof createClient>) {
   }
 
   const todayMs = new Date(today + "T00:00:00").getTime();
+  const byUser = groupByUser(subs as Sub[]);
 
-  for (const sub of subs) {
-    const lastDate = lastByUser.get(sub.user_id);
+  for (const [userId, userSubs] of byUser) {
+    const lastDate = lastByUser.get(userId);
     if (!lastDate) continue; // Never worked out — don't nag
 
     const daysSince = Math.round((todayMs - new Date(lastDate + "T00:00:00").getTime()) / 86400000);
@@ -162,11 +189,10 @@ async function sendWorkoutReminders(db: ReturnType<typeof createClient>) {
     const body = WORKOUT_MSGS[Math.min(daysSince, 5)];
     if (!body) continue;
 
-    if (await alreadySent(db, sub.user_id, "workout_reminder", today)) continue;
+    if (await alreadySent(db, userId, "workout_reminder", today)) continue;
 
-    const result = await push(sub, { title: "💪 GymBuddy", body, url: "/" });
-    if (result === "ok") await logSent(db, sub.user_id, "workout_reminder", today);
-    else if (result === "gone") await deactivateSub(db, sub.endpoint);
+    const sent = await pushToUser(db, userSubs, { title: "💪 GymBuddy", body, url: "/" });
+    if (sent) await logSent(db, userId, "workout_reminder", today);
   }
 }
 
@@ -210,21 +236,20 @@ async function checkGoalCompletions(db: ReturnType<typeof createClient>) {
     const count = (weekSessions as any)?.length ?? 0;
     if (count < goal) continue;
 
-    const { data: sub } = await db
+    // Get ALL active subscriptions for this user
+    const { data: userSubs } = await db
       .from("push_subscriptions")
       .select("endpoint, p256dh, auth")
       .eq("user_id", userId)
-      .eq("is_active", true)
-      .maybeSingle();
-    if (!sub) continue;
+      .eq("is_active", true);
+    if (!userSubs?.length) continue;
 
-    const result = await push(sub, {
+    const sent = await pushToUser(db, userSubs.map((s: any) => ({ ...s, user_id: userId })), {
       title: "🏆 GymBuddy",
       body: `כל הכבוד! השלמת ${goal} אימונים השבוע — יעד השבועי הושג! 🎉`,
       url: "/"
     });
-    if (result === "ok") await logSent(db, userId, "goal_complete", weekKey);
-    else if (result === "gone") await deactivateSub(db, sub.endpoint);
+    if (sent) await logSent(db, userId, "goal_complete", weekKey);
   }
 }
 
@@ -264,11 +289,13 @@ async function sendWeeklySummary(db: ReturnType<typeof createClient>) {
     else cur.last = Number(log.weight);
   }
 
-  for (const sub of subs) {
-    if (await alreadySent(db, sub.user_id, "weekly_summary", weekKey)) continue;
+  const byUser = groupByUser(subs as Sub[]);
 
-    const workouts = countByUser.get(sub.user_id) ?? 0;
-    const weight = weightByUser.get(sub.user_id);
+  for (const [userId, userSubs] of byUser) {
+    if (await alreadySent(db, userId, "weekly_summary", weekKey)) continue;
+
+    const workouts = countByUser.get(userId) ?? 0;
+    const weight = weightByUser.get(userId);
 
     if (!workouts && !weight) continue; // No activity — skip
 
@@ -283,13 +310,12 @@ async function sendWeeklySummary(db: ReturnType<typeof createClient>) {
         : " · משקל יציב";
     }
 
-    const result = await push(sub, {
+    const sent = await pushToUser(db, userSubs, {
       title: "📊 GymBuddy — סיכום שבועי",
       body,
       url: "/"
     });
-    if (result === "ok") await logSent(db, sub.user_id, "weekly_summary", weekKey);
-    else if (result === "gone") await deactivateSub(db, sub.endpoint);
+    if (sent) await logSent(db, userId, "weekly_summary", weekKey);
   }
 }
 
