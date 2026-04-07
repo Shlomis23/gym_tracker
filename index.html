@@ -2001,20 +2001,15 @@ async function openTelegramLinkSheet() {
   try {
     const userId = requireUserIdOrThrow("openTelegramLinkSheet");
 
-    // Generate random 6-char uppercase alphanumeric code
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    const arr = new Uint8Array(6);
-    crypto.getRandomValues(arr);
-    const code = Array.from(arr, b => chars[b % chars.length]).join("");
-
-    // POST to telegram_link_codes table
-    const insertHeaders = { ...SB_HEADERS, Prefer: "return=representation,resolution=merge-duplicates" };
-    const res = await fetch(SUPABASE_URL + "/rest/v1/telegram_link_codes", {
+    // יצירת קוד דרך Edge Function (מתחמק מ-RLS)
+    const res = await fetch(SUPABASE_URL + "/functions/v1/create-telegram-code", {
       method: "POST",
-      headers: insertHeaders,
-      body: JSON.stringify({ code, user_id: userId })
+      headers: { "Content-Type": "application/json", "apikey": SUPABASE_KEY },
+      body: JSON.stringify({ user_id: userId })
     });
     if (!res.ok) throw new Error(await res.text());
+    const { code } = await res.json();
+    if (!code) throw new Error("No code returned");
 
     const tgUrl = `https://t.me/GymBuddyIL_bot?start=${code}`;
     const body = sheet.querySelector("#tg-sheet-body");
