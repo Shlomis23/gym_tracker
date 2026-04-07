@@ -45,14 +45,17 @@ async function push(
   sub: { endpoint: string; p256dh: string; auth: string },
   payload: { title: string; body: string; url: string }
 ): Promise<"ok" | "gone" | "error"> {
+  const shortEndpoint = sub.endpoint.slice(-30);
   try {
     await webpush.sendNotification(
       { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
       JSON.stringify(payload)
     );
+    console.log(`[push] OK → ...${shortEndpoint}`);
     return "ok";
   } catch (err: any) {
     const code = Number(err?.statusCode ?? 0);
+    console.error(`[push] FAIL ${code} → ...${shortEndpoint}`, err?.body ?? err?.message ?? err);
     return code === 404 || code === 410 ? "gone" : "error";
   }
 }
