@@ -961,8 +961,6 @@ Deno.serve(async (req) => {
 
   if (!chatId || !text) return new Response("ok", { status: 200 });
 
-  const sb = createClient(supabaseUrl, serviceRoleKey);
-
   // ── /start handler ─────────────────────────────────────────────────────────
 
   if (text.startsWith("/start")) {
