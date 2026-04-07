@@ -1908,6 +1908,11 @@ async function enablePushNotifications() {
     }
 
     let permission = Notification.permission;
+    if (permission === "denied") {
+      showToast("יש לאפשר התראות ידנית בהגדרות iOS ← [שם האפליקציה] ← התראות");
+      render();
+      return;
+    }
     if (permission === "default") {
       permission = await Notification.requestPermission();
     }
@@ -2097,7 +2102,13 @@ function renderManage() {
       </div>
       <div style="font-size:12px;color:var(--text-hint);margin-bottom:10px" id="push-status-text">${getNotificationStatusText()}</div>
       <div style="display:grid;grid-template-columns:1fr;gap:8px">
-        <button onclick="enablePushNotifications()" ${state.notificationBusy ? "disabled" : ""} style="width:100%;padding:10px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-size:13px;font-family:inherit">הפעל התראות</button>
+        ${Notification.permission === "denied"
+          ? `<div style="font-size:12px;color:var(--red);background:var(--surface);border:1px solid var(--border-med);border-radius:10px;padding:10px;text-align:center;line-height:1.6">
+               ההרשאה נחסמה ← יש לאפשר ידנית:<br>
+               <strong>הגדרות iOS ← [שם האפליקציה] ← התראות ← אפשר</strong>
+             </div>`
+          : `<button onclick="enablePushNotifications()" ${state.notificationBusy ? "disabled" : ""} style="width:100%;padding:10px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-size:13px;font-family:inherit">הפעל התראות</button>`
+        }
         <button onclick="sendTestPushNotification()" ${state.notificationTestBusy ? "disabled" : ""} style="width:100%;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer;font-size:13px;font-family:inherit">שלח התראת בדיקה</button>
       </div>
     </div>
