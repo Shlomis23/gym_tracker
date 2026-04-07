@@ -823,10 +823,8 @@ async function handleOverview(sb: SB, userId: string): Promise<string> {
       const target = goalRes.data.goal_weight;
       const current = latestWeight.data.weight;
       const diff = Math.abs(target - current);
-      const done =
-        goalRes.data.goal_mode === "gain"
-          ? current >= target
-          : current <= target;
+      const isGain = ["gain", "lean_bulk", "bulk"].includes(goalRes.data.goal_mode);
+      const done = isGain ? current >= target : current <= target;
       goalStr = done
         ? "\n🎉 הגעת ליעד המשקל!"
         : `\n🎯 נשאר ${round1(diff)} ק״ג ליעד (${round1(target)} ק״ג)`;
