@@ -1927,8 +1927,10 @@ async function enablePushNotifications() {
     }
 
     const registration = await navigator.serviceWorker.ready;
+    // בטל תמיד סאבסקריפשן קיים כדי לקבל endpoint רענן מ-Apple
     const existing = await registration.pushManager.getSubscription();
-    const subscription = existing || await registration.pushManager.subscribe({
+    if (existing) await existing.unsubscribe();
+    const subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
     });
