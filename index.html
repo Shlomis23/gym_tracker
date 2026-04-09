@@ -451,10 +451,17 @@ async function loadWorkoutsFromSupabase() {
       if (!state.workouts?.length) {
         state.workouts = JSON.parse(JSON.stringify(DEFAULT_WORKOUTS));
       }
+      // Persist to v4 so future loads don't fall back to defaults (in case v3 was cleared by migration)
+      try { localStorage.setItem(STORAGE_WORKOUTS, JSON.stringify(state.workouts)); } catch (_) {}
       setDataSource("workouts", "local");
       setSyncError("לא נמצאו תוכניות בענן — מוצגות תוכניות מקומיות");
     }
-  } catch(e) { console.error("Workout plan load failed (fetch/parse/normalize):", e); setSyncError("טעינת תוכנית מהענן נכשלה"); }
+  } catch(e) {
+    console.error("Workout plan load failed (fetch/parse/normalize):", e);
+    setSyncError("טעינת תוכנית מהענן נכשלה");
+    // Persist current workouts to v4 so future reloads don't fall back to defaults
+    try { localStorage.setItem(STORAGE_WORKOUTS, JSON.stringify(state.workouts)); } catch (_) {}
+  }
   if ((state.syncStatus?.dataSource?.workouts) !== "supabase") {
     setDataSource("workouts", "local");
   }

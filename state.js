@@ -13,7 +13,10 @@ function loadWorkouts() {
     const old = localStorage.getItem("gym_workouts_v3");
     if (old) {
       const parsed = JSON.parse(old);
-      return parsed.map(w => ({ ...w, exercises: w.exercises.map(e => typeof e === "string" ? { name: e, rest: 60 } : e) }));
+      const migrated = parsed.map(w => ({ ...w, exercises: w.exercises.map(e => typeof e === "string" ? { name: e, rest: 60 } : e) }));
+      // Immediately persist to v4 so the schema migration can safely remove v3
+      try { localStorage.setItem("gym_workouts_v4", JSON.stringify(migrated)); } catch (_) {}
+      return migrated;
     }
     return JSON.parse(JSON.stringify(DEFAULT_WORKOUTS));
   } catch (e) { console.warn("[loadWorkouts] failed to parse workouts from localStorage, using defaults:", e); return JSON.parse(JSON.stringify(DEFAULT_WORKOUTS)); }
