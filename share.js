@@ -15,7 +15,7 @@ async function getOrCreateShareToken() {
       `share_tokens?user_id=eq.${encodeURIComponent(userId)}&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&order=expires_at.desc&limit=1`
     );
     if (Array.isArray(rows) && rows.length) return rows[0];
-  } catch (_) {}
+  } catch (e) { console.warn("[getOrCreateShareToken] failed to fetch existing share token, will create a new one:", e); }
 
   // צור חדש
   const token = generateToken();

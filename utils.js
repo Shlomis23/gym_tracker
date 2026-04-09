@@ -49,11 +49,11 @@
   }
 
   function getExNames(workout) {
-    return workout.exercises.map(e => (typeof e === "string" ? e : e.name));
+    return (workout?.exercises ?? []).map(e => (typeof e === "string" ? e : e.name));
   }
 
   function getExRest(workout, name) {
-    const exercise = workout.exercises.find(ex => (typeof ex === "string" ? ex : ex.name) === name);
+    const exercise = (workout?.exercises ?? []).find(ex => (typeof ex === "string" ? ex : ex.name) === name);
     return exercise?.rest || 60;
   }
 
@@ -83,9 +83,47 @@
     return clean.slice(0, maxLen);
   }
 
+  let _undoTimer = null;
+  let _undoPendingCommit = null;
+
+  function showUndoToast(msg, onCommit, onUndo) {
+    // Commit any previous pending deletion before showing new one
+    if (_undoTimer !== null) {
+      clearTimeout(_undoTimer);
+      _undoTimer = null;
+      if (_undoPendingCommit) { _undoPendingCommit(); _undoPendingCommit = null; }
+    }
+
+    const el = document.getElementById("toast");
+    if (!el) { onCommit(); return; }
+
+    el.innerHTML = `${msg} <button id="undo-action-btn" style="margin-right:10px;padding:3px 12px;border:1.5px solid rgba(255,255,255,0.5);background:transparent;color:#fff;border-radius:6px;font-family:inherit;font-size:12px;cursor:pointer;font-weight:600">בטל</button>`;
+    el.classList.add("show");
+    _undoPendingCommit = onCommit;
+
+    _undoTimer = setTimeout(() => {
+      el.classList.remove("show");
+      if (_undoPendingCommit) { _undoPendingCommit(); _undoPendingCommit = null; }
+      _undoTimer = null;
+    }, 5000);
+
+    const btn = document.getElementById("undo-action-btn");
+    if (btn) {
+      btn.addEventListener("click", () => {
+        clearTimeout(_undoTimer);
+        _undoTimer = null;
+        _undoPendingCommit = null;
+        el.classList.remove("show");
+        if (onUndo) onUndo();
+        showToast("הפעולה בוטלה");
+      }, { once: true });
+    }
+  }
+
   Object.assign(window, {
     haptic,
     showToast,
+    showUndoToast,
     formatDate,
     formatDateShort,
     formatVolume,

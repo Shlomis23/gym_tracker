@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gymbuddy-cache-v7';
+const CACHE_NAME = 'gymbuddy-cache-v8';
 
 const APP_SHELL_URLS = [
   './',
@@ -22,10 +22,17 @@ const APP_SHELL_URLS = [
 ];
 
 self.addEventListener('install', event => {
-  self.skipWaiting();
+  // Do NOT call skipWaiting() here — let the user choose when to update
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL_URLS))
   );
+});
+
+// Allow the page to trigger update on user consent
+self.addEventListener('message', event => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('activate', event => {

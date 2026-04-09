@@ -1,6 +1,10 @@
 const STORAGE_WEIGHT_LOGS = "gym_weight_logs_v1";
 const STORAGE_WEIGHT_GOAL = "gym_weight_goal_v1";
 
+function isValidWeightLog(row) {
+  return row && typeof row.weight === "number" && typeof row.measured_at === "string";
+}
+
 function saveWeightCache() {
   localStorage.setItem(STORAGE_WEIGHT_LOGS, JSON.stringify(state.weightLogs || []));
   localStorage.setItem(STORAGE_WEIGHT_GOAL, JSON.stringify(state.weightGoal || { start_weight: null, goal_weight: null, goal_mode: "maintain" }));
@@ -11,10 +15,10 @@ function loadWeightCache() {
   let goal = null;
   try {
     logs = JSON.parse(localStorage.getItem(STORAGE_WEIGHT_LOGS) || "[]");
-  } catch {}
+  } catch (e) { console.warn("[loadWeightCache] failed to parse weight logs from localStorage:", e); }
   try {
     goal = JSON.parse(localStorage.getItem(STORAGE_WEIGHT_GOAL) || "null");
-  } catch {}
+  } catch (e) { console.warn("[loadWeightCache] failed to parse weight goal from localStorage:", e); }
   return { logs: Array.isArray(logs) ? logs : [], goal };
 }
 
@@ -29,7 +33,11 @@ async function loadWeightData() {
     } else {
       ensureUserId();
     }
-    state.weightLogs = (logs || []).map(mapWeightLog);
+    const validLogs = (logs || []).filter(row => {
+      if (!isValidWeightLog(row)) { console.warn("[loadWeightData] skipping invalid row:", row); return false; }
+      return true;
+    });
+    state.weightLogs = validLogs.map(mapWeightLog);
     const goalsRaw = await sbGet("weight_goal?select=*&order=updated_at.desc&limit=1");
     dlog("[loadWeightData] weight_goal raw response:", goalsRaw);
     const goalRows = Array.isArray(goalsRaw) ? goalsRaw : (goalsRaw ? [goalsRaw] : []);

@@ -11,7 +11,7 @@ async function seedLibraryFromWorkouts() {
   const existingNames = new Set(state.exerciseLibrary.map(e => e.name));
   const toAdd = [];
   state.workouts.forEach(w => {
-    w.exercises.forEach(ex => {
+    (w?.exercises ?? []).forEach(ex => {
       const name = typeof ex === "string" ? ex : ex.name;
       const category = ex.category || null;
       if (name && !existingNames.has(name)) {
@@ -124,6 +124,7 @@ function renderLibraryScreen() {
 }
 
 function openLibraryAddExercise() {
+  if (document.getElementById("ex-picker-modal")) return; // already open
   document.getElementById("ex-picker-modal")?.remove();
   const overlay = document.createElement("div");
   overlay.id = "ex-picker-modal";
@@ -185,10 +186,8 @@ function renderLibraryManager() {
         ${byCategory[cat].map((ex,i,arr) => `
           <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:${i<arr.length-1?"1px solid var(--border)":"none"}">
             <span style="flex:1;font-size:13px;color:var(--text-primary)">${escapeHtml(ex.name)}</span>
-           <button onclick='openLibraryEdit(${JSON.stringify(ex.id)},${JSON.stringify(ex.name)},${JSON.stringify(ex.category||"")})'
-              class="icon-btn"><i data-lucide="pencil" style="width:13px;height:13px"></i></button>
-            <button onclick="if(confirm('למחוק מהמאגר?'))deleteFromLibrary('${ex.id}')"
-              class="icon-btn" style="color:var(--red)"><i data-lucide="trash-2" style="width:13px;height:13px"></i></button>
+            <button class="icon-btn lib-edit-btn" data-ex-id="${escapeHtml(String(ex.id))}" data-ex-name="${escapeHtml(ex.name)}" data-ex-cat="${escapeHtml(ex.category||"")}"><i data-lucide="pencil" style="width:13px;height:13px"></i></button>
+            <button class="icon-btn lib-del-btn" data-ex-id="${escapeHtml(String(ex.id))}" style="color:var(--red)"><i data-lucide="trash-2" style="width:13px;height:13px"></i></button>
           </div>`).join("")}
       </div>
     </div>`;
@@ -196,6 +195,7 @@ function renderLibraryManager() {
 }
 
 function openLibraryEdit(id, name, category) {
+  if (document.getElementById("lib-edit-modal")) return; // already open
   document.getElementById("lib-edit-modal")?.remove();
   const overlay = document.createElement("div");
   overlay.id = "lib-edit-modal";
@@ -229,6 +229,25 @@ function openLibraryEdit(id, name, category) {
   });
 }
 
+function bindLibraryButtons() {
+  document.querySelectorAll(".lib-edit-btn:not([data-bound])").forEach(btn => {
+    btn.dataset.bound = "1";
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.exId;
+      const name = btn.dataset.exName;
+      const cat = btn.dataset.exCat;
+      openLibraryEdit(id, name, cat);
+    });
+  });
+  document.querySelectorAll(".lib-del-btn:not([data-bound])").forEach(btn => {
+    btn.dataset.bound = "1";
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.exId;
+      if (confirm("למחוק מהמאגר?")) deleteFromLibrary(id);
+    });
+  });
+}
+
 Object.assign(window, {
   loadExerciseLibrary,
   seedLibraryFromWorkouts,
@@ -238,5 +257,6 @@ Object.assign(window, {
   renderLibraryScreen,
   openLibraryAddExercise,
   renderLibraryManager,
-  openLibraryEdit
+  openLibraryEdit,
+  bindLibraryButtons
 });

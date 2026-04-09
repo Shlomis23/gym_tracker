@@ -1,3 +1,7 @@
+function isValidSession(row) {
+  return row && (row.id || row.local_id) && row.date;
+}
+
 async function saveSessionToSupabase(session) {
   try {
     const userId = requireUserIdOrThrow("saveSessionToSupabase");
@@ -46,7 +50,11 @@ async function loadSessionsFromSupabase() {
     const rowsWithEmbed = await sbGet(sessionQuery);
     dlog("[loadSessionsFromSupabase] workout_sessions (embedded sets) raw response:", rowsWithEmbed);
 
-    const rows = Array.isArray(rowsWithEmbed) ? rowsWithEmbed : [];
+    const rawRows = Array.isArray(rowsWithEmbed) ? rowsWithEmbed : [];
+    const rows = rawRows.filter(row => {
+      if (!isValidSession(row)) { console.warn("[loadSessionsFromSupabase] skipping invalid session row:", row); return false; }
+      return true;
+    });
     let exerciseRows = [];
     try {
       exerciseRows = await sbGet(`session_exercises?select=*${userFilter}`);
@@ -138,7 +146,7 @@ async function loadSessionsFromSupabase() {
     console.error("Supabase load failed, using localStorage:", e);
     try {
       state.sessions = JSON.parse(localStorage.getItem(STORAGE_SESSIONS) || "[]");
-    } catch {}
+    } catch (e) { console.warn("[loadSessionsFromSupabase] failed to parse sessions from localStorage fallback:", e); }
     setDataSource("sessions", "local");
     setSyncError("טעינת אימונים מהענן נכשלה — מוצגים נתונים מקומיים");
   }

@@ -16,7 +16,7 @@ function loadWorkouts() {
       return parsed.map(w => ({ ...w, exercises: w.exercises.map(e => typeof e === "string" ? { name: e, rest: 60 } : e) }));
     }
     return JSON.parse(JSON.stringify(DEFAULT_WORKOUTS));
-  } catch { return JSON.parse(JSON.stringify(DEFAULT_WORKOUTS)); }
+  } catch (e) { console.warn("[loadWorkouts] failed to parse workouts from localStorage, using defaults:", e); return JSON.parse(JSON.stringify(DEFAULT_WORKOUTS)); }
 }
 
 function loadSettings() {
@@ -30,7 +30,7 @@ function loadSettings() {
     const currentEntry = sorted.find(e => e.from <= thisWeekIso);
     s.weeklyGoal = currentEntry ? currentEntry.goal : (s.weeklyGoal || 4);
     return s;
-  } catch { return { ...DEFAULT_SETTINGS, weeklyGoal: 4, goalHistory: [{ goal: 4, from: "2020-01-05" }] }; }
+  } catch (e) { console.warn("[loadSettings] failed to parse settings from localStorage, using defaults:", e); return { ...DEFAULT_SETTINGS, weeklyGoal: 4, goalHistory: [{ goal: 4, from: "2020-01-05" }] }; }
 }
 
 let state = {
@@ -47,7 +47,28 @@ let state = {
   workoutNote: "", monthViewYear: null, monthViewMonth: null, pendingGoal: null,
   editingExKey: null, exerciseLibrary: [], workoutExtras: [], dashboardAnimatedOnce: false,
   historyWorkoutFilterMode: "all", historyWorkoutId: "all", historyExerciseQuery: "",
-  pushSubscriptionActive: false, notificationBusy: false, notificationTestBusy: false
+  pushSubscriptionActive: false, notificationBusy: false, notificationTestBusy: false,
+  historyPage: 0, weightHistoryPage: 0
 };
 
 window.state = state;
+
+// ─── Schema Migrations ────────────────────────────────────────────────────────
+// Runs once per version bump to clean up stale localStorage keys
+(function runSchemaMigrations() {
+  const SCHEMA_KEY = "gym_schema_v";
+  let stored = 0;
+  try { stored = parseInt(localStorage.getItem(SCHEMA_KEY) || "0", 10); } catch (_) {}
+  if (stored >= (window.APP_SCHEMA_VERSION || 1)) return;
+
+  // v1: remove orphaned pre-versioned keys from old app versions
+  const staleKeys = [
+    "gym_sessions_v1",
+    "gym_workouts_v1", "gym_workouts_v2", "gym_workouts_v3",
+    "gym_settings_v0", "gym_weight_v0"
+  ];
+  staleKeys.forEach(k => { try { localStorage.removeItem(k); } catch (_) {} });
+  console.log("[schema] Migrations applied, version set to", APP_SCHEMA_VERSION);
+
+  try { localStorage.setItem(SCHEMA_KEY, String(window.APP_SCHEMA_VERSION || 1)); } catch (_) {}
+})();

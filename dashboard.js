@@ -45,7 +45,16 @@ function getThisWeekCount() {
   return state.sessions.filter(s => new Date(s.date) >= weekStart).length;
 }
 
+let _prsCache = null;
+let _prsCacheKey = null;
+
 function getPRs() {
+  // Cache key: session count + last session date — invalidates when sessions change
+  const last = state.sessions[state.sessions.length - 1];
+  const cacheKey = state.sessions.length + "|" + (last?.date ?? "") + "|" + (last?.id ?? "");
+  if (_prsCache !== null && _prsCacheKey === cacheKey) return _prsCache;
+  _prsCacheKey = cacheKey;
+
   const prs = {};
   state.sessions.forEach(session => {
     const sessionExercises = (session && typeof session.exercises === "object" && session.exercises) ? session.exercises : {};
@@ -55,6 +64,7 @@ function getPRs() {
         return;
       }
       sets.forEach(s => {
+        if (!s || typeof s !== 'object') return;
         if (s.weight > (prs[name]?.weight || 0)) {
           // חפש קטגוריה — קודם בתוכניות הפעילות, אחר כך במאגר
           let category = null;
@@ -71,6 +81,7 @@ function getPRs() {
       });
     });
   });
+  _prsCache = prs;
   return prs;
 }
 
@@ -348,10 +359,10 @@ const goalReached = thisWeek >= goal;
     </div>
   </div>`;
 
-  const inProgress = sessionStorage.getItem("gym_in_progress");
+  const inProgress = localStorage.getItem("gym_in_progress");
 let inProgressId = null;
 if (inProgress) {
-  try { inProgressId = JSON.parse(inProgress).workoutId || null; } catch {}
+  try { inProgressId = JSON.parse(inProgress).workoutId || null; } catch (e) { console.warn("[renderDashboard] failed to parse in-progress workout id:", e); }
 }
   const inProgressW = inProgressId ? getWorkout(inProgressId) : null;
   const nextBtn = inProgressW

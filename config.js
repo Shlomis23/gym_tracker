@@ -37,6 +37,8 @@ const CATEGORIES = [
   { id: "cardio",    label: "קרדיו",    icon: "activity" }
 ];
 
+const APP_SCHEMA_VERSION = 1;
+
 Object.assign(window, {
   SUPABASE_URL,
   SUPABASE_KEY,
@@ -47,5 +49,6 @@ Object.assign(window, {
   STORAGE_SETTINGS,
   DEFAULT_WORKOUTS,
   DEFAULT_SETTINGS,
-  CATEGORIES
+  CATEGORIES,
+  APP_SCHEMA_VERSION
 });

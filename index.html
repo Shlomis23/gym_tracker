@@ -106,7 +106,7 @@ function getGoalForWeek(weekStartIso) {
   return entry ? entry.goal : (state.settings.weeklyGoal || 4);
 }
 
-try { state.sessions = JSON.parse(localStorage.getItem(STORAGE_SESSIONS) || "[]"); } catch {}
+try { state.sessions = JSON.parse(localStorage.getItem(STORAGE_SESSIONS) || "[]"); } catch (e) { console.warn("[init] failed to parse sessions from localStorage:", e); }
 
 function saveSessions() { localStorage.setItem(STORAGE_SESSIONS, JSON.stringify(state.sessions)); }
 
@@ -172,6 +172,7 @@ function buildWrap(mb) {
 }
 
 function showGoalModal() {
+  if (document.getElementById("goal-modal")) return; // already open
   const wGoal = state.weightGoal || {};
   const selectedGoalMode = (typeof getWeightGoalMode === "function") ? getWeightGoalMode(wGoal) : "maintain";
   document.getElementById("goal-modal")?.remove();
@@ -233,6 +234,7 @@ function showGoalModal() {
 }
 
 function showWeightModal() {
+  if (document.getElementById("weight-modal")) return; // already open
   const latest = getLatestWeight();
   const todayIso = isoDateFromLocal(new Date());
 
@@ -470,6 +472,12 @@ function getExCategory(w, name) {
   return ex?.category || null;
 }
 
+let _saveInProgressTimer = null;
+function saveInProgressDebounced() {
+  clearTimeout(_saveInProgressTimer);
+  _saveInProgressTimer = setTimeout(saveInProgress, 300);
+}
+
 function saveInProgress() {
   if (state.workoutId) {
     localStorage.setItem("gym_in_progress", JSON.stringify({
@@ -497,7 +505,7 @@ function loadInProgress() {
       state.workoutNote = data.note || "";
       return true;
     }
-  } catch {}
+  } catch (e) { console.warn("[loadInProgress] failed to restore in-progress workout from localStorage:", e); }
   return false;
 }
 
@@ -532,52 +540,82 @@ function navigate(screen) {
 }
 
 function render() {
-  if (state.readonly) document.body.classList.add("readonly");
-  const el = document.getElementById("main-content");
-  let screenHtml = "";
-  if (state.screen === "dashboard") screenHtml = renderDashboard();
-  else if (state.screen === "home") screenHtml = state.workoutId ? renderWorkout() : renderChoose();
-  else if (state.screen === "history") screenHtml = renderHistory();
-  else if (state.screen === "library") screenHtml = renderLibraryScreen();
-  else {
-    dlog("[library-add] render() -> manage screen");
-    screenHtml = renderManage();
+  try {
+    if (state.readonly) document.body.classList.add("readonly");
+    const el = document.getElementById("main-content");
+    let screenHtml = "";
+    if (state.screen === "dashboard") screenHtml = renderDashboard();
+    else if (state.screen === "home") screenHtml = state.workoutId ? renderWorkout() : renderChoose();
+    else if (state.screen === "history") screenHtml = renderHistory();
+    else if (state.screen === "library") screenHtml = renderLibraryScreen();
+    else {
+      dlog("[library-add] render() -> manage screen");
+      screenHtml = renderManage();
+    }
+    const readonlyBanner = state.readonly
+      ? `<div style="background:#1e293b;color:#94a3b8;text-align:center;font-size:12px;padding:7px 16px;direction:rtl">
+          <i data-lucide="eye" style="width:12px;height:12px;vertical-align:middle;margin-left:5px"></i>מצב צפייה בלבד
+         </div>`
+      : "";
+    el.innerHTML = readonlyBanner + renderSyncNotice() + screenHtml;
+    if (window.lucide) {
+      requestAnimationFrame(() => lucide.createIcons());
+    }
+    bindDelButtons();
+    bindDragDrop();
+    if (state.screen === "library" && typeof bindLibraryButtons === "function") bindLibraryButtons();
+    const dot = document.getElementById("inprogress-dot");
+    if (dot) dot.style.display = state.workoutId ? "block" : "none";
+    if (state.screen === "dashboard") {
+      requestAnimationFrame(() => requestAnimationFrame(bindScrollAnimations));
+    }
+    if (state.screen === "manage") setTimeout(bindWorkoutDragDrop, 0);
+  } catch (e) {
+    console.error("[render] Unhandled error during render:", e);
+    const el = document.getElementById("main-content");
+    if (el && !el.dataset.errorShown) {
+      el.dataset.errorShown = "1";
+      el.innerHTML = `<div style="padding:32px;text-align:center;direction:rtl">
+        <div style="font-size:32px;margin-bottom:12px">⚠️</div>
+        <div style="font-weight:700;font-size:16px;color:var(--red);margin-bottom:8px">שגיאה בטעינת המסך</div>
+        <div style="font-size:13px;color:var(--text-hint);margin-bottom:20px">נסה לרענן את האפליקציה</div>
+        <button onclick="location.reload()" style="padding:10px 24px;background:var(--accent);color:#fff;border:none;border-radius:12px;font-size:14px;font-family:inherit;cursor:pointer">רענן</button>
+      </div>`;
+      setTimeout(() => { delete el.dataset.errorShown; }, 5000);
+    }
   }
-  const readonlyBanner = state.readonly
-    ? `<div style="background:#1e293b;color:#94a3b8;text-align:center;font-size:12px;padding:7px 16px;direction:rtl">
-        <i data-lucide="eye" style="width:12px;height:12px;vertical-align:middle;margin-left:5px"></i>מצב צפייה בלבד
-       </div>`
-    : "";
-  el.innerHTML = readonlyBanner + renderSyncNotice() + screenHtml;
-  if (window.lucide) lucide.createIcons();
-  bindDelButtons();
-  bindDragDrop();
-  const dot = document.getElementById("inprogress-dot");
-  if (dot) dot.style.display = state.workoutId ? "block" : "none";
-  if (state.screen === "dashboard") {
-    requestAnimationFrame(() => requestAnimationFrame(bindScrollAnimations));
-  }
-  if (state.screen === "manage") setTimeout(bindWorkoutDragDrop, 0);
 }
 
 
 function bindDelButtons() {
-  document.querySelectorAll("[data-del-session]").forEach(btn => {
+  document.querySelectorAll("[data-del-session]:not([data-bound])").forEach(btn => {
+    btn.dataset.bound = "1";
     btn.addEventListener("click", function() {
       const idx = parseInt(this.dataset.delSession);
-      if (confirm("למחוק את האימון מההיסטוריה?")) {
-        const session = state.sessions[idx];
-        if (session) deleteSessionFromSupabase(session.id);
-        state.sessions.splice(idx, 1); saveSessions(); render();
-      }
+      const session = state.sessions[idx];
+      if (!session) return;
+      state.sessions.splice(idx, 1); saveSessions(); render();
+      showUndoToast(
+        "האימון נמחק",
+        () => { deleteSessionFromSupabase(session.id); },
+        () => { state.sessions.splice(idx, 0, session); saveSessions(); render(); }
+      );
     });
   });
-  document.querySelectorAll("[data-del-weight]").forEach(btn => {
+  document.querySelectorAll("[data-del-weight]:not([data-bound])").forEach(btn => {
+    btn.dataset.bound = "1";
     btn.addEventListener("click", function() {
       const id = this.dataset.delWeight;
-      if (confirm("למחוק שקילה זו?")) {
-        deleteWeightLog(id);
-      }
+      const log = state.weightLogs.find(l => String(l.id) === String(id));
+      if (!log) return;
+      state.weightLogs = state.weightLogs.filter(l => String(l.id) !== String(id));
+      if (!state.weightLogs.length) state.weightGoal = { start_weight: null, goal_weight: null, goal_mode: "maintain" };
+      saveWeightCache(); render();
+      showUndoToast(
+        "השקילה נמחקה",
+        async () => { try { await sbDelete("body_weight_logs?id=eq." + encodeURIComponent(id)); } catch (e) { console.error("Weight delete failed:", e); showToast("שגיאה במחיקה ⚠️"); } },
+        () => { state.weightLogs.push(log); state.weightLogs = getWeightLogsAsc(); saveWeightCache(); render(); }
+      );
     });
   });
 }
@@ -793,8 +831,9 @@ function renderWorkout() {
 
 function updateSet(name,i,field,val) {
   const parsed = field==="weight" ? parseFloat(val)||0 : parseInt(val)||0;
+  if (!state.exercises[name]?.[i]) return;
   state.exercises[name][i][field] = parsed;
-  saveInProgress();
+  saveInProgressDebounced();
 }
 function getExCatByName(name) {
   for (const w of state.workouts) {
@@ -806,13 +845,22 @@ function getExCatByName(name) {
 }
 function addSet(name) {
   const sets = state.exercises[name];
+  if (!Array.isArray(sets)) return;
   sets.push({ num:sets.length+1, weight:0, reps:0, failed:false });
-  saveInProgress(); render();
+  saveInProgressDebounced(); render();
 }
-function removeSet(name,i) { state.exercises[name].splice(i,1); state.exercises[name].forEach((s,idx) => s.num=idx+1); saveInProgress(); render(); }
-function toggleFailed(name,i) { state.exercises[name][i].failed = !state.exercises[name][i].failed; saveInProgress(); render(); }
+function removeSet(name,i) {
+  const sets = state.exercises[name];
+  if (!Array.isArray(sets)) return;
+  sets.splice(i,1); sets.forEach((s,idx) => s.num=idx+1); saveInProgressDebounced(); render();
+}
+function toggleFailed(name,i) {
+  if (!state.exercises[name]?.[i]) return;
+  state.exercises[name][i].failed = !state.exercises[name][i].failed; saveInProgressDebounced(); render();
+}
 
 function finishWorkout() {
+  if (document.getElementById("finish-sheet")) return; // already open
   const todayIso = new Date().toISOString().slice(0,10);
 
   document.getElementById("finish-sheet")?.remove();
@@ -1267,6 +1315,7 @@ function selectWeightChartPoint(chartId, idx, measuredAt, weight, movingAvg) {
 }
 
 async function openWeightEntryModal(logId) {
+  if (document.getElementById("weight-entry-modal")) return; // already open
   const logs = getWeightLogsAsc();
   const editing = logId ? logs.find(l => l.id === logId) : null;
   const todayIso = isoDateFromLocal(new Date());
@@ -1378,9 +1427,9 @@ async function openWeightEntryModal(logId) {
 function renderHistory() {
   const tab = state.historyTab || "workouts";
   const tabs = `<div style="display:flex;gap:0;margin:0 14px 14px;background:var(--surface);border-radius:10px;padding:3px">
-    <button onclick="state.historyTab='workouts';render()" style="flex:1;padding:8px;border:none;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;background:${tab==='workouts'?'var(--card)':'transparent'};color:${tab==='workouts'?'var(--text-primary)':'var(--text-hint)'}">אימונים</button>
+    <button onclick="state.historyTab='workouts';state.historyPage=0;render()" style="flex:1;padding:8px;border:none;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;background:${tab==='workouts'?'var(--card)':'transparent'};color:${tab==='workouts'?'var(--text-primary)':'var(--text-hint)'}">אימונים</button>
     <button onclick="state.historyTab='month';render()" style="flex:1;padding:8px;border:none;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;background:${tab==='month'?'var(--card)':'transparent'};color:${tab==='month'?'var(--text-primary)':'var(--text-hint)'}">החודש שלי</button>
-    <button onclick="state.historyTab='weight';render()" style="flex:1;padding:8px;border:none;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;background:${tab==='weight'?'var(--card)':'transparent'};color:${tab==='weight'?'var(--text-primary)':'var(--text-hint)'}">משקל</button>
+    <button onclick="state.historyTab='weight';state.weightHistoryPage=0;render()" style="flex:1;padding:8px;border:none;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;background:${tab==='weight'?'var(--card)':'transparent'};color:${tab==='weight'?'var(--text-primary)':'var(--text-hint)'}">משקל</button>
   </div>`;
 
   if (tab === "month") {
@@ -1440,7 +1489,7 @@ function renderHistory() {
       { days: 90, label: "90 ימים" },
       { days: 180, label: "6 חודשים" },
       { days: 365, label: "שנה" }
-    ].map(r => `<button onclick="state.weightRangeMode='preset';state.weightRangeDays=${r.days};render()" style="padding:7px 10px;border-radius:999px;border:1px solid ${!isCustomRange&&range===r.days?"var(--accent)":"var(--border-med)"};background:${!isCustomRange&&range===r.days?"var(--accent)":"var(--surface)"};color:${!isCustomRange&&range===r.days?"#fff":"var(--text-secondary)"};font-family:inherit;font-size:11px;cursor:pointer">${r.label}</button>`).join("");
+    ].map(r => `<button onclick="state.weightRangeMode='preset';state.weightRangeDays=${r.days};state.weightHistoryPage=0;render()" style="padding:7px 10px;border-radius:999px;border:1px solid ${!isCustomRange&&range===r.days?"var(--accent)":"var(--border-med)"};background:${!isCustomRange&&range===r.days?"var(--accent)":"var(--surface)"};color:${!isCustomRange&&range===r.days?"#fff":"var(--text-secondary)"};font-family:inherit;font-size:11px;cursor:pointer">${r.label}</button>`).join("");
     const customRangeBtn = `<button onclick="selectCustomWeightRange()" style="padding:7px 10px;border-radius:999px;border:1px solid ${isCustomRange?"var(--accent)":"var(--border-med)"};background:${isCustomRange?"var(--accent)":"var(--surface)"};color:${isCustomRange?"#fff":"var(--text-secondary)"};font-family:inherit;font-size:11px;cursor:pointer">טווח תאריכים</button>`;
     const showRangeCopy = isCustomRange && hasFilteredData;
     const customRangeControls = isCustomRange ? `
@@ -1459,8 +1508,13 @@ function renderHistory() {
         ${customRangeInvalid ? `<div style="font-size:11px;color:var(--red);margin-top:8px">תאריך התחלה חייב להיות מוקדם או שווה לתאריך הסיום</div>` : ""}
       </div>
     ` : "";
-    const rows = [...withAvg].reverse().map((log, ri, arr) => {
-      const prev = arr[ri + 1];
+    const allWeightRows = [...withAvg].reverse();
+    const WEIGHT_PAGE_SIZE = 30;
+    const weightPage = state.weightHistoryPage || 0;
+    const visibleWeightRows = allWeightRows.slice(0, (weightPage + 1) * WEIGHT_PAGE_SIZE);
+    const hasMoreWeight = allWeightRows.length > visibleWeightRows.length;
+    const rows = visibleWeightRows.map((log, ri) => {
+      const prev = allWeightRows[ri + 1];
       const diff = prev ? (log.weight - prev.weight) : null;
       const diffColor = diff === null ? "" : diff < 0 ? "var(--green)" : diff > 0 ? "var(--red)" : "var(--text-hint)";
       const diffText = diff === null ? "" : `${diff > 0 ? "+" : ""}${diff.toFixed(1)} ק״ג`;
@@ -1477,6 +1531,9 @@ function renderHistory() {
         </div>
       </div>`;
     }).join("");
+    const weightLoadMoreBtn = hasMoreWeight
+      ? `<div style="padding:4px 0 4px;text-align:center"><button onclick="state.weightHistoryPage=(state.weightHistoryPage||0)+1;render()" style="padding:10px 28px;background:var(--surface);border:1px solid var(--border-med);border-radius:10px;font-family:inherit;font-size:13px;font-weight:600;color:var(--text-secondary);cursor:pointer">הצג עוד (${allWeightRows.length - visibleWeightRows.length})</button></div>`
+      : "";
     const weightGoalValues = getWeightGoalValues(state.weightGoal);
     const hasGoalWeight = Number.isFinite(weightGoalValues.target) && weightGoalValues.target > 0;
     const goalGap = (hasGoalWeight && latestOverall) ? Math.abs(Number(latestOverall.weight) - Number(weightGoalValues.target)) : null;
@@ -1498,6 +1555,7 @@ function renderHistory() {
         ${showRangeCopy ? `<button onclick="copyWeightRangeSummary()" style="width:auto;padding:8px 12px;font-size:12px;margin-right:8px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-family:inherit;font-weight:600">העתק סיכום</button>` : ""}
       </div>
       <div style="margin-top:10px;display:grid;gap:8px;padding-bottom:12px">${rows}</div>
+      ${weightLoadMoreBtn}
     </div>`;
   }
 
@@ -1543,99 +1601,111 @@ function renderHistory() {
   if (!state.expandedSessions) state.expandedSessions = new Set();
   return `<div style="padding:14px">${tabs}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-      <button onclick="state.historyWorkoutFilterMode='all';render()" style="padding:8px 10px;border-radius:10px;border:1px solid ${mode==='all'?'var(--accent)':'var(--border-med)'};background:${mode==='all'?'var(--accent)':'var(--card)'};color:${mode==='all'?'#fff':'var(--text-secondary)'};font-family:inherit;font-size:12px;cursor:pointer">הכול</button>
-      <button onclick="state.historyWorkoutFilterMode='improved';render()" style="padding:8px 10px;border-radius:10px;border:1px solid ${mode==='improved'?'var(--green)':'var(--border-med)'};background:${mode==='improved'?'var(--green-bg)':'var(--card)'};color:${mode==='improved'?'var(--green)':'var(--text-secondary)'};font-family:inherit;font-size:12px;cursor:pointer">רק עם שיפור</button>
+      <button onclick="state.historyWorkoutFilterMode='all';state.historyPage=0;render()" style="padding:8px 10px;border-radius:10px;border:1px solid ${mode==='all'?'var(--accent)':'var(--border-med)'};background:${mode==='all'?'var(--accent)':'var(--card)'};color:${mode==='all'?'#fff':'var(--text-secondary)'};font-family:inherit;font-size:12px;cursor:pointer">הכול</button>
+      <button onclick="state.historyWorkoutFilterMode='improved';state.historyPage=0;render()" style="padding:8px 10px;border-radius:10px;border:1px solid ${mode==='improved'?'var(--green)':'var(--border-med)'};background:${mode==='improved'?'var(--green-bg)':'var(--card)'};color:${mode==='improved'?'var(--green)':'var(--text-secondary)'};font-family:inherit;font-size:12px;cursor:pointer">רק עם שיפור</button>
     </div>
     <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-bottom:10px">
-      <select onchange="state.historyWorkoutId=this.value;render()" style="padding:9px 10px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;font-size:12px;color:var(--text-primary)">${workoutOptions}</select>
+      <select onchange="state.historyWorkoutId=this.value;state.historyPage=0;render()" style="padding:9px 10px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;font-size:12px;color:var(--text-primary)">${workoutOptions}</select>
       <input id="history-exercise-search" type="text" value="${escapeHtml(state.historyExerciseQuery || "")}" oninput="onHistoryExerciseQueryInput(this)" placeholder="חפש לפי תרגיל" style="padding:9px 10px;border:1px solid var(--border-med);border-radius:10px;background:var(--card);font-family:inherit;font-size:12px;color:var(--text-primary)">
     </div>
     ${exportBtn}
-    ${filteredSessions.length === 0 ? `<div style="padding:30px;text-align:center;color:var(--text-hint);font-size:14px">לא נמצאו אימונים לפי הסינון שבחרת</div>` : filteredSessions.map((session) => {
-    const originalIdx = state.sessions.findIndex(s => s.id === session.id);
-    const w = getWorkout(session.workoutId);
-    const wName = w ? w.name : (session.workoutName || session.workoutId);
-    const prevSameType = state.sessions.slice(0, originalIdx).reverse().find(s => s.workoutId === session.workoutId);
-    const isExpanded = state.expandedSessions.has(session.id);
+    ${(() => {
+    if (filteredSessions.length === 0) return `<div style="padding:30px;text-align:center;color:var(--text-hint);font-size:14px">לא נמצאו אימונים לפי הסינון שבחרת</div>`;
+    const PAGE_SIZE = 20;
+    const currentPage = state.historyPage || 0;
+    const visibleSessions = filteredSessions.slice(0, (currentPage + 1) * PAGE_SIZE);
+    const hasMore = filteredSessions.length > visibleSessions.length;
+    const sessionCards = visibleSessions.map((session) => {
+      const originalIdx = state.sessions.findIndex(s => s.id === session.id);
+      const w = getWorkout(session.workoutId);
+      const wName = w ? w.name : (session.workoutName || session.workoutId);
+      const prevSameType = state.sessions.slice(0, originalIdx).reverse().find(s => s.workoutId === session.workoutId);
+      const isExpanded = state.expandedSessions.has(session.id);
 
-    const exNames = Object.keys(session.exercises);
-    const totalEx = exNames.length;
-    const improved = improvedCount(session, prevSameType);
+      const exNames = Object.keys(session.exercises);
+      const totalEx = exNames.length;
+      const improved = improvedCount(session, prevSameType);
 
-    const sessionVol = calcSessionVolume(session.exercises);
-    const summaryChips = `
-      <span style="font-size:11px;color:var(--text-hint)">${totalEx} תרגילים</span>
-      <span style="font-size:11px;color:var(--text-hint)">·</span>
-      <span style="font-size:11px;color:var(--text-hint)">${formatVolume(sessionVol)}</span>
-      ${improved > 0 ? `<span style="font-size:11px;color:var(--green);font-weight:600;display:inline-flex;align-items:center;gap:2px"><i data-lucide="trending-up" style="width:11px;height:11px"></i> ${improved} שיפרת</span>` : (prevSameType ? `<span style="font-size:11px;color:var(--text-hint)">ללא שינוי</span>` : "")}
-    `;
+      const sessionVol = calcSessionVolume(session.exercises);
+      const summaryChips = `
+        <span style="font-size:11px;color:var(--text-hint)">${totalEx} תרגילים</span>
+        <span style="font-size:11px;color:var(--text-hint)">·</span>
+        <span style="font-size:11px;color:var(--text-hint)">${formatVolume(sessionVol)}</span>
+        ${improved > 0 ? `<span style="font-size:11px;color:var(--green);font-weight:600;display:inline-flex;align-items:center;gap:2px"><i data-lucide="trending-up" style="width:11px;height:11px"></i> ${improved} שיפרת</span>` : (prevSameType ? `<span style="font-size:11px;color:var(--text-hint)">ללא שינוי</span>` : "")}
+      `;
 
-    const exRows = isExpanded ? exNames.map(name => {
-      const sets = (session.exercises[name]||[]).filter(s => s.weight>0||s.reps>0||s.minutes>0);
-      if (!sets.length) return "";
-      const prevSets = prevSameType?.exercises?.[name]||[];
-      const exImproved = prevSets.length>0 && sets.some((s,i) => prevSets[i] && s.weight>prevSets[i].weight);
-      const rest = w ? getExRest(w, name) : null;
-      const setsTable = sets.map((s,i) => {
-        const p=prevSets[i]; const imp=p&&s.weight>p.weight; const reg=p&&s.weight>0&&s.weight<p.weight;
-        const failed = !!s.failed;
-        if (s.minutes > 0) {
+      const exRows = isExpanded ? exNames.map(name => {
+        const sets = (session.exercises[name]||[]).filter(s => s.weight>0||s.reps>0||s.minutes>0);
+        if (!sets.length) return "";
+        const prevSets = prevSameType?.exercises?.[name]||[];
+        const exImproved = prevSets.length>0 && sets.some((s,i) => prevSets[i] && s.weight>prevSets[i].weight);
+        const rest = w ? getExRest(w, name) : null;
+        const setsTable = sets.map((s,i) => {
+          const p=prevSets[i]; const imp=p&&s.weight>p.weight; const reg=p&&s.weight>0&&s.weight<p.weight;
+          const failed = !!s.failed;
+          if (s.minutes > 0) {
+            return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0">
+              <span style="min-width:14px;font-size:11px;color:var(--text-hint);font-weight:600">${s.num}</span>
+              <span style="font-size:13px;color:var(--text-primary);font-weight:500">${s.minutes} דקות</span>
+            </div>`;
+          }
           return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0">
-            <span style="min-width:14px;font-size:11px;color:var(--text-hint);font-weight:600">${s.num}</span>
-            <span style="font-size:13px;color:var(--text-primary);font-weight:500">${s.minutes} דקות</span>
+            <span style="min-width:14px;font-size:11px;color:${failed?"var(--red)":"var(--text-hint)"};font-weight:600">${s.num}</span>
+            <span style="font-size:13px;color:${failed?"var(--red)":"var(--text-primary)"};font-weight:500;min-width:56px">${s.weight} ק״ג</span>
+            <span style="font-size:13px;color:${failed?"var(--red)":"var(--text-secondary)"};min-width:44px">× ${s.reps}</span>
+            ${failed ? `<span style="font-size:10px;color:var(--red);font-weight:600">כשל</span>` : p?`<i data-lucide="${imp?"trending-up":reg?"trending-down":"minus"}" style="width:13px;height:13px;color:${imp?"var(--green)":reg?"var(--red)":"var(--text-hint)"}"></i>`:""}
           </div>`;
-        }
-        return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0">
-          <span style="min-width:14px;font-size:11px;color:${failed?"var(--red)":"var(--text-hint)"};font-weight:600">${s.num}</span>
-          <span style="font-size:13px;color:${failed?"var(--red)":"var(--text-primary)"};font-weight:500;min-width:56px">${s.weight} ק״ג</span>
-          <span style="font-size:13px;color:${failed?"var(--red)":"var(--text-secondary)"};min-width:44px">× ${s.reps}</span>
-          ${failed ? `<span style="font-size:10px;color:var(--red);font-weight:600">כשל</span>` : p?`<i data-lucide="${imp?"trending-up":reg?"trending-down":"minus"}" style="width:13px;height:13px;color:${imp?"var(--green)":reg?"var(--red)":"var(--text-hint)"}"></i>`:""}
+        }).join("");
+        return `<div style="margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+            <div style="display:flex;align-items:center;gap:7px">
+              <span style="font-size:13px;font-weight:600;color:var(--text-primary)">${escapeHtml(name)}</span>
+              ${rest ? `<span class="rest-chip"><i data-lucide="timer" style="width:10px;height:10px"></i> ${formatRest(rest)}</span>` : ""}
+            </div>
+            ${exImproved ? `<span style="font-size:11px;color:var(--green);font-weight:600;display:flex;align-items:center;gap:3px"><i data-lucide="trending-up" style="width:12px;height:12px"></i> שיפרת</span>` : prevSets.length>0 ? `<span style="font-size:11px;color:var(--text-hint)">ללא שינוי</span>` : ""}
+          </div>
+          <div style="padding-right:4px">${setsTable}</div>
         </div>`;
-      }).join("");
-      return `<div style="margin-bottom:12px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-          <div style="display:flex;align-items:center;gap:7px">
-            <span style="font-size:13px;font-weight:600;color:var(--text-primary)">${escapeHtml(name)}</span>
-            ${rest ? `<span class="rest-chip"><i data-lucide="timer" style="width:10px;height:10px"></i> ${formatRest(rest)}</span>` : ""}
-          </div>
-          ${exImproved ? `<span style="font-size:11px;color:var(--green);font-weight:600;display:flex;align-items:center;gap:3px"><i data-lucide="trending-up" style="width:12px;height:12px"></i> שיפרת</span>` : prevSets.length>0 ? `<span style="font-size:11px;color:var(--text-hint)">ללא שינוי</span>` : ""}
-        </div>
-        <div style="padding-right:4px">${setsTable}</div>
-      </div>`;
-    }).join("") : "";
+      }).join("") : "";
 
-    return `<div class="card" style="padding:0;overflow:hidden">
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 16px;cursor:pointer" onclick="toggleHistorySession('${session.id}')">
-        <div style="display:flex;align-items:center;gap:7px">
-          <i data-lucide="dumbbell" style="width:16px;height:16px;color:var(--text-secondary)"></i>
-          <div>
-            <span style="font-weight:700;font-size:15px;color:var(--text-primary)">${escapeHtml(wName)}</span>
-            <div style="display:flex;align-items:center;gap:8px;margin-top:3px">${summaryChips}</div>
+      return `<div class="card" style="padding:0;overflow:hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 16px;cursor:pointer" onclick="toggleHistorySession('${session.id}')">
+          <div style="display:flex;align-items:center;gap:7px">
+            <i data-lucide="dumbbell" style="width:16px;height:16px;color:var(--text-secondary)"></i>
+            <div>
+              <span style="font-weight:700;font-size:15px;color:var(--text-primary)">${escapeHtml(wName)}</span>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:3px">${summaryChips}</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:12px;color:var(--text-hint);display:flex;align-items:center;gap:3px">
+              <i data-lucide="clock" style="width:11px;height:11px"></i> ${formatDate(session.date)}
+            </span>
+            <button class="del-btn" data-del-session="${originalIdx}" onclick="event.stopPropagation()">
+              <i data-lucide="trash-2" style="width:15px;height:15px"></i>
+            </button>
+            <i data-lucide="${isExpanded?"chevron-up":"chevron-down"}" style="width:15px;height:15px;color:var(--text-hint)"></i>
           </div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:12px;color:var(--text-hint);display:flex;align-items:center;gap:3px">
-            <i data-lucide="clock" style="width:11px;height:11px"></i> ${formatDate(session.date)}
-          </span>
-          <button class="del-btn" data-del-session="${originalIdx}" onclick="event.stopPropagation()">
-            <i data-lucide="trash-2" style="width:15px;height:15px"></i>
-          </button>
-          <i data-lucide="${isExpanded?"chevron-up":"chevron-down"}" style="width:15px;height:15px;color:var(--text-hint)"></i>
-        </div>
-      </div>
-      ${isExpanded ? `<div style="padding:4px 16px 14px;border-top:1px solid var(--border)">
-        ${session.note ? `<div style="display:flex;align-items:flex-start;gap:6px;padding:8px 0 10px;border-bottom:1px solid var(--border);margin-bottom:8px">
-          <i data-lucide="message-square" style="width:13px;height:13px;color:var(--text-hint);margin-top:1px;flex-shrink:0"></i>
-          <span style="font-size:12px;color:var(--text-secondary);line-height:1.5">${escapeHtml(session.note).replace(/\n/g, "<br>")}</span>
+        ${isExpanded ? `<div style="padding:4px 16px 14px;border-top:1px solid var(--border)">
+          ${session.note ? `<div style="display:flex;align-items:flex-start;gap:6px;padding:8px 0 10px;border-bottom:1px solid var(--border);margin-bottom:8px">
+            <i data-lucide="message-square" style="width:13px;height:13px;color:var(--text-hint);margin-top:1px;flex-shrink:0"></i>
+            <span style="font-size:12px;color:var(--text-secondary);line-height:1.5">${escapeHtml(session.note).replace(/\n/g, "<br>")}</span>
+          </div>` : ""}
+          ${exRows}
         </div>` : ""}
-        ${exRows}
-      </div>` : ""}
-    </div>`;
-  }).join("")}</div>`;
+      </div>`;
+    }).join("");
+    const loadMoreBtn = hasMore
+      ? `<div style="padding:8px 0 4px;text-align:center"><button onclick="state.historyPage=(state.historyPage||0)+1;render()" style="padding:10px 28px;background:var(--surface);border:1px solid var(--border-med);border-radius:10px;font-family:inherit;font-size:13px;font-weight:600;color:var(--text-secondary);cursor:pointer">הצג עוד (${filteredSessions.length - visibleSessions.length})</button></div>`
+      : "";
+    return sessionCards + loadMoreBtn;
+  })()}</div>`;
 }
 
 function onHistoryExerciseQueryInput(inputEl) {
   state.historyExerciseQuery = inputEl.value;
+  state.historyPage = 0;
   const cursorPos = inputEl.selectionStart ?? inputEl.value.length;
   render();
   requestAnimationFrame(() => {
@@ -2185,6 +2255,17 @@ function renderManage() {
       <button onclick="openTelegramLinkSheet()" style="width:100%;padding:10px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-size:13px;font-family:inherit">צור קישור</button>
     </div>
 
+    <div class="card" style="padding:14px 16px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px">
+        <i data-lucide="download" style="width:15px;height:15px;color:var(--text-secondary)"></i>
+        <span style="font-weight:700;font-size:14px;color:var(--text-primary)">גיבוי וייצוא</span>
+      </div>
+      <div style="font-size:12px;color:var(--text-hint);margin-bottom:10px">הורד את כל הנתונים שלך כקובץ JSON</div>
+      <button onclick="exportData()" style="width:100%;padding:10px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-size:13px;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">
+        <i data-lucide="download" style="width:15px;height:15px"></i> ייצוא נתונים (JSON)
+      </button>
+    </div>
+
     <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px;padding:0 2px">
       <i data-lucide="dumbbell" style="width:15px;height:15px;color:var(--text-secondary)"></i>
       <span style="font-weight:700;font-size:14px;color:var(--text-primary)">אימונים ותרגילים</span>
@@ -2347,12 +2428,38 @@ function exportCSV() {
   showToast("הנתונים יוצאו בהצלחה ✓");
 }
 
+function exportData() {
+  try {
+    const data = {
+      exportedAt: new Date().toISOString(),
+      schemaVersion: window.APP_SCHEMA_VERSION || 1,
+      sessions: state.sessions,
+      weightLogs: state.weightLogs,
+      weightGoal: state.weightGoal,
+      workouts: state.workouts,
+      settings: state.settings
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "gymbuddy-backup-" + new Date().toISOString().slice(0, 10) + ".json";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast("הגיבוי הורד בהצלחה ✓");
+  } catch (e) {
+    console.error("Export failed:", e);
+    showToast("שגיאה בייצוא נתונים ⚠️");
+  }
+}
+
 let dragSrc = null;
 let touchDragSrc = null;
 let touchPlaceholder = null;
 
 function bindDragDrop() {
-  document.querySelectorAll(".ex-row-drag").forEach(row => {
+  document.querySelectorAll(".ex-row-drag:not([data-bound])").forEach(row => {
+    row.dataset.bound = "1";
 
     // ── Desktop drag ──────────────────────────────────────────────
     row.setAttribute("draggable", "true");
@@ -2746,6 +2853,20 @@ if (failed.length) {
 });
 </script>
   <script>
+  function showUpdateBanner(registration) {
+    if (document.getElementById("sw-update-banner")) return;
+    const banner = document.createElement("div");
+    banner.id = "sw-update-banner";
+    banner.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:4000;background:var(--accent);color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;font-size:14px;direction:rtl;box-shadow:0 2px 8px rgba(0,0,0,0.2)";
+    banner.innerHTML = `<span>גרסה חדשה זמינה</span><button id="sw-update-btn" style="padding:6px 14px;background:#fff;color:var(--accent);border:none;border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer">עדכן עכשיו</button>`;
+    document.body.appendChild(banner);
+    document.getElementById("sw-update-btn").addEventListener("click", () => {
+      const sw = registration.waiting;
+      if (sw) sw.postMessage({ type: "SKIP_WAITING" });
+      window.location.reload();
+    });
+  }
+
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
@@ -2754,6 +2875,22 @@ if (failed.length) {
           registration.update().catch(() => {});
           await syncPushSubscriptionState();
           render();
+
+          // Show banner when a new SW is waiting
+          registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing;
+            if (!newWorker) return;
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                showUpdateBanner(registration);
+              }
+            });
+          });
+
+          // Also check if a SW is already waiting on page load
+          if (registration.waiting && navigator.serviceWorker.controller) {
+            showUpdateBanner(registration);
+          }
         })
         .catch(err => {
           console.log('ServiceWorker registration failed:', err);
