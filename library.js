@@ -8,6 +8,8 @@ async function loadExerciseLibrary() {
 }
 
 async function seedLibraryFromWorkouts() {
+  const userId = (typeof ensureUserId === "function") ? ensureUserId() : (state.userId || null);
+  if (!userId) return;
   const existingNames = new Set(state.exerciseLibrary.map(e => e.name));
   const toAdd = [];
   state.workouts.forEach(w => {
@@ -16,7 +18,7 @@ async function seedLibraryFromWorkouts() {
       const category = ex.category || null;
       if (name && !existingNames.has(name)) {
         existingNames.add(name);
-        toAdd.push({ name, category });
+        toAdd.push({ name, category, user_id: userId });
       }
     });
   });
@@ -32,8 +34,10 @@ async function addToLibrary(name, category) {
   if (!cleanName) return null;
   const exists = state.exerciseLibrary.find(e => e.name === cleanName);
   if (exists) return exists;
+  const userId = (typeof ensureUserId === "function") ? ensureUserId() : (state.userId || null);
+  if (!userId) { console.error("addToLibrary: missing user_id"); showToast("שגיאה: משתמש לא מזוהה ⚠️"); return null; }
   try {
-    const rows = await sbPost("exercise_library", { name: cleanName, category: category || null });
+    const rows = await sbPost("exercise_library", { name: cleanName, category: category || null, user_id: userId });
     const entry = rows[0];
     state.exerciseLibrary.push(entry);
     return entry;
