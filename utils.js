@@ -120,10 +120,25 @@
     }
   }
 
+  // ─── Render throttle ──────────────────────────────────────────────────────────
+  // Batches multiple rapid render() calls into one per animation frame.
+  // Use for high-frequency interactions (typing, toggle, set operations).
+  // Use render() directly only where the update must be synchronous (navigation).
+  let _renderScheduled = false;
+  function scheduleRender() {
+    if (_renderScheduled) return;
+    _renderScheduled = true;
+    requestAnimationFrame(() => {
+      _renderScheduled = false;
+      if (typeof render === "function") render();
+    });
+  }
+
   Object.assign(window, {
     haptic,
     showToast,
     showUndoToast,
+    scheduleRender,
     formatDate,
     formatDateShort,
     formatVolume,

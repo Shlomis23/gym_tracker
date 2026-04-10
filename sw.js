@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gymbuddy-cache-v8';
+const CACHE_NAME = 'gymbuddy-cache-v9';
 
 const APP_SHELL_URLS = [
   './',
@@ -17,6 +17,13 @@ const APP_SHELL_URLS = [
   './weight-domain.js',
   './weight-data.js',
   './share.js',
+  './workout-sync.js',
+  './weight-ui.js',
+  './home-ui.js',
+  './history-ui.js',
+  './manage-ui.js',
+  './render.js',
+  './init.js',
   './icon-192x192.png',
   './icon-512x512.png'
 ];

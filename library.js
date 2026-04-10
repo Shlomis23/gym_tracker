@@ -1,6 +1,8 @@
 async function loadExerciseLibrary() {
   try {
-    const rows = await sbGet("exercise_library?select=*&order=name.asc");
+    const userId = (typeof ensureUserId === "function") ? ensureUserId() : (state.userId || "");
+    const userFilter = userId ? `&user_id=eq.${encodeURIComponent(userId)}` : "";
+    const rows = await sbGet(`exercise_library?select=*&order=name.asc${userFilter}`);
     state.exerciseLibrary = rows || [];
     // אכלוס ראשוני — הוסף תרגילים קיימים שחסרים במאגר
     await seedLibraryFromWorkouts();
