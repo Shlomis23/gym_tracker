@@ -49,7 +49,8 @@ async function push(
   try {
     await webpush.sendNotification(
       { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-      JSON.stringify(payload)
+      JSON.stringify(payload),
+      { TTL: 86400 } // 24 hours — keep in push service queue if device is offline
     );
     console.log(`[push] OK → ...${shortEndpoint}`);
     return "ok";
@@ -201,17 +202,18 @@ async function sendWorkoutReminders(db: ReturnType<typeof createClient>) {
 
 // ─── Goal Completion Check ────────────────────────────────────────────────────
 async function checkGoalCompletions(db: ReturnType<typeof createClient>) {
-  const oneHourAgo = new Date(Date.now() - 3600000).toISOString();
+  // Extend window to 3 hours so a session completed just before the cron ran isn't missed
+  const threeHoursAgo = new Date(Date.now() - 3 * 3600000).toISOString();
   const weekKey = currentWeekKey();
   const weekEnd = new Date(weekKey + "T00:00:00");
   weekEnd.setUTCDate(weekEnd.getUTCDate() + 6);
   const weekEndStr = weekEnd.toISOString().slice(0, 10);
 
-  // Users who had a session in the last hour
+  // Users who had a session in the last 3 hours
   const { data: recent } = await db
     .from("workout_sessions")
     .select("user_id, date")
-    .gte("date", oneHourAgo);
+    .gte("date", threeHoursAgo);
   if (!recent?.length) return;
 
   const recentUsers = [...new Set(recent.map((s: any) => s.user_id))];
@@ -219,24 +221,27 @@ async function checkGoalCompletions(db: ReturnType<typeof createClient>) {
   for (const userId of recentUsers) {
     if (await alreadySent(db, userId, "goal_complete", weekKey)) continue;
 
-    // Get goal from any workout plan
-    const { data: plan } = await db
-      .from("workout_plans")
-      .select("days_per_week")
+    // Get weekly_goal from user_settings (correct table & field)
+    const { data: settings } = await db
+      .from("user_settings")
+      .select("weekly_goal")
       .eq("user_id", userId)
+      .order("updated_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
 
-    const goal = plan?.days_per_week ?? 3;
+    const goal = settings?.weekly_goal ?? 4;
 
     // Count this week's sessions
     const { data: weekSessions } = await db
       .from("workout_sessions")
-      .select("id", { count: "exact" })
+      .select("id")
       .eq("user_id", userId)
       .gte("date", `${weekKey}T00:00:00`)
       .lte("date", `${weekEndStr}T23:59:59`);
 
     const count = (weekSessions as any)?.length ?? 0;
+    console.log(`[goal_check] user=${userId.slice(0,8)} goal=${goal} count=${count} week=${weekKey}`);
     if (count < goal) continue;
 
     // Get ALL active subscriptions for this user
