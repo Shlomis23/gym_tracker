@@ -71,7 +71,8 @@ Migrations live in `supabase/migrations/`.
 
 ## Service Worker
 
-- Cache name: `gymbuddy-cache-v9` — **bump this version whenever you change the cached file list**
+- Cache name: `gymbuddy-cache-v12` — **bump this version with EVERY code change to JS/CSS/HTML files**
+- **Rule**: bump cache version in the SAME commit as the code change, never after
 - App shell (HTML/CSS/JS/icons) → cache-first
 - Supabase API calls → network-first, never cached
 - Update flow: new SW detected → banner shown → user clicks "עדכן עכשיו" → `SKIP_WAITING` → reload
