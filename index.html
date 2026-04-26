@@ -4,6 +4,27 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<script>
+// Emergency recovery — runs before any other scripts, even with a broken SW cache
+(function() {
+  var p = new URLSearchParams(location.search);
+  // ?setUserId=UUID — restore a lost user_id in localStorage then reload clean
+  var uid = p.get('setUserId');
+  if (uid && /^[0-9a-f-]{36}$/i.test(uid)) {
+    localStorage.setItem('gym_user_id_v1', uid);
+    location.replace(location.pathname);
+    return;
+  }
+  // ?clearSW=1 — unregister all service workers and clear all caches, then reload clean
+  if (p.get('clearSW') === '1' && 'serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations()
+      .then(function(regs) { return Promise.all(regs.map(function(r) { return r.unregister(); })); })
+      .then(function() { return caches.keys(); })
+      .then(function(keys) { return Promise.all(keys.map(function(k) { return caches.delete(k); })); })
+      .then(function() { location.replace(location.pathname); });
+  }
+})();
+</script>
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>GymBuddy</title>
