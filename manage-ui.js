@@ -278,6 +278,18 @@ function renderManage() {
       </button>
     </div>
 
+    <div class="card" style="padding:14px 16px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px">
+        <i data-lucide="key-round" style="width:15px;height:15px;color:var(--text-secondary)"></i>
+        <span style="font-weight:700;font-size:14px;color:var(--text-primary)">שחזור חשבון</span>
+      </div>
+      <div style="font-size:12px;color:var(--text-hint);margin-bottom:10px">הדבק כאן את מזהה המשתמש (UUID) שלך כדי לשחזר נתונים</div>
+      <div style="display:flex;gap:8px">
+        <input id="restore-uid-input" class="inp inp-text" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" style="flex:1;font-size:12px;direction:ltr">
+        <button onclick="restoreUserId()" style="padding:0 14px;background:var(--accent);border:none;border-radius:8px;cursor:pointer;font-size:13px;color:#fff;font-family:inherit;white-space:nowrap">שחזר</button>
+      </div>
+    </div>
+
     <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px;padding:0 2px">
       <i data-lucide="dumbbell" style="width:15px;height:15px;color:var(--text-secondary)"></i>
       <span style="font-weight:700;font-size:14px;color:var(--text-primary)">אימונים ותרגילים</span>
@@ -304,6 +316,17 @@ function renderManage() {
       <i data-lucide="chevron-left" style="width:16px;height:16px;color:var(--text-hint)"></i>
     </button>
   </div>`;
+}
+
+function restoreUserId() {
+  const inp = document.getElementById("restore-uid-input");
+  const val = (inp ? inp.value : "").trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)) {
+    showToast("מזהה לא תקין ⚠️");
+    return;
+  }
+  localStorage.setItem("gym_user_id_v1", val);
+  location.reload();
 }
 
 function getNotificationStatusText() {
