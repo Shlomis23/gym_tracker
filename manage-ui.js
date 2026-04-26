@@ -247,7 +247,7 @@ function renderManage() {
       </div>
       <div style="font-size:12px;color:var(--text-hint);margin-bottom:10px" id="push-status-text">${getNotificationStatusText()}</div>
       <div style="display:grid;grid-template-columns:1fr;gap:8px">
-        ${Notification.permission === "denied"
+        ${(typeof Notification !== "undefined" && Notification.permission === "denied")
           ? `<div style="font-size:12px;color:var(--red);background:var(--surface);border:1px solid var(--border-med);border-radius:10px;padding:10px;text-align:center;line-height:1.6">
                ההרשאה נחסמה ← יש לאפשר ידנית:<br>
                <strong>הגדרות iOS ← [שם האפליקציה] ← התראות ← אפשר</strong>
