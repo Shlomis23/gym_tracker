@@ -66,9 +66,9 @@ function renderHistory() {
     const avg7 = hasFilteredData ? (withAvg[withAvg.length - 1]?.movingAvg ?? latest.weight) : 0;
     const summaryCards = `
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:10px">
-        <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">אחרון</div><div style="font-size:19px;font-weight:700">${hasFilteredData ? latest.weight.toFixed(1) : "-"}</div></div>
-        <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">ממוצע 7 ימים</div><div style="font-size:19px;font-weight:700;color:var(--green)">${hasFilteredData ? avg7.toFixed(1) : "-"}</div></div>
-        <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">שינוי בטווח</div><div style="font-size:19px;font-weight:700;color:${delta < 0 ? "var(--green)" : delta > 0 ? "var(--red)" : "var(--text-primary)"}">${hasFilteredData ? `${delta > 0 ? "+" : ""}${delta.toFixed(1)}` : "-"}</div></div>
+        <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">אחרון</div><div style="font-size:19px;font-weight:700">${hasFilteredData ? latest.weight.toFixed(2) : "-"}</div></div>
+        <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">ממוצע 7 ימים</div><div style="font-size:19px;font-weight:700;color:var(--green)">${hasFilteredData ? avg7.toFixed(2) : "-"}</div></div>
+        <div class="card" style="padding:10px"><div style="font-size:11px;color:var(--text-hint)">שינוי בטווח</div><div style="font-size:19px;font-weight:700;color:${delta < 0 ? "var(--green)" : delta > 0 ? "var(--red)" : "var(--text-primary)"}">${hasFilteredData ? `${delta > 0 ? "+" : ""}${delta.toFixed(2)}` : "-"}</div></div>
       </div>
     `;
 
@@ -106,11 +106,11 @@ function renderHistory() {
       const prev = allWeightRows[ri + 1];
       const diff = prev ? (log.weight - prev.weight) : null;
       const diffColor = diff === null ? "" : diff < 0 ? "var(--green)" : diff > 0 ? "var(--red)" : "var(--text-hint)";
-      const diffText = diff === null ? "" : `${diff > 0 ? "+" : ""}${diff.toFixed(1)} ק״ג`;
+      const diffText = diff === null ? "" : `${diff > 0 ? "+" : ""}${diff.toFixed(2)} ק״ג`;
       return `<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px">
         <div>
-          <div style="font-size:18px;font-weight:700">${log.weight.toFixed(1)} <span style="font-size:12px;font-weight:500;color:var(--text-hint)">ק״ג</span></div>
-          <div style="font-size:11px;color:var(--text-hint);margin-top:2px">${formatWeightDate(log)} · ממוצע 7י: ${log.movingAvg.toFixed(1)}</div>
+          <div style="font-size:18px;font-weight:700">${log.weight.toFixed(2)} <span style="font-size:12px;font-weight:500;color:var(--text-hint)">ק״ג</span></div>
+          <div style="font-size:11px;color:var(--text-hint);margin-top:2px">${formatWeightDate(log)} · ממוצע 7י: ${log.movingAvg.toFixed(2)}</div>
           ${log.note ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:3px">${escapeHtml(log.note)}</div>` : ""}
         </div>
         <div style="display:flex;align-items:center;gap:8px">
@@ -126,12 +126,12 @@ function renderHistory() {
     const weightGoalValues = getWeightGoalValues(state.weightGoal);
     const hasGoalWeight = Number.isFinite(weightGoalValues.target) && weightGoalValues.target > 0;
     const goalGap = (hasGoalWeight && latestOverall) ? Math.abs(Number(latestOverall.weight) - Number(weightGoalValues.target)) : null;
-    const goalGapText = goalGap !== null ? `${goalGap.toFixed(1)} ק״ג` : "";
+    const goalGapText = goalGap !== null ? `${goalGap.toFixed(2)} ק״ג` : "";
     const goalSummaryText = !hasGoalWeight
       ? "לא הוגדר יעד משקל"
       : goalGap !== null && goalGap <= 0.3
-      ? `יעד: ${Number(weightGoalValues.target).toFixed(1)} ק״ג | קרוב ליעד`
-      : `יעד: ${Number(weightGoalValues.target).toFixed(1)} ק״ג | פער נוכחי: ${goalGapText}`;
+      ? `יעד: ${Number(weightGoalValues.target).toFixed(2)} ק״ג | קרוב ליעד`
+      : `יעד: ${Number(weightGoalValues.target).toFixed(2)} ק״ג | פער נוכחי: ${goalGapText}`;
     return `<div style="padding:14px 14px 0">${tabs}
       <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:10px">${rangeButtons}${customRangeBtn}</div>
       ${customRangeControls}

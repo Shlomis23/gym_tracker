@@ -377,7 +377,7 @@ async function copyWeightWeeklySummary() {
   const rangeLine = `${formatDateShort(currentLogs[0].measured_at)} - ${formatDateShort(currentLogs[currentLogs.length - 1].measured_at)}`;
   const deltaLine = delta === null
     ? "שינוי משבוע קודם: אין נתונים לשבוע הקודם"
-    : `שינוי משבוע קודם: ${delta > 0 ? "+" : ""}${delta.toFixed(1)} ק״ג`;
+    : `שינוי משבוע קודם: ${delta > 0 ? "+" : ""}${delta.toFixed(2)} ק״ג`;
 
   const lines = [
     "*סיכום שקילות*",
@@ -385,11 +385,11 @@ async function copyWeightWeeklySummary() {
     "",
     ...currentLogs.map(log => {
       const dayName = new Date(log.measured_at).toLocaleDateString("he-IL", { weekday: "short" });
-      return `${dayName}, ${formatDateShort(log.measured_at)} - ${Number(log.weight).toFixed(1)} ק״ג`;
+      return `${dayName}, ${formatDateShort(log.measured_at)} - ${Number(log.weight).toFixed(2)} ק״ג`;
     }),
     "",
-    `*ממוצע שבועי: ${currentAvg.toFixed(1)} ק״ג*`,
-    prevAvg !== null ? `ממוצע שבוע קודם: ${prevAvg.toFixed(1)} ק״ג` : "ממוצע שבוע קודם: אין נתונים",
+    `*ממוצע שבועי: ${currentAvg.toFixed(2)} ק״ג*`,
+    prevAvg !== null ? `ממוצע שבוע קודם: ${prevAvg.toFixed(2)} ק״ג` : "ממוצע שבוע קודם: אין נתונים",
     deltaLine
   ];
 
@@ -431,16 +431,16 @@ async function copyWeightRangeSummary() {
         "",
         ...logs.map(log => {
           const dayName = new Date(log.measured_at).toLocaleDateString("he-IL", { weekday: "short" });
-          return `${dayName}, ${formatDateShort(log.measured_at)} - ${Number(log.weight).toFixed(1)} ק״ג`;
+          return `${dayName}, ${formatDateShort(log.measured_at)} - ${Number(log.weight).toFixed(2)} ק״ג`;
         }),
         "",
-        `*ממוצע שבועי: ${avg.toFixed(1)} ק״ג*`
+        `*ממוצע שבועי: ${avg.toFixed(2)} ק״ג*`
       ]
     : [
         "*סיכום שקילות*",
         rangeLine,
         "",
-        `*משקל ממוצע לתקופה זו: ${avg.toFixed(1)} ק״ג*`
+        `*משקל ממוצע לתקופה זו: ${avg.toFixed(2)} ק״ג*`
       ];
   const text = lines.join("\n");
 
