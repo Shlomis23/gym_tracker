@@ -848,4 +848,3 @@ async function redeemTransferCode() {
     console.error("[redeemTransferCode]", e);
   }
 }
-}
