@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gymbuddy-cache-v11';
+const CACHE_NAME = 'gymbuddy-cache-v12';
 
 const APP_SHELL_URLS = [
   './',
