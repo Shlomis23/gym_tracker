@@ -269,31 +269,6 @@ function renderManage() {
 
     <div class="card" style="padding:14px 16px;margin-bottom:16px">
       <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px">
-        <i data-lucide="smartphone" style="width:15px;height:15px;color:var(--text-secondary)"></i>
-        <span style="font-weight:700;font-size:14px;color:var(--text-primary)">העברת חשבון למכשיר / דפדפן אחר</span>
-      </div>
-      <div style="font-size:12px;color:var(--text-hint);margin-bottom:10px;line-height:1.5">
-        לסנכרון נתונים בין Safari ל-PWA: צור קוד במכשיר אחד והזן אותו בשני
-      </div>
-      ${state.transferCode ? `
-        <div style="background:var(--surface);border:1px solid var(--border-med);border-radius:10px;padding:12px;text-align:center;margin-bottom:8px">
-          <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px">קוד ההעברה שלך</div>
-          <div style="font-size:32px;font-weight:700;letter-spacing:8px;color:var(--text-primary);font-variant-numeric:tabular-nums;direction:ltr">${state.transferCode}</div>
-          <div style="font-size:11px;color:var(--text-hint);margin-top:4px" id="transfer-code-timer">פג תוקף בעוד ${getTransferCodeCountdown()}</div>
-        </div>
-      ` : `
-        <button onclick="generateTransferCode()" style="width:100%;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer;font-size:13px;font-family:inherit;margin-bottom:8px;display:flex;align-items:center;justify-content:center;gap:6px">
-          <i data-lucide="share-2" style="width:15px;height:15px"></i> צור קוד העברה
-        </button>
-      `}
-      <div style="display:flex;gap:8px">
-        <input id="transfer-code-input" class="inp inp-text" placeholder="הזן קוד 6 ספרות" maxlength="6" inputmode="numeric" style="flex:1;text-align:center;letter-spacing:4px;font-size:16px;direction:ltr">
-        <button onclick="redeemTransferCode()" style="padding:0 16px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-size:13px;font-family:inherit;white-space:nowrap">כנס</button>
-      </div>
-    </div>
-
-    <div class="card" style="padding:14px 16px;margin-bottom:16px">
-      <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px">
         <i data-lucide="download" style="width:15px;height:15px;color:var(--text-secondary)"></i>
         <span style="font-weight:700;font-size:14px;color:var(--text-primary)">גיבוי וייצוא</span>
       </div>
@@ -779,72 +754,4 @@ function bindWorkoutDragDrop() {
       touchDragSrcW = null;
     }, { passive: false });
   });
-}
-
-// ── Transfer Code ─────────────────────────────────────────────────────────────
-
-let _transferCodeTimer = null;
-
-function getTransferCodeCountdown() {
-  if (!state.transferCodeExpiry) return null;
-  const remaining = new Date(state.transferCodeExpiry) - Date.now();
-  if (remaining <= 0) return null;
-  const mins = Math.floor(remaining / 60000);
-  const secs = Math.floor((remaining % 60000) / 1000);
-  return `${mins}:${secs.toString().padStart(2, "0")}`;
-}
-
-async function generateTransferCode() {
-  const userId = ensureUserId();
-  const code = String(Math.floor(100000 + Math.random() * 900000));
-  const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-  try {
-    await sbDelete(`account_transfer_codes?user_id=eq.${userId}`);
-    await sbPost("account_transfer_codes", { code, user_id: userId, expires_at: expiresAt });
-    state.transferCode = code;
-    state.transferCodeExpiry = expiresAt;
-    render();
-    if (_transferCodeTimer) clearInterval(_transferCodeTimer);
-    _transferCodeTimer = setInterval(() => {
-      const el = document.getElementById("transfer-code-timer");
-      if (!el) { clearInterval(_transferCodeTimer); return; }
-      const remaining = getTransferCodeCountdown();
-      if (!remaining) {
-        clearInterval(_transferCodeTimer);
-        state.transferCode = null;
-        state.transferCodeExpiry = null;
-        render();
-        return;
-      }
-      el.textContent = `פג תוקף בעוד ${remaining}`;
-    }, 1000);
-  } catch (e) {
-    showToast("שגיאה ביצירת קוד ⚠️");
-    console.error("[generateTransferCode]", e);
-  }
-}
-
-async function redeemTransferCode() {
-  const input = document.getElementById("transfer-code-input");
-  const code = input?.value?.trim();
-  if (!code || code.length !== 6 || !/^\d{6}$/.test(code)) {
-    showToast("הזן קוד בן 6 ספרות");
-    return;
-  }
-  try {
-    const now = new Date().toISOString();
-    const rows = await sbGet(`account_transfer_codes?code=eq.${code}&expires_at=gt.${encodeURIComponent(now)}`);
-    if (!rows || !rows.length) {
-      showToast("קוד לא תקין או שפג תוקפו ⚠️");
-      return;
-    }
-    const { user_id } = rows[0];
-    await sbDelete(`account_transfer_codes?code=eq.${code}`);
-    localStorage.setItem("gym_user_id_v1", user_id);
-    showToast("החשבון הועבר בהצלחה! טוען מחדש...");
-    setTimeout(() => location.reload(), 1500);
-  } catch (e) {
-    showToast("שגיאה בהעברת החשבון ⚠️");
-    console.error("[redeemTransferCode]", e);
-  }
 }

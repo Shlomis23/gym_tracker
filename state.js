@@ -51,7 +51,6 @@ let state = {
   editingExKey: null, exerciseLibrary: [], workoutExtras: [], dashboardAnimatedOnce: false,
   historyWorkoutFilterMode: "all", historyWorkoutId: "all", historyExerciseQuery: "",
   pushSubscriptionActive: false, notificationBusy: false, notificationTestBusy: false,
-  transferCode: null, transferCodeExpiry: null,
   historyPage: 0, weightHistoryPage: 0
 };
 
