@@ -285,7 +285,7 @@ function renderManage() {
       </div>
       <div style="font-size:12px;color:var(--text-hint);margin-bottom:10px">הדבק כאן את מזהה המשתמש (UUID) שלך כדי לשחזר נתונים</div>
       <div style="display:flex;gap:8px">
-        <input id="restore-uid-input" class="inp inp-text" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" style="flex:1;font-size:12px;direction:ltr">
+        <input id="restore-uid-input" class="inp inp-text" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" style="flex:1;font-size:12px;direction:ltr" autocorrect="off" autocapitalize="off" autocomplete="off" spellcheck="false">
         <button onclick="restoreUserId()" style="padding:0 14px;background:var(--accent);border:none;border-radius:8px;cursor:pointer;font-size:13px;color:#fff;font-family:inherit;white-space:nowrap">שחזר</button>
       </div>
     </div>
@@ -320,7 +320,7 @@ function renderManage() {
 
 function restoreUserId() {
   const inp = document.getElementById("restore-uid-input");
-  const val = (inp ? inp.value : "").trim();
+  const val = (inp ? inp.value : "").replace(/\s/g, "");
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)) {
     showToast("מזהה לא תקין ⚠️");
     return;
