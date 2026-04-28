@@ -3,16 +3,28 @@
 const ALLOW_EMPTY_WORKOUT_SYNC = false;
 const STORAGE_USER_ID = "gym_user_id_v1";
 
+function getUidFromCookie() {
+  var m = document.cookie.match(/(?:^|;\s*)gym_uid=([0-9a-f-]{36})/i);
+  return m ? m[1] : null;
+}
+function saveUidToCookie(uid) {
+  document.cookie = 'gym_uid=' + uid + '; max-age=31536000; SameSite=Strict; path=/';
+}
+
 function ensureUserId() {
   if (state.userId) return state.userId;
-  const saved = localStorage.getItem(STORAGE_USER_ID);
+  let saved = localStorage.getItem(STORAGE_USER_ID);
+  if (!saved) saved = getUidFromCookie();
   if (saved) {
     state.userId = saved;
+    localStorage.setItem(STORAGE_USER_ID, saved);
+    saveUidToCookie(saved);
     return saved;
   }
   const generated = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ("uid-" + Date.now());
   state.userId = generated;
   localStorage.setItem(STORAGE_USER_ID, generated);
+  saveUidToCookie(generated);
   return generated;
 }
 

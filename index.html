@@ -12,6 +12,7 @@
   var uid = p.get('setUserId');
   if (uid && /^[0-9a-f-]{36}$/i.test(uid)) {
     localStorage.setItem('gym_user_id_v1', uid);
+    document.cookie = 'gym_uid=' + uid + '; max-age=31536000; SameSite=Strict; path=/';
     location.replace(location.pathname);
     return;
   }
