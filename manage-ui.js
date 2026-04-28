@@ -279,14 +279,31 @@ function renderManage() {
     </div>
 
     <div class="card" style="padding:14px 16px;margin-bottom:16px">
-      <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:12px">
         <i data-lucide="key-round" style="width:15px;height:15px;color:var(--text-secondary)"></i>
         <span style="font-weight:700;font-size:14px;color:var(--text-primary)">שחזור חשבון</span>
       </div>
-      <div style="font-size:12px;color:var(--text-hint);margin-bottom:10px">הדבק כאן את מזהה המשתמש (UUID) שלך כדי לשחזר נתונים</div>
-      <div style="display:flex;gap:8px">
-        <input id="restore-uid-input" class="inp inp-text" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" style="flex:1;font-size:12px;direction:ltr" autocorrect="off" autocapitalize="off" autocomplete="off" spellcheck="false">
-        <button onclick="restoreUserId()" style="padding:0 14px;background:var(--accent);border:none;border-radius:8px;cursor:pointer;font-size:13px;color:#fff;font-family:inherit;white-space:nowrap">שחזר</button>
+      <div style="margin-bottom:12px">
+        <div style="font-size:12px;color:var(--text-hint);margin-bottom:8px">צור קוד שחזור זמני (15 דקות) ממכשיר שעובד, והכנס אותו כאן</div>
+        ${(state.recoveryCode && state.recoveryCodeExpiry > Date.now())
+          ? `<div style="background:var(--surface);border:2px solid var(--accent);border-radius:10px;padding:12px;text-align:center;margin-bottom:8px">
+               <div style="font-size:11px;color:var(--text-hint);margin-bottom:4px">קוד השחזור שלך</div>
+               <div style="font-size:28px;font-weight:800;letter-spacing:6px;color:var(--accent);direction:ltr">${state.recoveryCode}</div>
+               <div style="font-size:11px;color:var(--text-hint);margin-top:4px">תקף 15 דקות</div>
+             </div>`
+          : `<button onclick="generateRecoveryCode()" style="width:100%;padding:10px;background:var(--surface);color:var(--text-secondary);border:1px solid var(--border-med);border-radius:10px;cursor:pointer;font-size:13px;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">
+               <i data-lucide="key-round" style="width:14px;height:14px"></i> צור קוד שחזור
+             </button>`
+        }
+      </div>
+      <div style="border-top:1px solid var(--border);padding-top:12px">
+        <div style="font-size:12px;color:var(--text-hint);margin-bottom:8px">יש לך קוד? הכנס אותו כאן:</div>
+        <div style="display:flex;gap:8px">
+          <input id="recovery-code-input" type="tel" inputmode="numeric" pattern="[0-9]*" placeholder="6 ספרות" maxlength="6"
+            style="flex:1;padding:10px;border:1px solid var(--border-med);border-radius:8px;background:var(--surface);color:var(--text-primary);font-size:20px;font-weight:700;letter-spacing:4px;text-align:center;direction:ltr;font-family:inherit"
+            autocorrect="off" autocomplete="off">
+          <button onclick="useRecoveryCode()" style="padding:0 16px;background:var(--accent);border:none;border-radius:8px;cursor:pointer;font-size:13px;color:#fff;font-family:inherit;white-space:nowrap;font-weight:600">שחזר</button>
+        </div>
       </div>
     </div>
 
@@ -318,15 +335,49 @@ function renderManage() {
   </div>`;
 }
 
-function restoreUserId() {
-  const inp = document.getElementById("restore-uid-input");
-  const val = (inp ? inp.value : "").replace(/\s/g, "");
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)) {
-    showToast("מזהה לא תקין ⚠️");
-    return;
+async function generateRecoveryCode() {
+  const userId = ensureUserId();
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+  try {
+    const r = await fetch(SUPABASE_URL + "/rest/v1/account_transfer_codes", {
+      method: "POST",
+      headers: SB_HEADERS,
+      body: JSON.stringify({ code, user_id: userId, expires_at: expiresAt })
+    });
+    if (!r.ok) throw new Error(await r.text());
+    state.recoveryCode = code;
+    state.recoveryCodeExpiry = Date.now() + 15 * 60 * 1000;
+    render();
+  } catch (e) {
+    console.error("generateRecoveryCode failed:", e);
+    showToast("שגיאה ביצירת קוד ⚠️");
   }
-  localStorage.setItem("gym_user_id_v1", val);
-  location.reload();
+}
+
+async function useRecoveryCode() {
+  const inp = document.getElementById("recovery-code-input");
+  const code = (inp ? inp.value : "").replace(/\D/g, "").slice(0, 6);
+  if (code.length !== 6) { showToast("הכנס 6 ספרות ⚠️"); return; }
+  try {
+    const r = await fetch(
+      SUPABASE_URL + "/rest/v1/account_transfer_codes?code=eq." + code + "&select=user_id,expires_at",
+      { headers: SB_HEADERS }
+    );
+    const data = await r.json();
+    if (!Array.isArray(data) || !data.length) { showToast("קוד לא נמצא ⚠️"); return; }
+    if (new Date(data[0].expires_at) < new Date()) { showToast("הקוד פג תוקף ⚠️"); return; }
+    const uid = data[0].user_id;
+    localStorage.setItem("gym_user_id_v1", uid);
+    if (typeof saveUidToCookie === "function") saveUidToCookie(uid);
+    fetch(SUPABASE_URL + "/rest/v1/account_transfer_codes?code=eq." + code, {
+      method: "DELETE", headers: SB_HEADERS
+    }).catch(() => {});
+    location.reload();
+  } catch (e) {
+    console.error("useRecoveryCode failed:", e);
+    showToast("שגיאה בשחזור ⚠️");
+  }
 }
 
 function getNotificationStatusText() {
